@@ -7,6 +7,7 @@ from tqdm import tqdm
 from models.base import SimulationModel
 # Si tu as besoin de add_missing_mask, importe-le depuis utils
 from utils import add_missing_mask
+import matplotlib.pyplot as plt
 
 
 class GenericSimulationDataset(Dataset):
@@ -85,10 +86,21 @@ class GenericSimulationDataset(Dataset):
         self.time_generation = time.time() - start_time
         self.save(path)
 
+    def show(self, ax, idx, sample_idx=0):
+        batch, theta, _ = self.__getitem__(idx)
+
+        img = batch[sample_idx, 0]
+
+        title_text = self.model.to_title(theta[0])
+
+        ax.imshow(img, aspect='equal')
+        # ax.colorbar(label="Signal")
+        ax.set_title(title_text, fontsize=10)
+        ax.set_xlabel("Space")
+        ax.set_ylabel("Time")
+
     def __getitem__(self, idx):
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
-
-        print(self.missing_ratio)
 
         if self.missing_ratio > 0:
             batch = add_missing_mask(batch, self.missing_ratio)
@@ -100,16 +112,3 @@ class GenericSimulationDataset(Dataset):
         deepset = torch.ones(self.deepset_size, dtype=int) * idx
 
         return (torch.from_numpy(batch), theta_tiled, deepset)
-
-    def get_fulldata_mask(self, idx):
-        batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
-
-        if self.missing_ratio > 0:
-            batch_mask = add_missing_mask(batch.copy(), self.missing_ratio)[0]
-        else:
-            batch_mask = batch.copy()
-
-        batch_mask[0] = batch[0]
-
-        theta = self.get_theta_tensor()[idx]
-        return (batch_mask, theta)

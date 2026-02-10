@@ -26,13 +26,10 @@ theta_colors = [
     },
 ]
 
-theta_names_adv = ["advection", "range time", "range space", "std"]
-theta_names_sep = ["separability", "scale time", "scale space", "sill"]
-
 def create_data_path(base_path: str) -> Path:
     path = Path(base_path).resolve()
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path = path / timestamp
 
     sub_dirs = [
@@ -62,25 +59,26 @@ def create_res_path(base_path: str) -> Path:
 
     return path
 
+
 def add_missing_mask(batch, missing_ratio):
+    deepset_size = batch.shape[0]
     space_size = batch.shape[-1]
+
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing
 
-    batch = batch.copy()
-
-    if nb_visible <= (space_size + 1) // 2:
-        max_index = space_size - (nb_visible - 1)
-        base = np.random.choice(max_index, size=nb_visible, replace=False)
-        base = np.sort(base)
-        visibles = base + np.arange(nb_visible)
-    else:
-        visibles = np.random.choice(space_size, size=nb_visible, replace=False)
-
     mask = np.ones_like(batch)
-    mask[:, :, :, visibles] = 0
 
-    batch[:, :, :, mask[0, 0, 0] == 1] = 0
+    for i in range(deepset_size):
+        if nb_visible < (space_size + 1) // 2:
+            max_index = space_size - (nb_visible - 1)
+            base = np.random.choice(max_index, size=nb_visible, replace=False)
+            base = np.sort(base)
+            visibles = base + np.arange(nb_visible)
+        else:
+            visibles = np.random.choice(space_size, size=nb_visible, replace=False)
+
+        mask[i, :, :, visibles] = 0
 
     return np.concatenate([batch, mask], axis=1)
 
@@ -90,6 +88,8 @@ def deepset_collate(batch):
     data = data.flatten(0, 1)
     theta = theta.flatten(0, 1)
     deepset = deepset.flatten(0, 1)
+
+    data[:, 0][data[:, 1] == 1] = 0
 
     return data, theta, deepset
 

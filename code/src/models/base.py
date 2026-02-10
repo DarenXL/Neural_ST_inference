@@ -8,6 +8,10 @@ class SimulationModel(ABC):
         pass
 
     @abstractmethod
+    def to_title(self, vals):
+        pass
+
+    @abstractmethod
     def sample_thetas(self, n_samples):
         pass
 

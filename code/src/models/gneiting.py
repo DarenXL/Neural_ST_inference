@@ -164,6 +164,10 @@ class GneitingModel(SimulationModel):
     def param_names(self):
         return self._names
 
+    def to_title(self, vals):
+        return (f"sep: {vals[0]:.2f}\np2_t: {vals[1]:.2f}\n"
+                f"scale_t: {vals[2]:.1f}\nscale_s: {vals[3]:.1f}\nsill: {vals[4]:.3f}")
+
     def sample_thetas(self, n):
         sep = np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,))
         power2_t = np.random.uniform(sep, np.ones_like(sep) * 3, (n,))

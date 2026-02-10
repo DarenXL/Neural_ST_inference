@@ -49,6 +49,9 @@ class AdvectionModel(SimulationModel):
     def param_names(self):
         return self._names
 
+    def to_title(self, vals):
+        return f"adv: {int(vals[0])}\nrange_t: {vals[1]:.2f}\nrange_s: {vals[2]:.2f}\nstd: {vals[3]:.2f}"
+
     def sample_thetas(self, n):
         return {
             'adv': np.random.randint(self.lower_bound[0], self.upper_bound[0], (n,)),
