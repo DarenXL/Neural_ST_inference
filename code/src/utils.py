@@ -54,7 +54,7 @@ def create_res_path(base_path: str) -> Path:
     sub_dirs = [
         path / "loss_evolution",
         path / "conclusion_graphs",
-        path / "models"
+        path / "architectures"
     ]
 
     for sd in sub_dirs:

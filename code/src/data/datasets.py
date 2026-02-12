@@ -131,3 +131,37 @@ class GenericSimulationDataset(Dataset):
         deepset = torch.ones(self.deepset_size, dtype=int) * idx
 
         return (torch.from_numpy(batch), theta_tiled, deepset)
+
+
+class NlsSimulationDataset(GenericSimulationDataset):
+    def __init__(self, dataset: GenericSimulationDataset):
+        self.__dict__ = dataset.__dict__.copy()
+
+        self.all_thetas = self.get_theta_tensor()
+
+        self.pi = torch.stack([
+            torch.randint(0, self.theta_size, (self.theta_size,))
+            for _ in range(self.deepset_size)
+        ])
+
+    def __len__(self):
+        return 2 * self.theta_size
+
+    def __getitem__(self, idx):
+        is_perm = idx // self.theta_size
+        sample_idx = idx % self.theta_size
+
+        batch = np.load(f"{self.path}/samples/sample_{sample_idx}.npy")
+        if self.missing_ratio > 0:
+            batch = add_missing_mask(batch, self.missing_ratio)
+
+        if is_perm == 0:
+            true_theta = self.all_thetas[sample_idx]
+            theta = true_theta.repeat(self.deepset_size, 1)
+        else:
+            fake_indices = self.pi[:, sample_idx]
+            theta = self.all_thetas[fake_indices]
+
+        classi = torch.full((self.deepset_size,), is_perm, dtype=torch.int64)
+
+        return torch.from_numpy(batch), theta, classi
