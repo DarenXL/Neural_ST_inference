@@ -7,6 +7,11 @@ class SimulationModel(ABC):
     def param_names(self):
         pass
 
+    @property
+    @abstractmethod
+    def nb_params(self):
+        pass
+
     @abstractmethod
     def to_title(self, vals):
         pass
@@ -16,5 +21,5 @@ class SimulationModel(ABC):
         pass
 
     @abstractmethod
-    def simulate(self, theta_values, time_size, space_size, deepset_size):
+    def simulate(self, theta_values, time_size, space_dim, space_size, deepset_size):
         pass

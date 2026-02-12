@@ -164,9 +164,17 @@ class GneitingModel(SimulationModel):
     def param_names(self):
         return self._names
 
-    def to_title(self, vals):
-        return (f"sep: {vals[0]:.2f}\np2_t: {vals[1]:.2f}\n"
-                f"scale_t: {vals[2]:.1f}\nscale_s: {vals[3]:.1f}\nsill: {vals[4]:.3f}")
+    @property
+    def nb_params(self):
+        return len(self.param_names)
+
+    def to_title(self, vals, alt_format=False):
+        if not alt_format :
+            return (f"sep: {vals[0]:.2f}\np2_t: {vals[1]:.2f}\n"
+                    f"scale_t: {vals[2]:.1f}\nscale_s: {vals[3]:.1f}\nsill: {vals[4]:.3f}")
+        else :
+            return (f"sep {vals[0]:.4f} | p2_t {vals[1]:.4f} | "
+                    f"scale_t {vals[2]:.4f} | scale_s:{vals[3]:.4f} | sill {vals[4]:.4f}")
 
     def sample_thetas(self, n):
         sep = np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,))
@@ -180,7 +188,8 @@ class GneitingModel(SimulationModel):
             'sill': np.random.uniform(self.lower_bound[4], self.upper_bound[4], (n,)) ** 2
         }
 
-    def simulate(self, p, t_size, s_size, d_size):
+    def simulate(self, p, t_size, s_dim, s_size, d_size):
+        # TODO
         s_coords = np.expand_dims(np.arange(1, s_size + 1), 1)
 
         sim_params = {

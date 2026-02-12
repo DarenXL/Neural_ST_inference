@@ -33,6 +33,8 @@ from utils import *
 from models.advection import AdvectionModel
 from models.gneiting import GneitingModel
 from data.datasets import GenericSimulationDataset
+from architecture.train_test import train_test
+from architecture.neural_networks import CNN_ST_network
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -41,25 +43,25 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 #############
 
 # Paths
-data_path = create_data_path("./code/data/spatiotemporal_2D")
-# data_path = Path("./code/data/spatiotemporal_2D").resolve() / "2026-02-10_11-26-51" / "train"
+# data_path = create_data_path("./code/data/spatiotemporal_adv")
+data_path = Path("./code/data/spatiotemporal_adv").resolve() / "3D-try"
 
-res_path = create_res_path("./code/results/spatiotemporal_2D")
+res_path = create_res_path("./code/results/spatiotemporal")
 
 # Neural Network train options
 batch_size = 50
-n_epochs = 250
-n_epochs_test = 10
+nb_epochs = 50
+freq_epochs_test = 10
 
-time_size = 30
-space_dim = 1
-space_size = 30
+time_size = 10
+space_dim = 2
+space_size = 20
 
 deepset_size = 2
 missing_ratio = 1/2
 
-train_size = 16
-test_size = 5
+train_size = 50
+test_size = 10
 
 #########
 # Model #
@@ -68,43 +70,48 @@ test_size = 5
 model = AdvectionModel()
 # model = GneitingModel()
 
-dataset_train = GenericSimulationDataset(
-    model=model,
-    theta_size=train_size,
-    time_size=time_size,
-    space_size=space_size,
-    deepset_size=deepset_size,
-    missing_ratio=missing_ratio,
-)
+# dataset_train = GenericSimulationDataset(
+#     model=model,
+#     theta_size=train_size,
+#     time_size=time_size,
+#     space_dim=space_dim,
+#     space_size=space_size,
+#     deepset_size=deepset_size,
+#     missing_ratio=missing_ratio,
+# )
+#
+# print(f"Data train generation : {model.__class__.__name__}")
+# dataset_train.generate(data_path / "train")
+#
+# dataset_test = GenericSimulationDataset(
+#     model=model,
+#     theta_size=test_size,
+#     time_size=time_size,
+#     space_dim=space_dim,
+#     space_size=space_size,
+#     deepset_size=1,
+#     missing_ratio=missing_ratio,
+# )
+#
+# print(f"Data test generation : {model.__class__.__name__}")
+# dataset_test.generate(data_path / "test")
 
-print(f"Data train generation : {model.__class__.__name__}")
-dataset_train.generate(data_path / "train")
-
-dataset_test = GenericSimulationDataset(
-    model=model,
-    theta_size=test_size,
-    time_size=time_size,
-    space_size=space_size,
-    deepset_size=1,
-    missing_ratio=missing_ratio,
-)
-
-print(f"Data test generation : {model.__class__.__name__}")
-dataset_test.generate(data_path / "test")
-
-# dataset_train = GenericSimulationDataset.load(data_path, model_instance=model)
-# dataset_test = GenericSimulationDataset.load(data_path, model_instance=model)
+dataset_train = GenericSimulationDataset.load(data_path / "train", model_instance=model)
+dataset_test = GenericSimulationDataset.load(data_path / "test", model_instance=model)
 
 loader_train = DataLoader(dataset_train, batch_size=batch_size, shuffle=True,collate_fn=deepset_collate)
 loader_test = DataLoader(dataset_test, batch_size=10, shuffle=False,collate_fn=deepset_collate)
 
-fig, axs = plt.subplots(nrows=4, ncols=2, figsize=(5, 15), layout='constrained')
+# show_example(dataset_test, loader_test, k=1)
 
-fig.suptitle('Examples')
+################
+# Architecture #
+################
 
-for data_test, theta_test, deepset_test in loader_test:
-    for i in range(len(axs)):
-        dataset_test.show(axs[i,0], i)
-        axs[i,1].imshow(data_test[i,0])
-    break
-plt.show()
+CNN = CNN_ST_network(in_channels=2, out_dim=dataset_train.model.nb_params, spatial_dim=space_dim, option="jointly").to(device)
+optimizer = torch.optim.Adam(CNN.parameters(), lr=5e-5)
+train_test(CNN, optimizer, loader_train, loader_test, nb_epochs, freq_epochs_test, device, res_path, True)
+
+CNN= CNN_ST_network(in_channels=2, out_dim=dataset_train.model.nb_params, spatial_dim=space_dim, option="separately").to(device)
+optimizer= torch.optim.Adam(CNN.parameters(), lr=5e-5)
+train_test(CNN, optimizer, loader_train, loader_test, nb_epochs, freq_epochs_test, device, res_path, True)

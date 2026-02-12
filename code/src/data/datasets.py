@@ -11,11 +11,12 @@ import matplotlib.pyplot as plt
 
 
 class GenericSimulationDataset(Dataset):
-    def __init__(self, model: SimulationModel, theta_size=200, time_size=40, space_size=40, deepset_size=5,
+    def __init__(self, model: SimulationModel, theta_size=200, time_size=40, space_dim=1, space_size=40, deepset_size=5,
                  missing_ratio=0):
         self.model = model
         self.theta_size = theta_size
         self.time_size = time_size
+        self.space_dim = space_dim
         self.space_size = space_size
         self.deepset_size = deepset_size
         self.missing_ratio = missing_ratio
@@ -36,6 +37,7 @@ class GenericSimulationDataset(Dataset):
         meta = {
             "config": {
                 "time_size": self.time_size,
+                "space_dim": self.space_dim,
                 "space_size": self.space_size,
                 "theta_size": self.theta_size,
                 "deepset_size": self.deepset_size,
@@ -57,6 +59,7 @@ class GenericSimulationDataset(Dataset):
             model=model_instance,
             theta_size=config["theta_size"],
             time_size=config["time_size"],
+            space_dim=config["space_dim"],
             space_size=config["space_size"],
             deepset_size=config["deepset_size"],
             missing_ratio=config["missing_ratio"]
@@ -78,7 +81,7 @@ class GenericSimulationDataset(Dataset):
             theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
             batch = self.model.simulate(
-                theta_i, self.time_size, self.space_size, self.deepset_size
+                theta_i, self.time_size, self.space_dim, self.space_size, self.deepset_size
             )
 
             np.save(f"{path}/samples/sample_{idx}.npy", batch)
@@ -89,15 +92,31 @@ class GenericSimulationDataset(Dataset):
     def show(self, ax, idx, sample_idx=0):
         batch, theta, _ = self.__getitem__(idx)
 
-        img = batch[sample_idx, 0]
+        if self.space_dim == 1:
 
-        title_text = self.model.to_title(theta[0])
+            img = batch[sample_idx, 0]
 
-        ax.imshow(img, aspect='equal')
-        # ax.colorbar(label="Signal")
-        ax.set_title(title_text, fontsize=10)
-        ax.set_xlabel("Space")
-        ax.set_ylabel("Time")
+            title_text = self.model.to_title(theta[0])
+
+            ax.imshow(img, aspect='equal', extent=[0,1,0,1])
+            # ax.colorbar(label="Signal")
+            ax.set_title(title_text, fontsize=10)
+            # ax.set_xlabel("Space")
+            # ax.set_ylabel("Time")
+
+        elif self.space_dim == 2:
+
+            for i in range(len(ax)):
+
+                img = batch[sample_idx, 0, i]
+
+                title_text = self.model.to_title(theta[0])
+
+                ax[i].imshow(img, aspect='equal', extent=[0, 1, 0, 1])
+                ax[i].set_title(f"Time {i}" if i != len(ax)//2 else title_text+f"\n\nTime {i}", fontsize=10)
+                # ax[i].set_xlabel("Space 1")
+                # ax[i].set_ylabel(r"$\it{Space 2}$")
+
 
     def __getitem__(self, idx):
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")

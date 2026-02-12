@@ -2,40 +2,79 @@ import numpy as np
 import gstlearn as gl
 from .base import SimulationModel
 
-def _simulate_matern_grid_func(time_size, space_size, adv, range_time, range_space, std, deepset_size=5):
-    model = gl.Model.createFromParam(gl.ECov.MATERN, ranges=[range_time, range_space], param=1, sill=std ** 2,
-                                     flagRange=False)
+def _simulate_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, std, deepset_size=5):
+    if space_dim == 1:
+        model = gl.Model.createFromParam(gl.ECov.MATERN, ranges=[range_time, range_space], param=1, sill=std ** 2,
+                                         flagRange=False)
 
-    shape_adv = abs(adv) + 1
+        shape_adv = abs(adv) + 1
 
-    grid = gl.DbGrid.create(
-        nx=[time_size, space_size + time_size * shape_adv],
-        dx=[1. / time_size, 1. / space_size]
-    )
+        grid = gl.DbGrid.create(
+            nx=[time_size, space_size + time_size * shape_adv],
+            dx=[1. / time_size, 1. / space_size]
+        )
 
-    mesh = gl.MeshETurbo(grid)
+        mesh = gl.MeshETurbo(grid)
 
-    pop = gl.PrecisionOpMatrix(mesh, model.getCovAniso(0))
+        pop = gl.PrecisionOpMatrix(mesh, model.getCovAniso(0))
 
-    batch = []
+        batch = []
 
-    for i in range(deepset_size):
+        for i in range(deepset_size):
 
-        res = pop.simulateOne()
-        res = res.reshape((time_size, space_size + time_size * shape_adv), order='F')
+            res = pop.simulateOne()
+            res = res.reshape((time_size, space_size + time_size * shape_adv), order='F')
 
-        t, s = np.meshgrid(np.arange(time_size), np.arange(space_size), indexing='ij')
-        offset = t.copy() * abs(adv)
-        s = s + offset
+            t, s = np.meshgrid(np.arange(time_size), np.arange(space_size), indexing='ij')
+            offset = t.copy() * abs(adv)
+            s = s + offset
 
-        if adv >= 0:
-            res = res[t, s]
-        else:
-            res = np.fliplr(res)
-            res = res[t, s]
-            res = np.fliplr(res)
+            if adv >= 0:
+                res = res[t, s]
+            else:
+                res = np.fliplr(res)
+                res = res[t, s]
+                res = np.fliplr(res)
 
-        batch.append(res)
+            batch.append(res)
+
+    elif space_dim == 2 :
+        sp = gl.SpaceRN.create(3)
+        model = gl.Model.createFromParam(gl.ECov.MATERN, ranges=[range_time, range_space, range_space], param=1, sill=std ** 2,
+                                         flagRange=False, space = sp)
+
+        shape_adv = abs(adv) + 1
+
+        grid = gl.DbGrid.create(
+            nx=[time_size, space_size + time_size * shape_adv, space_size],
+            dx=[1. / time_size, 1. / space_size, 1. / space_size]
+        )
+
+        mesh = gl.MeshETurbo(grid)
+
+        pop = gl.PrecisionOpMatrix(mesh, model.getCovAniso(0))
+
+        batch = []
+
+        for i in range(deepset_size):
+
+            res = pop.simulateOne()
+            res = res.reshape((time_size, space_size + time_size * shape_adv, space_size), order='F')
+
+            t, s1, s2 = np.meshgrid(np.arange(time_size), np.arange(space_size), np.arange(space_size), indexing='ij')
+            offset = t.copy() * abs(adv)
+            s1 = s1 + offset
+
+            if adv >= 0:
+                res = res[t, s1, s2]
+            else:
+                res = np.fliplr(res)
+                res = res[t, s1, s2]
+                res = np.fliplr(res)
+
+            batch.append(res)
+        # else:
+        #     raise "space_dim not 1 or 2"
 
     return np.expand_dims(np.stack(batch), 1)
 
@@ -49,8 +88,15 @@ class AdvectionModel(SimulationModel):
     def param_names(self):
         return self._names
 
-    def to_title(self, vals):
-        return f"adv: {int(vals[0])}\nrange_t: {vals[1]:.2f}\nrange_s: {vals[2]:.2f}\nstd: {vals[3]:.2f}"
+    @property
+    def nb_params(self):
+        return len(self.param_names)
+
+    def to_title(self, vals, alt_format=False):
+        if not alt_format:
+            return f"adv: {int(vals[0])}\nrange_t: {vals[1]:.2f}\nrange_s: {vals[2]:.2f}\nstd: {vals[3]:.2f}"
+        else :
+            return f"adv {vals[0]:.4f} | range_t {vals[1]:.4f} | range_s {vals[2]:.4f} | std {vals[3]:.4f}"
 
     def sample_thetas(self, n):
         return {
@@ -60,9 +106,9 @@ class AdvectionModel(SimulationModel):
             'std': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,))
         }
 
-    def simulate(self, p, t_size, s_size, d_size):
+    def simulate(self, p, t_size, s_dim, s_size, d_size):
         return _simulate_matern_grid_func(
-            t_size, s_size,
+            t_size, s_dim, s_size,
             p['adv'], p['range_time'], p['range_space'], p['std'],
             deepset_size=d_size
         )

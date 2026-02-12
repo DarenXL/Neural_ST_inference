@@ -2,8 +2,11 @@ from pathlib import Path
 from datetime import datetime
 import numpy as np
 import torch
+import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
-theta_colors = [
+
+THETA_COLORS = [
     {
         "train":"orangered",
         "test":"lightsalmon",
@@ -60,6 +63,64 @@ def create_res_path(base_path: str) -> Path:
     return path
 
 
+def sampling_matern(outShape, lambdaParent, lambdaDaughter, radiusCluster):
+    xMin = 0
+    xMax = 1
+    yMin = 0
+    yMax = 1
+
+    rExt = radiusCluster
+    xMinExt = xMin - rExt
+    xMaxExt = xMax + rExt
+    yMinExt = yMin - rExt
+    yMaxExt = yMax + rExt
+
+    xDeltaExt = xMaxExt - xMinExt
+    yDeltaExt = yMaxExt - yMinExt
+    areaTotalExt = xDeltaExt * yDeltaExt
+
+    numbPointsParent = np.random.poisson(areaTotalExt * lambdaParent)
+
+    xxParent = xMinExt + xDeltaExt * np.random.uniform(0, 1, numbPointsParent)
+    yyParent = yMinExt + yDeltaExt * np.random.uniform(0, 1, numbPointsParent)
+
+    numbPointsDaughter = np.random.poisson(lambdaDaughter, numbPointsParent)
+    numbPoints = sum(numbPointsDaughter)
+
+    theta = 2 * np.pi * np.random.uniform(0, 1, numbPoints)
+    rho = radiusCluster * np.sqrt(np.random.uniform(0, 1, numbPoints))
+    xx0 = rho * np.cos(theta)
+    yy0 = rho * np.sin(theta)
+
+    xx = np.repeat(xxParent, numbPointsDaughter)
+    yy = np.repeat(yyParent, numbPointsDaughter)
+
+    xx = xx + xx0
+    yy = yy + yy0
+
+    booleInside = ((xx >= xMin) & (xx <= xMax) & (yy >= yMin) & (yy <= yMax))
+    xx = xx[booleInside]
+    yy = yy[booleInside]
+
+    # plt.scatter(xx,yy)
+    # plt.xlim(xMin, xMax)
+    # plt.ylim(yMin, yMax)
+    # plt.axis('equal')
+    # plt.title(f"{numbPointsParent} parents | {numbPointsDaughter} daughters")
+    # plt.show()
+
+    bin_size = 1.0 / outShape
+
+    ix = np.clip((xx / bin_size).astype(np.int32), max=outShape - 1)
+    iy = np.clip((yy / bin_size).astype(np.int32), max=outShape - 1)
+
+    # flat_idx = ix * outShape + iy
+
+    mask = np.zeros((outShape, outShape), dtype=bool)
+    mask[ix, iy] = 1
+
+    return mask
+
 def add_missing_mask(batch, missing_ratio):
     deepset_size = batch.shape[0]
     space_size = batch.shape[-1]
@@ -70,13 +131,16 @@ def add_missing_mask(batch, missing_ratio):
     mask = np.ones_like(batch)
 
     for i in range(deepset_size):
-        if nb_visible < (space_size + 1) // 2:
-            max_index = space_size - (nb_visible - 1)
-            base = np.random.choice(max_index, size=nb_visible, replace=False)
-            base = np.sort(base)
-            visibles = base + np.arange(nb_visible)
-        else:
-            visibles = np.random.choice(space_size, size=nb_visible, replace=False)
+        if len(batch.shape) == 4:
+            if nb_visible < (space_size + 1) // 2:
+                max_index = space_size - (nb_visible - 1)
+                base = np.random.choice(max_index, size=nb_visible, replace=False)
+                base = np.sort(base)
+                visibles = base + np.arange(nb_visible)
+            else:
+                visibles = np.random.choice(space_size, size=nb_visible, replace=False)
+        else :
+            visibles = sampling_matern(space_size, nb_visible,nb_visible, .1)
 
         mask[i, :, :, visibles] = 0
 
@@ -93,6 +157,60 @@ def deepset_collate(batch):
 
     return data, theta, deepset
 
+def show_example(dataset, loader, k=0):
+    fig, axs = plt.subplots(nrows=2, ncols=5, figsize=(18, 7), layout='constrained')
+
+    for data, theta, deepset in loader:
+
+        vmin, vmax = data[:, 0].min(), data[:, 0].max()
+
+        if len(data.shape) == 4:
+
+            fig.suptitle(r"Examples on different $\theta$")
+
+            for i in range(len(axs[0])):
+                dataset.show(axs[0, i], k+i)
+                data_t = data[k+i, 0].clone()
+                data_t[data_t == 0] = np.nan
+                axs[1, i].imshow(data_t, aspect='equal', extent=[0,1,0,1])
+                axs[1, i].set_xlabel(r"$\it{Space}$")
+                axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
+                axs[0, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
+
+        else:
+            fig.suptitle(r"Example over time")
+
+            dataset.show(axs[0], k)
+
+            for i in range(len(axs[0])):
+                data_t = data[k, 0, i].clone()
+                data_t[data_t == 0] = np.nan
+                axs[1, i].imshow(data_t, aspect='equal', extent=[0,1,0,1])
+                axs[1, i].set_xlabel(r"$\it{Space 1}$")
+                axs[1, i].set_ylabel(r"$\it{Space 2}$")
+                axs[0, i].set_ylabel(r"$\it{Space 2}$" if i == 0 else None)
+
+        break
+
+
+    all_images = [im for ax in axs.flat for im in ax.get_images()]
+
+    if all_images:
+        v_min = min(np.nanmin(im.get_array()) for im in all_images)
+        v_max = max(np.nanmax(im.get_array()) for im in all_images)
+
+        cols = ["#7AA7F1","#648FFF","#785EF0","#DC267F","#FE6100","#FFB000"]
+
+        cmap = LinearSegmentedColormap.from_list("", cols, N=100)
+
+        for im in all_images:
+            im.set_clim(v_min, v_max)
+            im.set_cmap(cmap)
+
+        cbar = fig.colorbar(all_images[-1], ax=axs, location='right', shrink=0.8)
+        cbar.set_label('Value')
+
+    plt.show()
 
 def unique_preserve_order(x):
     seen = []
@@ -118,7 +236,7 @@ def map_deepset(deepset, theta, device):
 
 
 def baseline_mae(dataset):
-    all_thetas = dataset.get_theta()
+    all_thetas = dataset.get_theta_tensor()
 
     theta_mean = all_thetas.mean(dim=0)
 
