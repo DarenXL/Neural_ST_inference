@@ -157,7 +157,10 @@ def deepset_collate(batch):
 
     return data, theta, deepset
 
-def show_example(dataset, loader, k=0):
+def show_example(loader, k=0):
+
+    dataset = loader.dataset
+
     fig, axs = plt.subplots(nrows=2, ncols=5, figsize=(18, 7), layout='constrained')
 
     for data, theta, deepset in loader:
@@ -191,7 +194,6 @@ def show_example(dataset, loader, k=0):
                 axs[0, i].set_ylabel(r"$\it{Space 2}$" if i == 0 else None)
 
         break
-
 
     all_images = [im for ax in axs.flat for im in ax.get_images()]
 
@@ -251,3 +253,7 @@ def global_mean_pool(x, deepset):
     out = torch.zeros(num_groups, x.size(1), device=x.device)
     out.index_add_(0, deepset, x)
     return out / torch.bincount(deepset).float().unsqueeze(1)
+
+def format_seconds(s):
+    h, m, s = int(s//3600), int((s%3600)//60), int(s%60)
+    return f"{h}h{m}m{s}s" if h > 0 else (f"{m}m{s}s" if m > 0 else f"{s}s")
