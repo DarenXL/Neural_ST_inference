@@ -1,8 +1,14 @@
 import numpy as np
 import gstlearn as gl
 from .base import SimulationModel
+from scipy.special import gamma, kv
 
 def _simulate_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, std, deepset_size=5):
+    adv = np.round(adv).astype(int)
+    range_time = np.maximum(range_time, np.array(0.05))
+    range_space = np.maximum(range_space, np.array(0.05))
+    std = np.maximum(std, np.array(0.1))
+
     if space_dim == 1:
         model = gl.Model.createFromParam(gl.ECov.MATERN, ranges=[range_time, range_space], param=1, sill=std ** 2,
                                          flagRange=False)
@@ -78,6 +84,71 @@ def _simulate_matern_grid_func(time_size, space_dim, space_size, adv, range_time
 
     return np.expand_dims(np.stack(batch), 1)
 
+
+def matern_adv_cov(coords1, coords2, space_dim, adv, range_time, range_space, std):
+
+    range_time = max(range_time, 0.05)
+    range_space = max(range_space, 0.05)
+    std = max(std, 0.1)
+
+    if space_dim == 1:
+        t1 = coords1[:, 0].reshape(-1, 1)
+        s1 = coords1[:, 1].reshape(-1, 1)
+
+        t2 = coords2[:, 0].reshape(1, -1)
+        s2 = coords2[:, 1].reshape(1, -1)
+
+        adv = int(round(adv))
+
+        # Advection
+        s1 = s1 + adv * t1
+        s2 = s2 + adv * t2
+
+        nu = 1.0
+
+        d2 = ((t1 - t2) ** 2) / range_time**2 + ((s1 - s2) ** 2) / range_space**2
+        d = np.sqrt(d2 + 1e-12)
+
+        K = (
+            std**2
+            * (2 ** (1 - nu))
+            / gamma(nu)
+            * (np.sqrt(2 * nu) * d) ** nu
+            * kv(nu, np.sqrt(2 * nu) * d)
+        )
+
+        return K
+    elif space_dim == 2:
+        t1 = coords1[:, 0].reshape(-1, 1)
+        s1 = coords1[:, 1].reshape(-1, 1)
+        s1_ = coords1[:, 2].reshape(-1, 1)
+
+        t2 = coords2[:, 0].reshape(1, -1)
+        s2 = coords2[:, 1].reshape(1, -1)
+        s2_ = coords2[:, 2].reshape(1, -1)
+
+        adv = int(round(adv))
+
+        # Advection
+        s1 = s1 + adv * t1
+        s2 = s2 + adv * t2
+
+        nu = 1.0
+
+        d2 = ((t1 - t2) ** 2) / range_time**2 + ((s1 - s2) ** 2) / range_space**2 + ((s1_ - s2_) ** 2) / range_space**2
+        d = np.sqrt(d2 + 1e-12)
+
+        K = (
+            std**2
+            * (2 ** (1 - nu))
+            / gamma(nu)
+            * (np.sqrt(2 * nu) * d) ** nu
+            * kv(nu, np.sqrt(2 * nu) * d)
+        )
+
+        return K
+
+
 class AdvectionModel(SimulationModel):
     def __init__(self):
         self._names = ['adv', 'range_time', 'range_space', 'std']
@@ -112,3 +183,10 @@ class AdvectionModel(SimulationModel):
             p['adv'], p['range_time'], p['range_space'], p['std'],
             deepset_size=d_size
         )
+
+    def get_cov(self, coords1, coords2, space_dim, theta_values):
+        return matern_adv_cov(
+            coords1, coords2, space_dim,
+            theta_values[0], theta_values[1], theta_values[2], theta_values[3]
+        )
+        # return matern_adv_cov(coords1, coords2, space_dim, *theta_values)

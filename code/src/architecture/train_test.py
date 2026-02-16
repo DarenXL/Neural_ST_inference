@@ -19,12 +19,12 @@ import numpy as np
 class Trainer:
     def __init__(self, architecture, device, res_path, optimizer=None):
 
-        self.architecture = architecture.to(device)
+        self.network = architecture.to(device)
         self.device = device
         self.res_path = Path(res_path)
 
         if optimizer is None:
-            if self.architecture.nls:
+            if self.network.nls:
                 self.optimizer = torch.optim.Adam(architecture.parameters(), lr=1e-3)
             else:
                 self.optimizer = torch.optim.Adam(architecture.parameters(), lr=5e-5)
@@ -40,12 +40,12 @@ class Trainer:
         (self.res_path / "complete_outputs").mkdir(parents=True, exist_ok=True)
 
     def save_architecture(self, name="final"):
-        path = self.res_path / "architectures" / f"{self.architecture.label}_{name}.pth"
-        torch.save(self.architecture.state_dict(), path)
+        path = self.res_path / "architectures" / f"{self.network.label}_{name}.pth"
+        torch.save(self.network.state_dict(), path)
 
     def _save_history(self, history, suffix="history"):
         path = (
-            self.res_path / "loss_evolution" / f"{self.architecture.label}_{suffix}.pt"
+            self.res_path / "loss_evolution" / f"{self.network.label}_{suffix}.pt"
         )
         torch.save(history, path)
 
@@ -53,7 +53,7 @@ class Trainer:
         path = (
             self.res_path
             / "complete_outputs"
-            / f"{self.architecture.label}_{suffix}.pt"
+            / f"{self.network.label}_{suffix}.pt"
         )
         torch.save(outputs, path)
 
@@ -69,7 +69,7 @@ class Trainer:
             assert train_loader.dataset.model.param_names == self.train_loaders_hist[0].dataset.model.param_names
         self.train_loaders_hist.append(train_loader)
 
-        if self.architecture.nls:
+        if self.network.nls:
             self.train_nls(train_loader, nb_epochs, print_result)
         else:
             self.train_generic(
@@ -84,7 +84,7 @@ class Trainer:
             )
         self.test_loaders_hist.append(test_loader)
 
-        if self.architecture.nls:
+        if self.network.nls:
             self.test_nls(test_loader, theta0, print_result)
         else:
             self.test_generic(test_loader, print_result)
@@ -107,7 +107,7 @@ class Trainer:
         MAE = torch.nn.L1Loss(reduction="none")
 
         for epoch in t:
-            self.architecture.train()
+            self.network.train()
 
             epoch_batch_means = []
 
@@ -122,7 +122,7 @@ class Trainer:
 
                 deepset_mapped, theta = map_deepset(deepset, theta, self.device)
 
-                output = self.architecture(batched_data, deepset_mapped)
+                output = self.network(batched_data, deepset_mapped)
 
                 loss_vec = MAE(output, theta)
 
@@ -147,7 +147,7 @@ class Trainer:
 
             if (epoch + 1) % freq_epochs_test == 0:
                 start_test = time.time()
-                self.architecture.eval()
+                self.network.eval()
 
                 test_errors_list = []
 
@@ -161,7 +161,7 @@ class Trainer:
                             deepset_test, theta_test, self.device
                         )
 
-                        output = self.architecture(data_test, deepset_mapped_test)
+                        output = self.network(data_test, deepset_mapped_test)
 
                         errors = torch.abs(output - theta_test)
                         test_errors_list.append(errors.detach().cpu())
@@ -236,19 +236,19 @@ class Trainer:
             ax[i].set_ylabel("MAE")
             ax[i].legend()
 
-        fig.suptitle("Loss evolutions of " + self.architecture.label)
+        fig.suptitle("Loss evolutions of " + self.network.label)
 
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.architecture.label}_train_evolution.png",
+            / f"{self.network.label}_train_evolution.png",
             format="png",
             bbox_inches="tight",
         )
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.architecture.label}_train_evolution.pdf",
+            / f"{self.network.label}_train_evolution.pdf",
             format="pdf",
             bbox_inches="tight",
         )
@@ -259,13 +259,13 @@ class Trainer:
         all_true_theta = []
 
         time_start = time.time()
-        self.architecture.eval()
+        self.network.eval()
 
         model_ref = loader_test.dataset.model
         t = tqdm(
             loader_test,
             total=len(loader_test),
-            desc=f"Inference {self.architecture.label}",
+            desc=f"Inference {self.network.label}",
         )
 
         with torch.no_grad():
@@ -277,7 +277,7 @@ class Trainer:
                 # deepset_mapped, theta_target = map_deepset(
                 #     deepset_test, theta_test, self.device
                 # )
-                output = self.architecture(data_test, torch.arange(len(deepset_test)))
+                output = self.network(data_test, torch.arange(len(deepset_test)))
 
                 loss = torch.abs(output - theta_test).detach().cpu()
                 theta_final = output.detach().cpu()
@@ -324,7 +324,7 @@ class Trainer:
         CE = nn.CrossEntropyLoss()
 
         for epoch in t:
-            self.architecture.train()
+            self.network.train()
 
             epoch_batch = []
 
@@ -335,7 +335,7 @@ class Trainer:
                 theta = theta.to(self.device)
                 classi = classi.to(self.device)
 
-                output = self.architecture(batched_data, theta=theta)
+                output = self.network(batched_data, theta=theta)
 
                 loss = CE(output, classi).mean()
 
@@ -369,21 +369,21 @@ class Trainer:
         fig, ax = plt.subplots(1, 1, figsize=(14, 7), constrained_layout=True)
         ax.plot(all_loss_train, "forestgreen", linewidth=2.0)
 
-        fig.suptitle("Loss evolutions of " + self.architecture.label)
+        fig.suptitle("Loss evolutions of " + self.network.label)
         ax.set_xlabel("epochs")
         ax.set_ylabel("Cross Entropy")
 
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.architecture.label}_train_evolution.png",
+            / f"{self.network.label}_train_evolution.png",
             format="png",
             bbox_inches="tight",
         )
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.architecture.label}_train_evolution.pdf",
+            / f"{self.network.label}_train_evolution.pdf",
             format="pdf",
             bbox_inches="tight",
         )
@@ -393,7 +393,7 @@ class Trainer:
         def obj(theta):
             theta_t = activation(theta.unsqueeze(0).to(self.device))
             # theta_t = theta.unsqueeze(0).to(self.device)
-            h = self.architecture(data, theta=theta_t)
+            h = self.network(data, theta=theta_t)
 
             logL = h[:, 1] - h[:, 0]
             return logL

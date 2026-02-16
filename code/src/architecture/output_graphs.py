@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 
 from utils import THETA_COLORS, baseline_mae, format_seconds
 
@@ -19,12 +20,12 @@ def train_graph(trainers, res_path):
     losses = []
     labels = []
     for j, trainer in enumerate(trainers):
-        if not trainer.architecture.nls:
-            labels.append(trainer.architecture.label)
+        if not trainer.network.nls:
+            labels.append(trainer.network.label)
             path = (
                 trainer.res_path
                 / "loss_evolution"
-                / f"{trainer.architecture.label}_history.pt"
+                / f"{trainer.network.label}_history.pt"
             )
             losses.append(torch.load(path)["final_train_losses"])
 
@@ -67,11 +68,11 @@ def test_graph(trainers, res_path):
     losses = []
     labels = []
     for j, trainer in enumerate(trainers):
-        labels.append(trainer.architecture.label)
+        labels.append(trainer.network.label)
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"{trainer.architecture.label}_outputs.pt"
+            / f"{trainer.network.label}_outputs.pt"
         )
         losses.append(torch.load(path)["final_test_losses"])
 
@@ -106,18 +107,18 @@ def time_hist(trainers, res_path):
     simu_times, train_times, test_times = [], [], []
     labels = []
     for j, trainer in enumerate(trainers):
-        labels.append(trainer.architecture.label)
+        labels.append(trainer.network.label)
         simu_times.append(trainer.train_loaders_hist[0].dataset.time_generation)
         path = (
             trainer.res_path
             / "loss_evolution"
-            / f"{trainer.architecture.label}_history.pt"
+            / f"{trainer.network.label}_history.pt"
         )
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"{trainer.architecture.label}_outputs.pt"
+            / f"{trainer.network.label}_outputs.pt"
         )
         test_times.append(torch.load(path)["test_time"])
 
@@ -153,6 +154,8 @@ def time_hist(trainers, res_path):
 
 def target_graph(trainers, res_path, k=0):
 
+    #TODO : ajouter un paramètre pour choisir le loader
+
     dataset0 = trainers[0].train_loaders_hist[0].dataset
     theta_names = dataset0.model.param_names
     n_params = len(theta_names)
@@ -165,7 +168,7 @@ def target_graph(trainers, res_path, k=0):
     path0 = (
         trainers[0].res_path
         / "complete_outputs"
-        / f"{trainers[0].architecture.label}_outputs.pt"
+        / f"{trainers[0].network.label}_outputs.pt"
     )
     true_all_theta = torch.load(path0)["true_all_theta"]
 
@@ -179,7 +182,7 @@ def target_graph(trainers, res_path, k=0):
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"{trainer.architecture.label}_outputs.pt"
+            / f"{trainer.network.label}_outputs.pt"
         )
         all_preds = torch.load(path)["final_all_theta"]
 
@@ -187,7 +190,7 @@ def target_graph(trainers, res_path, k=0):
 
         color = getattr(trainer, "color", THETA_COLORS[idx]['test'])
 
-        preds_dict[trainer.architecture.label] = {
+        preds_dict[trainer.network.label] = {
             "pred": filtered_preds,
             "color": color,
         }
@@ -287,3 +290,129 @@ def target_graph(trainers, res_path, k=0):
         format="png",
         bbox_inches="tight",
     )
+
+def visualise_output(trainer, res_path, nb_examples=3, num_loader=-1):
+    p = 4
+    fig_map, axs = plt.subplots(
+        nb_examples, p, figsize=(5 * p, nb_examples * 4), constrained_layout=True
+    )
+
+    dataset = trainer.test_loaders_hist[num_loader].dataset
+    space_dim = dataset.space_dim
+
+    for i in range(nb_examples):
+        full_sample, true_theta, _ = dataset[i]
+        full_sample, true_theta = full_sample[0], true_theta[0]
+
+        axs[i, 1].imshow(full_sample[0] if space_dim == 1 else full_sample[0,0], cmap="viridis", extent=[0, 1, 0, 1])
+        axs[i, 1].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
+        axs[i, 1].set_title(
+            r"= Simu with true $\theta$ =" + "\n" + dataset.model.to_title(true_theta)
+        )
+
+        masked_sample = full_sample.clone()
+        masked_sample[0][np.array(masked_sample[1], dtype=bool)] = 0
+
+        masked_sample_nan = masked_sample.detach().numpy().copy()
+        masked_sample_nan[0][np.array(masked_sample[1], dtype=bool)] = np.nan
+
+        axs[i, 0].imshow(masked_sample_nan[0] if space_dim == 1 else masked_sample_nan[0,0], cmap="viridis", extent=[0, 1, 0, 1])
+        axs[i, 0].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
+        axs[i, 0].set_ylabel(r"$\it{Time}$" if space_dim == 1 else r"$\it{Space 2}$")
+        axs[i, 0].set_title(
+            r"= Simu with true $\theta$ =" + "\n" + dataset.model.to_title(true_theta)
+        )
+
+        theta_pred = (
+            trainer.network(
+                masked_sample.unsqueeze(0).float(),
+                deepset=torch.tensor([0]),
+            )[0]
+            .detach()
+            .numpy()
+        )
+
+        sample_uncond = dataset.generate_one(i)[0][0]
+
+        sample_krig_uncond = dataset.kriging(
+            np.stack([np.where(~masked_sample[1].to(bool), sample_uncond, 0), masked_sample[1]]),
+            theta_pred,
+        )
+
+        sample_krig = dataset.kriging(
+            masked_sample.detach().numpy(), theta_pred
+        )
+
+        sample_pred = sample_uncond - sample_krig_uncond + sample_krig
+
+        axs[i, 2].imshow(
+            sample_pred if space_dim == 1 else sample_pred[0], cmap="viridis", extent=[0, 1, 0, 1]
+        )
+        axs[i, 2].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
+        axs[i, 2].set_title(
+            r"= Simu with $\theta$ from " + trainer.network.label + " =\n" + dataset.model.to_title(theta_pred)
+        )
+
+        mae_data = (
+            abs(sample_pred - full_sample[0].detach().numpy())
+            if space_dim == 1
+            else abs(sample_pred[0] - full_sample[0, 0].detach().numpy())
+        )
+        im_mae = axs[i, 3].imshow(
+            mae_data,
+            cmap="inferno",
+            extent=[0, 1, 0, 1],
+        )
+        axs[i, 3].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
+        axs[i, 3].set_title(r"= MAE truth - prediction =")
+
+    data_images = [
+        axs[i, j].get_images()[0] for i in range(nb_examples) for j in range(3)
+    ]
+    if data_images:
+        v_min = min(np.nanmin(im.get_array()) for im in data_images)
+        v_max = max(np.nanmax(im.get_array()) for im in data_images)
+
+        cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
+        data_cmap = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+
+        for im in data_images:
+            im.set_clim(v_min, v_max)
+            im.set_cmap(data_cmap)
+
+        cbar_data = fig_map.colorbar(
+            data_images[0], ax=axs[:, :3], location="right", shrink=0.8, pad=0.08
+        )
+        cbar_data.set_label("Value")
+
+    mae_images = [axs[i, 3].get_images()[0] for i in range(nb_examples)]
+    if mae_images:
+        mae_max = max(np.nanmax(im.get_array()) for im in mae_images)
+
+        cols = ["#FFFFFF", "#7AA7F1"]
+        data_cmap = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+
+        for im in mae_images:
+            im.set_clim(0, mae_max)
+            im.set_cmap(
+                data_cmap # "Blues"
+            )
+
+        cbar_mae = fig_map.colorbar(
+            mae_images[0], ax=axs[:, 3], location="right", shrink=0.8, pad=0.05
+        )
+        cbar_mae.set_label("MAE (Error)")
+
+    (res_path / "conclusion_graphs").mkdir(parents=True, exist_ok=True)
+    fig_map.savefig(
+        res_path / "conclusion_graphs" / f"visualisation.pdf",
+        format="pdf",
+        bbox_inches="tight",
+    )
+    fig_map.savefig(
+        res_path / "conclusion_graphs" / f"visualisation.png",
+        format="png",
+        bbox_inches="tight",
+    )
+
+    plt.show()

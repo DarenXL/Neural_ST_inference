@@ -89,6 +89,16 @@ class GenericSimulationDataset(Dataset):
         self.time_generation = time.time() - start_time
         self.save(path)
 
+    def generate_one(self, idx):
+
+        theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+
+        batch = self.model.simulate(
+            theta_i, self.time_size, self.space_dim, self.space_size, 1
+        )
+
+        return batch
+
     def show(self, ax, idx, sample_idx=0):
         batch, theta, _ = self.__getitem__(idx)
 
@@ -117,6 +127,40 @@ class GenericSimulationDataset(Dataset):
                 # ax[i].set_xlabel("Space 1")
                 # ax[i].set_ylabel(r"$\it{Space 2}$")
 
+    def kriging(self, sample, theta_pred):
+        y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(-1)
+
+        t = np.linspace(0, 1, self.time_size)
+        s = np.linspace(0, 1, self.space_size)
+
+        if self.space_dim == 1 :
+            coords = np.array([(ti, si) for ti in t for si in s])
+        else :
+            coords = np.array([(ti, si, sj) for ti in t for si in s for sj in s])
+
+        y_obs = y[~mask_obs]
+        coords_obs = coords[~mask_obs]
+        coords_miss = coords[mask_obs]
+
+        cov_oo = self.model.get_cov(
+            coords_obs, coords_obs, self.space_dim, theta_pred
+        )
+
+        cov_mo = self.model.get_cov(
+            coords_miss, coords_obs, self.space_dim, theta_pred
+        )
+
+        cov_oo += 1e-6 * np.eye(cov_oo.shape[0])
+
+        y_miss = cov_mo @ np.linalg.solve(cov_oo, y_obs)
+
+        y_full = y.copy()
+        y_full[mask_obs] = y_miss
+
+        if self.space_dim == 1 :
+            return y_full.reshape(self.time_size, self.space_size)
+        else :
+            return y_full.reshape(self.time_size, self.space_size, self.space_size)
 
     def __getitem__(self, idx):
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")

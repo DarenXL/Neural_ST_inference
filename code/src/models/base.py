@@ -23,3 +23,7 @@ class SimulationModel(ABC):
     @abstractmethod
     def simulate(self, theta_values, time_size, space_dim, space_size, deepset_size):
         pass
+
+    @abstractmethod
+    def get_cov(self, coords1, coords2, space_dim, theta_values):
+        pass

@@ -40,6 +40,8 @@ from architecture.output_graphs import *
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
+#TODO : commenter le code
+
 #############
 # Variables #
 #############
@@ -56,8 +58,8 @@ nb_epochs = 50
 freq_epochs_test = 10
 
 time_size = 10
-space_dim = 1
-space_size = 20
+space_dim = 2
+space_size = 10
 
 deepset_size = 5
 missing_ratio = 1 / 2
@@ -164,34 +166,34 @@ trainer_separately.test(loader_test)
 # Model #
 #########
 
-dataset_train_nls = NlsSimulationDataset(dataset_train)
-dataset_test_nls = NlsSimulationDataset(dataset_test)
-
-loader_train_nls = DataLoader(
-    dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
-)
-loader_test_nls = DataLoader(
-    dataset_test_nls, batch_size=5, shuffle=False, collate_fn=deepset_collate
-)
+# dataset_train_nls = NlsSimulationDataset(dataset_train)
+# dataset_test_nls = NlsSimulationDataset(dataset_test)
+#
+# loader_train_nls = DataLoader(
+#     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+# )
+# loader_test_nls = DataLoader(
+#     dataset_test_nls, batch_size=5, shuffle=False, collate_fn=deepset_collate
+# )
 
 ################
 # Architecture #
 ################
 
-CNN = CNN_ST_network(
-    in_channels=2,
-    out_dim=dataset_train.model.nb_params,
-    spatial_dim=space_dim,
-    option="jointly",
-    nls=True,
-).to(device)
-trainer_nls = Trainer(CNN, device, res_path)
-trainer_nls.train(
-    train_loader=loader_train_nls,
-    nb_epochs=nb_epochs,
-    print_result=True
-)
-trainer_nls.test(loader_test_nls)
+# CNN = CNN_ST_network(
+#     in_channels=2,
+#     out_dim=dataset_train.model.nb_params,
+#     spatial_dim=space_dim,
+#     option="jointly",
+#     nls=True,
+# ).to(device)
+# trainer_nls = Trainer(CNN, device, res_path)
+# trainer_nls.train(
+#     train_loader=loader_train_nls,
+#     nb_epochs=nb_epochs,
+#     print_result=True
+# )
+# trainer_nls.test(loader_test_nls)
 
 #########################
 #########################
@@ -199,9 +201,12 @@ trainer_nls.test(loader_test_nls)
 #########################
 #########################
 
-trainers = [trainer_jointly, trainer_separately, trainer_nls]
+trainers = [trainer_jointly, trainer_separately] #, trainer_nls]
 
 # train_graph(trainers, res_path)
 # test_graph(trainers, res_path)
 # time_hist(trainers, res_path)
-target_graph(trainers, res_path, k=0)
+# target_graph(trainers, res_path, k=0)
+
+visualise_output(trainer_jointly, res_path)
+
