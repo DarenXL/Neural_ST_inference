@@ -8,24 +8,34 @@ from matplotlib.colors import LinearSegmentedColormap
 
 THETA_COLORS = [
     {
-        "train":"orangered",
-        "test":"lightsalmon",
-        "baseline":"dimgrey"
+        "train": "#7AA7F1",  # "orangered",
+        "test": "#7AA7F1",  # "lightsalmon",
+        "baseline": "dimgrey",
     },
     {
-        "train":"deepskyblue",
-        "test":"lightskyblue",
-        "baseline":"dimgrey"
+        "train": "#648FFF",  # "deepskyblue",
+        "test": "#648FFF",  # "lightskyblue",
+        "baseline": "dimgrey",
     },
     {
-        "train":"forestgreen",
-        "test":"limegreen",
-        "baseline":"dimgrey"
+        "train": "#785EF0",  # "forestgreen",
+        "test": "#785EF0",  # "limegreen",
+        "baseline": "dimgrey",
     },
     {
-        "train":"darkorchid",
-        "test":"orchid",
-        "baseline":"dimgrey"
+        "train": "#DC267F",  # "darkorchid",
+        "test": "#DC267F",  # "orchid",
+        "baseline": "dimgrey",
+    },
+    {
+        "train": "#FE6100",
+        "test": "#FE6100",
+        "baseline": "dimgrey",
+    },
+    {
+        "train": "#FFB000",
+        "test": "#FFB000",
+        "baseline": "dimgrey",
     },
 ]
 
@@ -54,7 +64,7 @@ def create_res_path(base_path: str) -> Path:
     sub_dirs = [
         path / "loss_evolution",
         path / "conclusion_graphs",
-        path / "architectures"
+        path / "networks"
     ]
 
     for sd in sub_dirs:

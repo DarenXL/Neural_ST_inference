@@ -17,43 +17,43 @@ import numpy as np
 
 
 class Trainer:
-    def __init__(self, architecture, device, res_path, optimizer=None):
+    def __init__(self, network, device, res_path, optimizer=None):
 
-        self.network = architecture.to(device)
+        self.network = network.to(device)
         self.device = device
         self.res_path = Path(res_path)
 
         if optimizer is None:
             if self.network.nls:
-                self.optimizer = torch.optim.Adam(architecture.parameters(), lr=1e-3)
+                self.optimizer = torch.optim.Adam(network.parameters(), lr=1e-3)
             else:
-                self.optimizer = torch.optim.Adam(architecture.parameters(), lr=5e-5)
+                self.optimizer = torch.optim.Adam(network.parameters(), lr=5e-5)
 
         self.theta_names = None
         self.simu_time = None
 
-        self.train_loaders_hist = []
-        self.test_loaders_hist = []
+        self.train_dataset_hist = []
+        self.test_dataset_hist = []
 
         (self.res_path / "loss_evolution").mkdir(parents=True, exist_ok=True)
-        (self.res_path / "architectures").mkdir(parents=True, exist_ok=True)
+        (self.res_path / "networks").mkdir(parents=True, exist_ok=True)
         (self.res_path / "complete_outputs").mkdir(parents=True, exist_ok=True)
 
-    def save_architecture(self, name="final"):
-        path = self.res_path / "architectures" / f"{self.network.label}_{name}.pth"
+    def save_network(self, name=""):
+        path = self.res_path / "networks" / f"{self.network.label}{name}.pth"
         torch.save(self.network.state_dict(), path)
 
-    def _save_history(self, history, suffix="history"):
+    def _save_history(self, history, prefix="history"):
         path = (
-            self.res_path / "loss_evolution" / f"{self.network.label}_{suffix}.pt"
+            self.res_path / "loss_evolution" / f"{prefix} - {self.network.label} [{len(self.train_dataset_hist)-1}].pt"
         )
         torch.save(history, path)
 
-    def _save_results(self, outputs, suffix="outputs"):
+    def _save_results(self, outputs, prefix="outputs"):
         path = (
             self.res_path
             / "complete_outputs"
-            / f"{self.network.label}_{suffix}.pt"
+            / f"{prefix} - {self.network.label} [{len(self.test_dataset_hist)-1}].pt"
         )
         torch.save(outputs, path)
 
@@ -65,9 +65,9 @@ class Trainer:
         freq_epochs_test=10,
         print_result=False,
     ):
-        if len(self.train_loaders_hist) > 0 :
-            assert train_loader.dataset.model.param_names == self.train_loaders_hist[0].dataset.model.param_names
-        self.train_loaders_hist.append(train_loader)
+        if len(self.train_dataset_hist) > 0 :
+            assert train_loader.dataset.model.param_names == self.train_dataset_hist[0].dataset.model.param_names
+        self.train_dataset_hist.append(train_loader.dataset)
 
         if self.network.nls:
             self.train_nls(train_loader, nb_epochs, print_result)
@@ -77,12 +77,12 @@ class Trainer:
             )
 
     def test(self, test_loader, theta0=None, print_result=False):
-        if len(self.test_loaders_hist) > 0 :
+        if len(self.test_dataset_hist) > 0 :
             assert (
                 test_loader.dataset.model.param_names
-                == self.test_loaders_hist[0].dataset.model.param_names
+                == self.test_dataset_hist[0].dataset.model.param_names
             )
-        self.test_loaders_hist.append(test_loader)
+        self.test_dataset_hist.append(test_loader.dataset)
 
         if self.network.nls:
             self.test_nls(test_loader, theta0, print_result)
@@ -202,7 +202,7 @@ class Trainer:
         }
 
         self._save_history(results)
-        self.save_architecture()
+        self.save_network()
 
         theta_names = test_loader.dataset.model.param_names
 
@@ -222,6 +222,7 @@ class Trainer:
                 [l[i] for l in all_loss_test],
                 THETA_COLORS[i]["test"],
                 label="test " + name,
+                linestyle=(5,(10,2))
             )
 
             ax[i].axhline(
@@ -241,14 +242,14 @@ class Trainer:
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.network.label}_train_evolution.png",
+            / f"train_evolution - {self.network.label}.png",
             format="png",
             bbox_inches="tight",
         )
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.network.label}_train_evolution.pdf",
+            / f"train_evolution - {self.network.label}.pdf",
             format="pdf",
             bbox_inches="tight",
         )
@@ -364,7 +365,7 @@ class Trainer:
         }
 
         self._save_history(results)
-        self.save_architecture()
+        self.save_network()
 
         fig, ax = plt.subplots(1, 1, figsize=(14, 7), constrained_layout=True)
         ax.plot(all_loss_train, "forestgreen", linewidth=2.0)
@@ -376,14 +377,14 @@ class Trainer:
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.network.label}_train_evolution.png",
+            / f"train_evolution - {self.network.label}.png",
             format="png",
             bbox_inches="tight",
         )
         fig.savefig(
             self.res_path
             / "loss_evolution"
-            / f"{self.network.label}_train_evolution.pdf",
+            / f"train_evolution - {self.network.label}.pdf",
             format="pdf",
             bbox_inches="tight",
         )

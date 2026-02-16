@@ -6,13 +6,19 @@ from matplotlib.colors import LinearSegmentedColormap
 from utils import THETA_COLORS, baseline_mae, format_seconds
 
 
-def train_graph(trainers, res_path):
+def list_trainers_name(trainers, num_dataset):
+    return " - ".join([trainer.network.label + f" [{n}]" for n, trainer in zip(num_dataset,trainers)])
 
-    assert all(item.train_loaders_hist[0].dataset.model.param_names == trainers[0].train_loaders_hist[0].dataset.model.param_names for item in trainers)
-    theta_names = trainers[0].train_loaders_hist[0].dataset.model.param_names
+def train_graph(trainers, res_path, num_dataset=0):
+
+    if isinstance(num_dataset, int) :
+        num_dataset = [num_dataset]*len(trainers)
+
+    # assert all(item.train_dataset_hist[0].model.param_names == trainers[0].train_dataset_hist[0].model.param_names for item in trainers)
+    theta_names = trainers[0].train_dataset_hist[num_dataset[0]].model.param_names
 
     baseline, baseline_theta_mean = baseline_mae(
-        trainers[0].test_loaders_hist[0].dataset
+        trainers[0].test_dataset_hist[0]
     )
 
     fig_box_train, axs = plt.subplots(1, len(theta_names), figsize=(18, 10))
@@ -25,7 +31,7 @@ def train_graph(trainers, res_path):
             path = (
                 trainer.res_path
                 / "loss_evolution"
-                / f"{trainer.network.label}_history.pt"
+                / f"history - {trainer.network.label} [{num_dataset[j]}].pt"
             )
             losses.append(torch.load(path)["final_train_losses"])
 
@@ -51,16 +57,19 @@ def train_graph(trainers, res_path):
     plt.tight_layout()
     plt.show()
 
-    fig_box_train.savefig(res_path / "conclusion_graphs" / "score_train.pdf", format="pdf", bbox_inches="tight")
-    fig_box_train.savefig(res_path / "conclusion_graphs" / "score_train.png", format="png", bbox_inches="tight")
+    fig_box_train.savefig(res_path / "conclusion_graphs" / f"score_train - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
+    fig_box_train.savefig(res_path / "conclusion_graphs" / f"score_train - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def test_graph(trainers, res_path):
+def test_graph(trainers, res_path, num_dataset=0):
 
-    assert all(item.train_loaders_hist[0].dataset.model.param_names == trainers[0].train_loaders_hist[0].dataset.model.param_names for item in trainers)
-    theta_names = trainers[0].train_loaders_hist[0].dataset.model.param_names
+    if isinstance(num_dataset, int) :
+        num_dataset = [num_dataset]*len(trainers)
+
+    # assert all(item.test_dataset_hist[0].model.param_names == trainers[0].test_dataset_hist[0].model.param_names for item in trainers)
+    theta_names = trainers[0].test_dataset_hist[num_dataset[0]].model.param_names
 
     baseline, baseline_theta_mean = baseline_mae(
-        trainers[0].test_loaders_hist[0].dataset
+        trainers[0].test_dataset_hist[0]
     )
 
     fig_box, axs = plt.subplots(1, len(theta_names), figsize=(18, 10))
@@ -72,7 +81,7 @@ def test_graph(trainers, res_path):
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"{trainer.network.label}_outputs.pt"
+            / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
         )
         losses.append(torch.load(path)["final_test_losses"])
 
@@ -94,31 +103,34 @@ def test_graph(trainers, res_path):
         )
         # axs[i].legend()
 
-    plt.suptitle("Test error comparaison")
-    plt.tight_layout()
+    fig_box.suptitle("Test error comparaison")
+    fig_box.tight_layout()
     plt.show()
 
-    fig_box.savefig(res_path / "conclusion_graphs" / "score_test.pdf", format="pdf", bbox_inches="tight")
-    fig_box.savefig(res_path / "conclusion_graphs" / "score_test.png", format="png", bbox_inches="tight")
+    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
+    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
 
-def time_hist(trainers, res_path):
+def time_hist(trainers, res_path, num_dataset=0):
+
+    if isinstance(num_dataset, int) :
+        num_dataset = [num_dataset]*len(trainers)
 
     simu_times, train_times, test_times = [], [], []
     labels = []
     for j, trainer in enumerate(trainers):
         labels.append(trainer.network.label)
-        simu_times.append(trainer.train_loaders_hist[0].dataset.time_generation)
+        simu_times.append(trainer.train_dataset_hist[0].time_generation)
         path = (
             trainer.res_path
             / "loss_evolution"
-            / f"{trainer.network.label}_history.pt"
+            / f"history - {trainer.network.label} [{num_dataset[j]}].pt"
         )
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"{trainer.network.label}_outputs.pt"
+            / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
         )
         test_times.append(torch.load(path)["test_time"])
 
@@ -126,10 +138,10 @@ def time_hist(trainers, res_path):
     width = 0.3
 
     fig_time, ax = plt.subplots(figsize=(8, 5))
-
-    bar0 = ax.bar(x - width, simu_times, width, label='Simulation', color='forestgreen')
-    bar1 = ax.bar(x, train_times, width, label='Train', color='royalblue')
-    bar2 = ax.bar(x + width, test_times, width, label='Test', color='firebrick')
+    # cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
+    bar0 = ax.bar(x - width, simu_times, width, label='Simulation', color="#785EF0")
+    bar1 = ax.bar(x, train_times, width, label='Train', color="#DC267F")
+    bar2 = ax.bar(x + width, test_times, width, label='Test', color="#FE6100")
 
     for b, t in zip([bar0, bar1, bar2], [simu_times, train_times, test_times]):
         labels_time = [format_seconds(val) for val in t]
@@ -148,15 +160,16 @@ def time_hist(trainers, res_path):
     plt.tight_layout()
     plt.show()
 
-    fig_time.savefig(res_path / "conclusion_graphs" / "times.pdf", format="pdf", bbox_inches="tight")
-    fig_time.savefig(res_path / "conclusion_graphs" / "times.png", format="png", bbox_inches="tight")
+    fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
+    fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
 
-def target_graph(trainers, res_path, k=0):
+def target_graph(trainers, res_path, k=0, num_dataset=0):
 
-    #TODO : ajouter un paramètre pour choisir le loader
+    if isinstance(num_dataset, int) :
+        num_dataset = [num_dataset]*len(trainers)
 
-    dataset0 = trainers[0].train_loaders_hist[0].dataset
+    dataset0 = trainers[0].train_dataset_hist[num_dataset[0]]
     theta_names = dataset0.model.param_names
     n_params = len(theta_names)
 
@@ -168,7 +181,7 @@ def target_graph(trainers, res_path, k=0):
     path0 = (
         trainers[0].res_path
         / "complete_outputs"
-        / f"{trainers[0].network.label}_outputs.pt"
+        / f"outputs - {trainers[0].network.label} [{num_dataset[0]}].pt"
     )
     true_all_theta = torch.load(path0)["true_all_theta"]
 
@@ -178,17 +191,17 @@ def target_graph(trainers, res_path, k=0):
 
     preds_dict = {}
 
-    for idx, trainer in enumerate(trainers):
+    for j, trainer in enumerate(trainers):
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"{trainer.network.label}_outputs.pt"
+            / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
         )
         all_preds = torch.load(path)["final_all_theta"]
 
         filtered_preds = all_preds[mask].detach().cpu().numpy()
 
-        color = getattr(trainer, "color", THETA_COLORS[idx]['test'])
+        color = getattr(trainer, "color", THETA_COLORS[j]['test'])
 
         preds_dict[trainer.network.label] = {
             "pred": filtered_preds,
@@ -279,25 +292,16 @@ def target_graph(trainers, res_path, k=0):
 
     plt.show()
 
-    (res_path / "conclusion_graphs").mkdir(parents=True, exist_ok=True)
-    fig_target.savefig(
-        res_path / "conclusion_graphs" / f"target_k{k}.pdf",
-        format="pdf",
-        bbox_inches="tight",
-    )
-    fig_target.savefig(
-        res_path / "conclusion_graphs" / f"target_k{k}.png",
-        format="png",
-        bbox_inches="tight",
-    )
+    fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
+    fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def visualise_output(trainer, res_path, nb_examples=3, num_loader=-1):
+def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
     p = 4
     fig_map, axs = plt.subplots(
         nb_examples, p, figsize=(5 * p, nb_examples * 4), constrained_layout=True
     )
 
-    dataset = trainer.test_loaders_hist[num_loader].dataset
+    dataset = trainer.test_dataset_hist[num_dataset]
     space_dim = dataset.space_dim
 
     for i in range(nb_examples):
@@ -403,16 +407,7 @@ def visualise_output(trainer, res_path, nb_examples=3, num_loader=-1):
         )
         cbar_mae.set_label("MAE (Error)")
 
-    (res_path / "conclusion_graphs").mkdir(parents=True, exist_ok=True)
-    fig_map.savefig(
-        res_path / "conclusion_graphs" / f"visualisation.pdf",
-        format="pdf",
-        bbox_inches="tight",
-    )
-    fig_map.savefig(
-        res_path / "conclusion_graphs" / f"visualisation.png",
-        format="png",
-        bbox_inches="tight",
-    )
+    fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.pdf", format="pdf", bbox_inches="tight")
+    fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.png", format="png", bbox_inches="tight")
 
     plt.show()

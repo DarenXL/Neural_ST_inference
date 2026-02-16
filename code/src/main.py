@@ -58,7 +58,7 @@ nb_epochs = 50
 freq_epochs_test = 10
 
 time_size = 10
-space_dim = 2
+space_dim = 1
 space_size = 10
 
 deepset_size = 5
@@ -203,10 +203,10 @@ trainer_separately.test(loader_test)
 
 trainers = [trainer_jointly, trainer_separately] #, trainer_nls]
 
-# train_graph(trainers, res_path)
-# test_graph(trainers, res_path)
-# time_hist(trainers, res_path)
-# target_graph(trainers, res_path, k=0)
+train_graph(trainers, res_path)
+test_graph(trainers, res_path)
+time_hist(trainers, res_path)
+target_graph(trainers, res_path, k=0)
 
 visualise_output(trainer_jointly, res_path)
 
