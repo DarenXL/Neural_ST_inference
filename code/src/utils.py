@@ -47,7 +47,7 @@ def create_data_path(base_path: str) -> Path:
 
     sub_dirs = [
         path / "train" / "samples",
-        path / "test" / "samples"
+        path / "test" # / "samples"
     ]
 
     for sd in sub_dirs:
@@ -167,43 +167,35 @@ def deepset_collate(batch):
 
     return data, theta, deepset
 
-def show_example(loader, k=0):
-
-    dataset = loader.dataset
+def show_example(dataset, data_path, k=0, label='example'):
 
     fig, axs = plt.subplots(nrows=2, ncols=5, figsize=(18, 7), layout='constrained')
 
-    for data, theta, deepset in loader:
+    if dataset.space_dim == 1:
 
-        vmin, vmax = data[:, 0].min(), data[:, 0].max()
+        fig.suptitle(r"Examples on different $\theta$")
 
-        if len(data.shape) == 4:
+        for i in range(len(axs[0])):
+            dataset.show(axs[0, i], k + i)
+            dataset.show(axs[1, i], k + i, mask=True)
 
-            fig.suptitle(r"Examples on different $\theta$")
+            axs[1, i].set_xlabel(r"$\it{Space}$")
+            axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
+            axs[0, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
 
-            for i in range(len(axs[0])):
-                dataset.show(axs[0, i], k+i)
-                data_t = data[k+i, 0].clone()
-                data_t[data_t == 0] = np.nan
-                axs[1, i].imshow(data_t, aspect='equal', extent=[0,1,0,1])
-                axs[1, i].set_xlabel(r"$\it{Space}$")
-                axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
-                axs[0, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
+    else:
+        fig.suptitle(r"Example over time")
 
-        else:
-            fig.suptitle(r"Example over time")
+        dataset.show(axs[0], k)
+        dataset.show(axs[1], k, mask=True)
 
-            dataset.show(axs[0], k)
-
-            for i in range(len(axs[0])):
-                data_t = data[k, 0, i].clone()
-                data_t[data_t == 0] = np.nan
-                axs[1, i].imshow(data_t, aspect='equal', extent=[0,1,0,1])
-                axs[1, i].set_xlabel(r"$\it{Space 1}$")
-                axs[1, i].set_ylabel(r"$\it{Space 2}$")
-                axs[0, i].set_ylabel(r"$\it{Space 2}$" if i == 0 else None)
-
-        break
+        for i in range(len(axs[0])):
+            # data_t = data[k, 0, i].clone()
+            # data_t[data_t == 0] = np.nan
+            # axs[1, i].imshow(data_t, aspect='equal', extent=[0,1,0,1])
+            axs[1, i].set_xlabel(r"$\it{Space 1}$")
+            axs[1, i].set_ylabel(r"$\it{Space 2}$")
+            axs[0, i].set_ylabel(r"$\it{Space 2}$" if i == 0 else None)
 
     all_images = [im for ax in axs.flat for im in ax.get_images()]
 
@@ -220,9 +212,13 @@ def show_example(loader, k=0):
             im.set_cmap(cmap)
 
         cbar = fig.colorbar(all_images[-1], ax=axs, location='right', shrink=0.8)
-        cbar.set_label('Value')
+        cbar.set_label('') # 'Value'
 
     plt.show()
+
+    (data_path / "examples").mkdir(parents=True, exist_ok=True)
+    fig.savefig(data_path / "examples" / f"{label}.pdf", format="pdf", bbox_inches="tight")
+    fig.savefig(data_path / "examples" / f"{label}.png", format="png", bbox_inches="tight")
 
 def unique_preserve_order(x):
     seen = []

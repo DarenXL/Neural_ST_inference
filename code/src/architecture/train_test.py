@@ -80,7 +80,7 @@ class Trainer:
         if len(self.test_dataset_hist) > 0 :
             assert (
                 test_loader.dataset.model.param_names
-                == self.test_dataset_hist[0].dataset.model.param_names
+                == self.test_dataset_hist[0].model.param_names
             )
         self.test_dataset_hist.append(test_loader.dataset)
 
@@ -152,6 +152,7 @@ class Trainer:
                 test_errors_list = []
 
                 with torch.no_grad():
+                    # TODO : vérifier test
                     for data_test, theta_test, deepset_test in test_loader:
                         data_test = data_test.to(self.device).float()
                         theta_test = theta_test.to(self.device)

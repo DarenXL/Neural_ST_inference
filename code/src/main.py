@@ -40,7 +40,7 @@ from architecture.output_graphs import *
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
-#TODO : commenter le code
+# TODO : commenter le code
 
 #############
 # Variables #
@@ -57,14 +57,14 @@ batch_size = 50
 nb_epochs = 50
 freq_epochs_test = 10
 
-time_size = 10
+time_size = 30
 space_dim = 1
-space_size = 10
+space_size = 30
 
 deepset_size = 5
-missing_ratio = 1 / 2
+missing_ratios = [9/10, 1/2]
 
-train_size = 50
+train_size = 10
 test_size = 10
 
 ####################
@@ -87,39 +87,40 @@ dataset_train = GenericSimulationDataset(
     space_dim=space_dim,
     space_size=space_size,
     deepset_size=deepset_size,
-    missing_ratio=missing_ratio,
+    missing_ratio=missing_ratios[0],
 )
-
 print(f"Data train generation : {model.__class__.__name__}")
 dataset_train.generate(data_path / "train")
-
-dataset_test = GenericSimulationDataset(
-    model=model,
-    theta_size=test_size,
-    time_size=time_size,
-    space_dim=space_dim,
-    space_size=space_size,
-    deepset_size=5,
-    missing_ratio=missing_ratio,
-)
-
-print(f"Data test generation : {model.__class__.__name__}")
-dataset_test.generate(data_path / "test")
-
-# dataset_train = GenericSimulationDataset.load(data_path / "train", model_instance=model)
-# dataset_test = GenericSimulationDataset.load(data_path / "test", model_instance=model)
 
 loader_train = DataLoader(
     dataset_train, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
 )
-loader_test = DataLoader(
-    dataset_test, batch_size=5, shuffle=False, collate_fn=deepset_collate
-)
 
-# show_example(loader_test, k=1)
+datasets_test = []
+loaders_test = []
 
-baseline, theta_mean = baseline_mae(dataset_test)
+for ratio in missing_ratios:
+    specific_test_path = data_path / "test" / f"ratio_{ratio}"
 
+    dataset = GenericSimulationDataset(
+        model=model,
+        theta_size=test_size,
+        time_size=time_size,
+        space_dim=space_dim,
+        space_size=space_size,
+        deepset_size=5,
+        missing_ratio=ratio,
+    )
+
+    print(f"Data test {ratio} generation : {model.__class__.__name__}")
+    dataset.generate(specific_test_path)
+
+    datasets_test.append(dataset)
+    loaders_test.append(
+        DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate)
+    )
+
+show_example(datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=1)
 ################
 # Architecture #
 ################
@@ -133,12 +134,14 @@ CNN = CNN_ST_network(
 trainer_jointly = Trainer(CNN, device, res_path)
 trainer_jointly.train(
     train_loader=loader_train,
-    test_loader=loader_test,
+    test_loader=loaders_test[0],
     nb_epochs=nb_epochs,
     freq_epochs_test=freq_epochs_test,
     print_result=True,
 )
-trainer_jointly.test(loader_test)
+for i in range(len(datasets_test)):
+    trainer_jointly.test(loaders_test[i])
+
 
 CNN = CNN_ST_network(
     in_channels=2,
@@ -149,12 +152,13 @@ CNN = CNN_ST_network(
 trainer_separately = Trainer(CNN, device, res_path)
 trainer_separately.train(
     train_loader=loader_train,
-    test_loader=loader_test,
+    test_loader=loaders_test[0],
     nb_epochs=nb_epochs,
     freq_epochs_test=freq_epochs_test,
     print_result=True,
 )
-trainer_separately.test(loader_test)
+for i in range(len(datasets_test)):
+    trainer_separately.test(loaders_test[i])
 
 ################
 ################
@@ -201,12 +205,12 @@ trainer_separately.test(loader_test)
 #########################
 #########################
 
-trainers = [trainer_jointly, trainer_separately] #, trainer_nls]
+trainers = [trainer_jointly, trainer_separately]
 
-train_graph(trainers, res_path)
-test_graph(trainers, res_path)
-time_hist(trainers, res_path)
-target_graph(trainers, res_path, k=0)
+train_graph(trainers, res_path, num_dataset=0)
+time_hist(trainers, res_path, num_dataset=0)
 
-visualise_output(trainer_jointly, res_path)
-
+for i in range(len(datasets_test)):
+    test_graph(trainers, res_path, num_dataset=i)
+    target_graph(trainers, res_path, k=0, num_dataset=i)
+    visualise_output(trainer_jointly, res_path, num_dataset=i)

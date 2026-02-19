@@ -99,12 +99,16 @@ class GenericSimulationDataset(Dataset):
 
         return batch
 
-    def show(self, ax, idx, sample_idx=0):
+    def show(self, ax, idx, mask=False, sample_idx=0):
         batch, theta, _ = self.__getitem__(idx)
 
         if self.space_dim == 1:
 
             img = batch[sample_idx, 0]
+
+            if mask:
+                img = img.clone()
+                img[batch[sample_idx, 1].to(bool)] = np.nan
 
             title_text = self.model.to_title(theta[0])
 
@@ -120,12 +124,18 @@ class GenericSimulationDataset(Dataset):
 
                 img = batch[sample_idx, 0, i]
 
+                if mask:
+                    img = img.clone()
+                    img[batch[sample_idx, 1, i].to(bool)] = np.nan
+
                 title_text = self.model.to_title(theta[0])
 
                 ax[i].imshow(img, aspect='equal', extent=[0, 1, 0, 1])
                 ax[i].set_title(f"Time {i}" if i != len(ax)//2 else title_text+f"\n\nTime {i}", fontsize=10)
                 # ax[i].set_xlabel("Space 1")
                 # ax[i].set_ylabel(r"$\it{Space 2}$")
+
+
 
     def kriging(self, sample, theta_pred):
         y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(-1)
@@ -165,8 +175,8 @@ class GenericSimulationDataset(Dataset):
     def __getitem__(self, idx):
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
 
-        if self.missing_ratio > 0:
-            batch = add_missing_mask(batch, self.missing_ratio)
+        # if self.missing_ratio > 0:
+        batch = add_missing_mask(batch, self.missing_ratio)
 
         theta_vec = self.get_theta_tensor()[idx]
 
@@ -196,8 +206,8 @@ class NlsSimulationDataset(GenericSimulationDataset):
         sample_idx = idx % self.theta_size
 
         batch = np.load(f"{self.path}/samples/sample_{sample_idx}.npy")
-        if self.missing_ratio > 0:
-            batch = add_missing_mask(batch, self.missing_ratio)
+        # if self.missing_ratio > 0:
+        batch = add_missing_mask(batch, self.missing_ratio)
 
         if is_perm == 0:
             true_theta = self.all_thetas[sample_idx]

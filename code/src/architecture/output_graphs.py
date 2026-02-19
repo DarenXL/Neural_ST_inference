@@ -6,6 +6,7 @@ from matplotlib.colors import LinearSegmentedColormap
 from utils import THETA_COLORS, baseline_mae, format_seconds
 
 
+
 def list_trainers_name(trainers, num_dataset):
     return " - ".join([trainer.network.label + f" [{n}]" for n, trainer in zip(num_dataset,trainers)])
 
@@ -21,7 +22,7 @@ def train_graph(trainers, res_path, num_dataset=0):
         trainers[0].test_dataset_hist[0]
     )
 
-    fig_box_train, axs = plt.subplots(1, len(theta_names), figsize=(18, 10))
+    fig_box_train, axs = plt.subplots(1, len(theta_names), figsize=(18, 7))
 
     losses = []
     labels = []
@@ -69,10 +70,10 @@ def test_graph(trainers, res_path, num_dataset=0):
     theta_names = trainers[0].test_dataset_hist[num_dataset[0]].model.param_names
 
     baseline, baseline_theta_mean = baseline_mae(
-        trainers[0].test_dataset_hist[0]
+        trainers[0].test_dataset_hist[num_dataset[0]]
     )
 
-    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(18, 10))
+    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(18, 7))
 
     losses = []
     labels = []
@@ -103,13 +104,62 @@ def test_graph(trainers, res_path, num_dataset=0):
         )
         # axs[i].legend()
 
-    fig_box.suptitle("Test error comparaison")
+    fig_box.suptitle(f"Test error comparaison")
     fig_box.tight_layout()
     plt.show()
 
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
+
+def test_alt_graph(trainer, res_path):
+
+    theta_names = trainer.test_dataset_hist[0].model.param_names
+
+    # baseline = []
+    # for i in  range(len(trainer.test_dataset_hist)):
+    #     baseline.append(baseline_mae(trainer.test_dataset_hist[0])[0])
+    # baseline = np.mean(baseline)
+
+    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(18, 7))
+
+    losses = []
+    labels = []
+    missing_ratios = []
+    for j, dataset in enumerate(trainer.test_dataset_hist):
+        labels.append(f"missing ratio {dataset.missing_ratio}")
+        missing_ratios.append(dataset.missing_ratio)
+        path = (
+            trainer.res_path
+            / "complete_outputs"
+            / f"outputs - {trainer.network.label} [{j}].pt"
+        )
+        losses.append(torch.load(path)["final_test_losses"])
+
+    for i, name in enumerate(theta_names):
+
+        axs[i].boxplot(
+            [loss[:,i] for loss in losses],
+            tick_labels=labels,
+            patch_artist=True,
+            boxprops=dict(facecolor=THETA_COLORS[i]["test"], alpha=0.6),
+            medianprops=dict(linestyle="-", linewidth=2, color="black"),
+        )
+        axs[i].tick_params(axis="x", labelrotation=45)
+        axs[i].set_title("MAE – " + name)
+        axs[i].set_ylabel("MAE")
+
+        # axs[i].axhline(
+        #     baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline " + name
+        # )
+        # axs[i].legend()
+
+    fig_box.suptitle(f"Test error comparaison - {trainer.network.label}")
+    fig_box.tight_layout()
+    plt.show()
+
+    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.network.label}.pdf", format="pdf", bbox_inches="tight")
+    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.network.label}.png", format="png", bbox_inches="tight")
 
 def time_hist(trainers, res_path, num_dataset=0):
 
@@ -169,7 +219,7 @@ def target_graph(trainers, res_path, k=0, num_dataset=0):
     if isinstance(num_dataset, int) :
         num_dataset = [num_dataset]*len(trainers)
 
-    dataset0 = trainers[0].train_dataset_hist[num_dataset[0]]
+    dataset0 = trainers[0].test_dataset_hist[num_dataset[0]]
     theta_names = dataset0.model.param_names
     n_params = len(theta_names)
 
@@ -201,7 +251,7 @@ def target_graph(trainers, res_path, k=0, num_dataset=0):
 
         filtered_preds = all_preds[mask].detach().cpu().numpy()
 
-        color = getattr(trainer, "color", THETA_COLORS[j]['test'])
+        color = getattr(trainer, "color", THETA_COLORS[-j]['test'])
 
         preds_dict[trainer.network.label] = {
             "pred": filtered_preds,
@@ -295,7 +345,20 @@ def target_graph(trainers, res_path, k=0, num_dataset=0):
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
+def visualise(trainers, res_path, nb_examples=3, num_dataset=0):
+    if isinstance(num_dataset, int) :
+        num_dataset = [num_dataset]*len(trainers)
+
+    mask = []
+    for i in range(nb_examples):
+        full_sample, _, _ = trainers[0].test_dataset_hist[num_dataset[0]][i]
+        mask.append(full_sample[0][1])
+
+    for j, trainer in enumerate(trainers) :
+        visualise_output(trainer, res_path, nb_examples, num_dataset[j], mask=mask)
+
+def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, mask=None):
+    # TODO : même masque
     p = 4
     fig_map, axs = plt.subplots(
         nb_examples, p, figsize=(5 * p, nb_examples * 4), constrained_layout=True
@@ -315,6 +378,8 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
         )
 
         masked_sample = full_sample.clone()
+        if not(mask is None):
+                masked_sample[1] = mask[i]
         masked_sample[0][np.array(masked_sample[1], dtype=bool)] = 0
 
         masked_sample_nan = masked_sample.detach().numpy().copy()
@@ -336,10 +401,12 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
             .numpy()
         )
 
-        sample_uncond = dataset.generate_one(i)[0][0]
+        sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
+        sample_uncond_masked = sample_uncond.copy()
+        sample_uncond_masked[np.array(masked_sample[1], dtype=bool)] = 0
 
         sample_krig_uncond = dataset.kriging(
-            np.stack([np.where(~masked_sample[1].to(bool), sample_uncond, 0), masked_sample[1]]),
+            np.stack([sample_uncond_masked, masked_sample[1]]),
             theta_pred,
         )
 
@@ -347,10 +414,10 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
             masked_sample.detach().numpy(), theta_pred
         )
 
-        sample_pred = sample_uncond - sample_krig_uncond + sample_krig
+        sample_pred = sample_krig + sample_uncond - sample_krig_uncond
 
         axs[i, 2].imshow(
-            sample_pred if space_dim == 1 else sample_pred[0], cmap="viridis", extent=[0, 1, 0, 1]
+            sample_krig if space_dim == 1 else sample_krig[0], cmap="viridis", extent=[0, 1, 0, 1]
         )
         axs[i, 2].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
         axs[i, 2].set_title(
@@ -358,17 +425,21 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
         )
 
         mae_data = (
-            abs(sample_pred - full_sample[0].detach().numpy())
+            abs(sample_krig - full_sample[0].detach().numpy())
             if space_dim == 1
-            else abs(sample_pred[0] - full_sample[0, 0].detach().numpy())
+            else abs(sample_krig[0] - full_sample[0, 0].detach().numpy())
         )
-        im_mae = axs[i, 3].imshow(
+        axs[i, 3].imshow(
             mae_data,
             cmap="inferno",
             extent=[0, 1, 0, 1],
         )
         axs[i, 3].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
-        axs[i, 3].set_title(r"= MAE truth - prediction =")
+        axs[i, 3].set_title(r"= MAE truth - prediction ="
+                            +f"\ntotal error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy())):.3f}"
+                             f"\ntotal normalized error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy()))
+                                                     /np.std(abs(full_sample[0].detach().numpy())):.3f}"
+                            )
 
     data_images = [
         axs[i, j].get_images()[0] for i in range(nb_examples) for j in range(3)
@@ -387,7 +458,7 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
         cbar_data = fig_map.colorbar(
             data_images[0], ax=axs[:, :3], location="right", shrink=0.8, pad=0.08
         )
-        cbar_data.set_label("Value")
+        cbar_data.set_label("") # 'Value'
 
     mae_images = [axs[i, 3].get_images()[0] for i in range(nb_examples)]
     if mae_images:
@@ -409,5 +480,7 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0):
 
     fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.pdf", format="pdf", bbox_inches="tight")
     fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.png", format="png", bbox_inches="tight")
+
+    print(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.pdf")
 
     plt.show()
