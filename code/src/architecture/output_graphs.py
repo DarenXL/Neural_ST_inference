@@ -3,8 +3,7 @@ import torch
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 
-from utils import THETA_COLORS, baseline_mae, format_seconds
-
+from utils import THETA_COLORS, CMAP, baseline_mae, format_seconds
 
 
 def list_trainers_name(trainers, num_dataset):
@@ -112,22 +111,26 @@ def test_graph(trainers, res_path, num_dataset=0):
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
 
-def test_alt_graph(trainer, res_path):
+def test_alt_graph(trainers, res_path):
+    for trainer in trainers :
+        _test_alt_graph(trainer, res_path)
 
-    theta_names = trainer.test_dataset_hist[0].model.param_names
+def _test_alt_graph(trainer, res_path):
 
-    # baseline = []
-    # for i in  range(len(trainer.test_dataset_hist)):
-    #     baseline.append(baseline_mae(trainer.test_dataset_hist[0])[0])
-    # baseline = np.mean(baseline)
+    theta_names = trainer.test_dataset_hist[0].model.get_param_names(alt_format=True)
 
-    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(18, 7))
+    baseline, baseline_theta_mean = baseline_mae(
+        trainer.test_dataset_hist[0]
+    )
+
+    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(13, 5))
+
 
     losses = []
-    labels = []
+    labels = []#["~79%\nmissing\nratio", "~47%\nmissing\nratio", "~16%\nmissing\nratio"]
     missing_ratios = []
     for j, dataset in enumerate(trainer.test_dataset_hist):
-        labels.append(f"missing ratio {dataset.missing_ratio}")
+        labels.append(f"missing\nratio\n{dataset.missing_ratio}")
         missing_ratios.append(dataset.missing_ratio)
         path = (
             trainer.res_path
@@ -145,14 +148,15 @@ def test_alt_graph(trainer, res_path):
             boxprops=dict(facecolor=THETA_COLORS[i]["test"], alpha=0.6),
             medianprops=dict(linestyle="-", linewidth=2, color="black"),
         )
-        axs[i].tick_params(axis="x", labelrotation=45)
+        axs[i].tick_params(axis="x")# , labelrotation=45)
         axs[i].set_title("MAE – " + name)
-        axs[i].set_ylabel("MAE")
+        axs[i].set_ylabel("MAE" if i == 0 else "")
 
-        # axs[i].axhline(
-        #     baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline " + name
-        # )
-        # axs[i].legend()
+        axs[i].axhline(
+            baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline"  # + name
+        )
+        if i == len(axs) - 1 :
+            axs[i].legend()
 
     fig_box.suptitle(f"Test error comparaison - {trainer.network.label}")
     fig_box.tight_layout()
@@ -345,7 +349,7 @@ def target_graph(trainers, res_path, k=0, num_dataset=0):
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def visualise(trainers, res_path, nb_examples=3, num_dataset=0):
+def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0):
     if isinstance(num_dataset, int) :
         num_dataset = [num_dataset]*len(trainers)
 
@@ -355,41 +359,51 @@ def visualise(trainers, res_path, nb_examples=3, num_dataset=0):
         mask.append(full_sample[0][1])
 
     for j, trainer in enumerate(trainers) :
-        visualise_output(trainer, res_path, nb_examples, num_dataset[j], mask=mask)
+        if not trainer.network.nls:
+            visualise_output(trainer, res_path, nb_examples, num_dataset[j], k, mask=mask)
+        else :
+            return
 
-def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, mask=None):
-    # TODO : même masque
+def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None):
     p = 4
     fig_map, axs = plt.subplots(
-        nb_examples, p, figsize=(5 * p, nb_examples * 4), constrained_layout=True
+        nb_examples, p, figsize=(4 * p, nb_examples * 3.5), constrained_layout=True
     )
+    fig_map.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
 
     dataset = trainer.test_dataset_hist[num_dataset]
     space_dim = dataset.space_dim
 
+    if space_dim == 1 :
+        label_x = r"$\it{Space}$"
+        label_y = r"$\it{Time}$"
+    else:
+        label_x = r"$\it{Space 1}$"
+        label_y = r"$\it{Space 2}$"
+
     for i in range(nb_examples):
-        full_sample, true_theta, _ = dataset[i]
+        full_sample, true_theta, _ = dataset[i+k]
         full_sample, true_theta = full_sample[0], true_theta[0]
 
         axs[i, 1].imshow(full_sample[0] if space_dim == 1 else full_sample[0,0], cmap="viridis", extent=[0, 1, 0, 1])
-        axs[i, 1].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
+        axs[i, 1].set_xlabel(label_x if i == (nb_examples -1) else "")
         axs[i, 1].set_title(
-            r"= Simu with true $\theta$ =" + "\n" + dataset.model.to_title(true_theta)
+            (r"= Simu with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
         )
 
         masked_sample = full_sample.clone()
         if not(mask is None):
-                masked_sample[1] = mask[i]
+            masked_sample[1] = mask[i]
         masked_sample[0][np.array(masked_sample[1], dtype=bool)] = 0
 
         masked_sample_nan = masked_sample.detach().numpy().copy()
         masked_sample_nan[0][np.array(masked_sample[1], dtype=bool)] = np.nan
 
         axs[i, 0].imshow(masked_sample_nan[0] if space_dim == 1 else masked_sample_nan[0,0], cmap="viridis", extent=[0, 1, 0, 1])
-        axs[i, 0].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
-        axs[i, 0].set_ylabel(r"$\it{Time}$" if space_dim == 1 else r"$\it{Space 2}$")
+        axs[i, 0].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 0].set_ylabel(label_y)
         axs[i, 0].set_title(
-            r"= Simu with true $\theta$ =" + "\n" + dataset.model.to_title(true_theta)
+            (r"= Data with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
         )
 
         theta_pred = (
@@ -419,9 +433,9 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, mask=None)
         axs[i, 2].imshow(
             sample_krig if space_dim == 1 else sample_krig[0], cmap="viridis", extent=[0, 1, 0, 1]
         )
-        axs[i, 2].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
+        axs[i, 2].set_xlabel(label_x if i == (nb_examples -1) else "")
         axs[i, 2].set_title(
-            r"= Simu with $\theta$ from " + trainer.network.label + " =\n" + dataset.model.to_title(theta_pred)
+            (r"= Prediction with inferred $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
         )
 
         mae_data = (
@@ -434,10 +448,10 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, mask=None)
             cmap="inferno",
             extent=[0, 1, 0, 1],
         )
-        axs[i, 3].set_xlabel(r"$\it{Space 1}$" if i == (nb_examples -1) else "")
-        axs[i, 3].set_title(r"= MAE truth - prediction ="
-                            +f"\ntotal error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy())):.3f}"
-                             f"\ntotal normalized error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy()))
+        axs[i, 3].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 3].set_title((r"= Mean Absolute Error =" +"\n" if i == 0 else "")
+                            +f"Error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy())):.3f}"
+                             f"\nNormalized error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy()))
                                                      /np.std(abs(full_sample[0].detach().numpy())):.3f}"
                             )
 
@@ -448,15 +462,15 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, mask=None)
         v_min = min(np.nanmin(im.get_array()) for im in data_images)
         v_max = max(np.nanmax(im.get_array()) for im in data_images)
 
-        cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
-        data_cmap = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+        # cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
+        # data_cmap = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
 
         for im in data_images:
             im.set_clim(v_min, v_max)
-            im.set_cmap(data_cmap)
+            im.set_cmap(CMAP)
 
         cbar_data = fig_map.colorbar(
-            data_images[0], ax=axs[:, :3], location="right", shrink=0.8, pad=0.08
+            data_images[0], ax=axs[:, :3], location="right", shrink=0.8, pad=0.05
         )
         cbar_data.set_label("") # 'Value'
 
@@ -476,11 +490,9 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, mask=None)
         cbar_mae = fig_map.colorbar(
             mae_images[0], ax=axs[:, 3], location="right", shrink=0.8, pad=0.05
         )
-        cbar_mae.set_label("MAE (Error)")
+        # cbar_mae.set_label("MAE (Error)")
 
     fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.pdf", format="pdf", bbox_inches="tight")
     fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.png", format="png", bbox_inches="tight")
-
-    print(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.pdf")
 
     plt.show()

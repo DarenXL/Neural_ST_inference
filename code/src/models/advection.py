@@ -152,6 +152,7 @@ def matern_adv_cov(coords1, coords2, space_dim, adv, range_time, range_space, st
 class AdvectionModel(SimulationModel):
     def __init__(self):
         self._names = ['adv', 'range_time', 'range_space', 'std']
+        self._names_alt = ["adv", r"$\rho_t$", r"$\rho_s$", r"$\sigma$"]
         self.lower_bound = (-3, 0.05, 0.05, 0.1)
         self.upper_bound = (4, 0.25, 0.25, 1.)
 
@@ -159,15 +160,20 @@ class AdvectionModel(SimulationModel):
     def param_names(self):
         return self._names
 
+    def get_param_names(self, alt_format=False):
+        if alt_format:
+            return self._names_alt
+        return self.param_names
+
     @property
     def nb_params(self):
         return len(self.param_names)
 
     def to_title(self, vals, alt_format=False):
         if not alt_format:
-            return f"adv: {int(vals[0])}\nrange_t: {vals[1]:.2f}\nrange_s: {vals[2]:.2f}\nstd: {vals[3]:.2f}"
+            return fr"adv: {int(vals[0].round())} | $\rho_t$: {vals[1]:.2f}" + "\n" + fr"$\rho_s$: {vals[2]:.2f} | $\sigma$: {vals[3]:.2f}"
         else :
-            return f"adv {vals[0]:.4f} | range_t {vals[1]:.4f} | range_s {vals[2]:.4f} | std {vals[3]:.4f}"
+            return fr"adv: {int(vals[0].round())} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f} | $\sigma$: {vals[3]:.2f}"
 
     def sample_thetas(self, n):
         return {

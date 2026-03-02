@@ -1,18 +1,26 @@
 import torch
+from pathlib import Path
 import numpy as np
 import os
 import time
 from torch.utils.data import Dataset
 from tqdm import tqdm
 from models.base import SimulationModel
-# Si tu as besoin de add_missing_mask, importe-le depuis utils
 from utils import add_missing_mask
 import matplotlib.pyplot as plt
 
 
 class GenericSimulationDataset(Dataset):
-    def __init__(self, model: SimulationModel, theta_size=200, time_size=40, space_dim=1, space_size=40, deepset_size=5,
-                 missing_ratio=0):
+    def __init__(
+        self,
+        model: SimulationModel,
+        theta_size=200,
+        time_size=40,
+        space_dim=1,
+        space_size=40,
+        deepset_size=5,
+        missing_ratio=0,
+    ):
         self.model = model
         self.theta_size = theta_size
         self.time_size = time_size
@@ -29,11 +37,13 @@ class GenericSimulationDataset(Dataset):
     def __len__(self):
         return self.theta_size
 
-    def get_theta_tensor(self):
+    def get_theta_tensor(self) -> torch.Tensor:
+        """Return every theta in a tensor"""
         stack = [self.thetas[name] for name in self.model.param_names]
         return torch.from_numpy(np.stack(stack).T)
 
-    def save(self, path):
+    def save(self, path: Path):
+        """Save all attributes and the thetas"""
         meta = {
             "config": {
                 "time_size": self.time_size,
@@ -43,15 +53,16 @@ class GenericSimulationDataset(Dataset):
                 "deepset_size": self.deepset_size,
                 "missing_ratio": self.missing_ratio,
                 "time_generation": self.time_generation,
-                "model_class": self.model.__class__.__name__
+                "model_class": self.model.__class__.__name__,
             },
-            "thetas": self.thetas
+            "thetas": self.thetas,
         }
         np.save(f"{path}/metadata.npy", meta)
         self.path = path
 
     @classmethod
-    def load(cls, path, model_instance: SimulationModel):
+    def load(cls, path: Path, model_instance: SimulationModel):
+        """Load all attributes and the thetas"""
         data = np.load(f"{path}/metadata.npy", allow_pickle=True).item()
         config = data["config"]
 
@@ -62,7 +73,7 @@ class GenericSimulationDataset(Dataset):
             space_dim=config["space_dim"],
             space_size=config["space_size"],
             deepset_size=config["deepset_size"],
-            missing_ratio=config["missing_ratio"]
+            missing_ratio=config["missing_ratio"],
         )
 
         instance.thetas = data["thetas"]
@@ -71,7 +82,8 @@ class GenericSimulationDataset(Dataset):
 
         return instance
 
-    def generate(self, path):
+    def generate(self, path: Path):
+        """Generate gaussian fields on a complete grid"""
         os.makedirs(f"{path}/samples", exist_ok=True)
 
         t_iter = tqdm(range(self.theta_size), total=self.theta_size)
@@ -81,7 +93,11 @@ class GenericSimulationDataset(Dataset):
             theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
             batch = self.model.simulate(
-                theta_i, self.time_size, self.space_dim, self.space_size, self.deepset_size
+                theta_i,
+                self.time_size,
+                self.space_dim,
+                self.space_size,
+                self.deepset_size,
             )
 
             np.save(f"{path}/samples/sample_{idx}.npy", batch)
@@ -89,8 +105,8 @@ class GenericSimulationDataset(Dataset):
         self.time_generation = time.time() - start_time
         self.save(path)
 
-    def generate_one(self, idx):
-
+    def generate_one(self, idx: int) -> np.ndarray:
+        """Generate one gaussian field on a complete grid and return it"""
         theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
         batch = self.model.simulate(
@@ -99,7 +115,8 @@ class GenericSimulationDataset(Dataset):
 
         return batch
 
-    def show(self, ax, idx, mask=False, sample_idx=0):
+    def show(self, ax, idx: int, mask: bool = False, sample_idx: int = 0):
+        """Show a gaussian field"""
         batch, theta, _ = self.__getitem__(idx)
 
         if self.space_dim == 1:
@@ -110,9 +127,9 @@ class GenericSimulationDataset(Dataset):
                 img = img.clone()
                 img[batch[sample_idx, 1].to(bool)] = np.nan
 
-            title_text = self.model.to_title(theta[0])
+            title_text = self.model.to_title(theta[0], alt_format=True)
 
-            ax.imshow(img, aspect='equal', extent=[0,1,0,1])
+            ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
             # ax.colorbar(label="Signal")
             ax.set_title(title_text, fontsize=10)
             # ax.set_xlabel("Space")
@@ -128,37 +145,35 @@ class GenericSimulationDataset(Dataset):
                     img = img.clone()
                     img[batch[sample_idx, 1, i].to(bool)] = np.nan
 
-                title_text = self.model.to_title(theta[0])
+                title_text = self.model.to_title(theta[0], alt_format=True)
 
-                ax[i].imshow(img, aspect='equal', extent=[0, 1, 0, 1])
-                ax[i].set_title(f"Time {i}" if i != len(ax)//2 else title_text+f"\n\nTime {i}", fontsize=10)
+                ax[i].imshow(img, aspect="equal", extent=[0, 1, 0, 1])
+                ax[i].set_title(
+                    f"Time {i}" if i != len(ax) // 2 else title_text + f"\n\nTime {i}",
+                    fontsize=10,
+                )
                 # ax[i].set_xlabel("Space 1")
                 # ax[i].set_ylabel(r"$\it{Space 2}$")
 
-
-
-    def kriging(self, sample, theta_pred):
+    def kriging(self, sample: np.ndarray, theta_pred: np.ndarray) -> np.ndarray:
+        """Kriging"""
         y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(-1)
 
         t = np.linspace(0, 1, self.time_size)
         s = np.linspace(0, 1, self.space_size)
 
-        if self.space_dim == 1 :
+        if self.space_dim == 1:
             coords = np.array([(ti, si) for ti in t for si in s])
-        else :
+        else:
             coords = np.array([(ti, si, sj) for ti in t for si in s for sj in s])
 
         y_obs = y[~mask_obs]
         coords_obs = coords[~mask_obs]
         coords_miss = coords[mask_obs]
 
-        cov_oo = self.model.get_cov(
-            coords_obs, coords_obs, self.space_dim, theta_pred
-        )
+        cov_oo = self.model.get_cov(coords_obs, coords_obs, self.space_dim, theta_pred)
 
-        cov_mo = self.model.get_cov(
-            coords_miss, coords_obs, self.space_dim, theta_pred
-        )
+        cov_mo = self.model.get_cov(coords_miss, coords_obs, self.space_dim, theta_pred)
 
         cov_oo += 1e-6 * np.eye(cov_oo.shape[0])
 
@@ -167,9 +182,9 @@ class GenericSimulationDataset(Dataset):
         y_full = y.copy()
         y_full[mask_obs] = y_miss
 
-        if self.space_dim == 1 :
+        if self.space_dim == 1:
             return y_full.reshape(self.time_size, self.space_size)
-        else :
+        else:
             return y_full.reshape(self.time_size, self.space_size, self.space_size)
 
     def __getitem__(self, idx):
@@ -193,10 +208,12 @@ class NlsSimulationDataset(GenericSimulationDataset):
 
         self.all_thetas = self.get_theta_tensor()
 
-        self.pi = torch.stack([
-            torch.randint(0, self.theta_size, (self.theta_size,))
-            for _ in range(self.deepset_size)
-        ])
+        self.pi = torch.stack(
+            [
+                torch.randint(0, self.theta_size, (self.theta_size,))
+                for _ in range(self.deepset_size)
+            ]
+        )
 
     def __len__(self):
         return 2 * self.theta_size

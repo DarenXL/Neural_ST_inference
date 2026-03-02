@@ -45,7 +45,9 @@ class Trainer:
 
     def _save_history(self, history, prefix="history"):
         path = (
-            self.res_path / "loss_evolution" / f"{prefix} - {self.network.label} [{len(self.train_dataset_hist)-1}].pt"
+            self.res_path
+            / "loss_evolution"
+            / f"{prefix} - {self.network.label} [{len(self.train_dataset_hist)-1}].pt"
         )
         torch.save(history, path)
 
@@ -59,14 +61,22 @@ class Trainer:
 
     def train(
         self,
-        train_loader,
-        nb_epochs,
-        test_loader=None,
-        freq_epochs_test=10,
-        print_result=False,
+        train_loader:torch.DataLoader,
+        nb_epochs:int,
+        test_loader:torch.DataLoader=None,
+        freq_epochs_test:int=10,
+        print_result:bool=False,
     ):
-        if len(self.train_dataset_hist) > 0 :
-            assert train_loader.dataset.model.param_names == self.train_dataset_hist[0].dataset.model.param_names
+        """"
+        Train the neural network.
+        Test the neural network every freq_epochs_test epochs if not NLS case.
+        keeps track of the datasets used.
+        """
+        if len(self.train_dataset_hist) > 0:
+            assert (
+                train_loader.dataset.model.param_names
+                == self.train_dataset_hist[0].dataset.model.param_names
+            )
         self.train_dataset_hist.append(train_loader.dataset)
 
         if self.network.nls:
@@ -76,8 +86,12 @@ class Trainer:
                 train_loader, test_loader, nb_epochs, freq_epochs_test, print_result
             )
 
-    def test(self, test_loader, theta0=None, print_result=False):
-        if len(self.test_dataset_hist) > 0 :
+    def test(self, test_loader:torch.DataLoader, theta0:torch.Tensor=None, print_result:bool=False):
+        """"
+        Test the neural network.
+        keeps track of the datasets used.
+        """
+        if len(self.test_dataset_hist) > 0:
             assert (
                 test_loader.dataset.model.param_names
                 == self.test_dataset_hist[0].model.param_names
@@ -156,13 +170,15 @@ class Trainer:
                     for data_test, theta_test, deepset_test in test_loader:
                         data_test = data_test.to(self.device).float()
                         theta_test = theta_test.to(self.device)
-                        deepset_test = deepset_test.to(self.device)
+                        # deepset_test = deepset_test.to(self.device)
+                        # deepset_mapped_test, theta_test = map_deepset(
+                        #     deepset_test, theta_test, self.device
+                        # )
+                        # output = self.network(data_test, deepset_mapped_test)
 
-                        deepset_mapped_test, theta_test = map_deepset(
-                            deepset_test, theta_test, self.device
+                        output = self.network(
+                            data_test, torch.arange(len(deepset_test))
                         )
-
-                        output = self.network(data_test, deepset_mapped_test)
 
                         errors = torch.abs(output - theta_test)
                         test_errors_list.append(errors.detach().cpu())
@@ -180,14 +196,14 @@ class Trainer:
         if print_result:
             print(f"\nTime to train : {total_time_train:.2f}s")
 
-            last_train = all_loss_train[-1].tolist()
+            last_train = all_loss_train[-1]  # .tolist()
             print(
                 "Train loss per param : "
                 + train_loader.dataset.model.to_title(last_train, alt_format=True)
             )
 
             if all_loss_test:
-                last_test = all_loss_test[-1].tolist()
+                last_test = all_loss_test[-1]  # .tolist()
                 print(
                     "Test loss per param : "
                     + test_loader.dataset.model.to_title(last_test, alt_format=True)
@@ -195,7 +211,9 @@ class Trainer:
 
         results = {
             "train_loss_history": torch.stack(all_loss_train),
-            "test_loss_history": (torch.stack(all_loss_test) if all_loss_test else None),
+            "test_loss_history": (
+                torch.stack(all_loss_test) if all_loss_test else None
+            ),
             "train_time": total_time_train,
             "time_test_accumulated": time_test_accumulated,
             "final_train_losses": loss_final_train,
@@ -223,7 +241,7 @@ class Trainer:
                 [l[i] for l in all_loss_test],
                 THETA_COLORS[i]["test"],
                 label="test " + name,
-                linestyle=(5,(10,2))
+                linestyle=(5, (10, 2)),
             )
 
             ax[i].axhline(
@@ -274,7 +292,7 @@ class Trainer:
             for i, (data_test, theta_test, deepset_test) in enumerate(t):
                 data_test = data_test.to(self.device).float()
                 theta_test = theta_test.to(self.device)
-                #deepset_test = deepset_test.to(self.device)
+                # deepset_test = deepset_test.to(self.device)
 
                 # deepset_mapped, theta_target = map_deepset(
                 #     deepset_test, theta_test, self.device

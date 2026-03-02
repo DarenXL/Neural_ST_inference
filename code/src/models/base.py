@@ -2,10 +2,14 @@ from abc import ABC, abstractmethod
 import numpy as np
 
 class SimulationModel(ABC):
+
     @property
     @abstractmethod
     def param_names(self):
         pass
+
+    def get_param_names(self, alt_format=False):
+        return self.param_names
 
     @property
     @abstractmethod
