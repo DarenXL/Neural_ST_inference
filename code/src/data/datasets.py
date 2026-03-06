@@ -115,45 +115,91 @@ class GenericSimulationDataset(Dataset):
 
         return batch
 
-    def show(self, ax, idx: int, mask: bool = False, sample_idx: int = 0):
+    def get_min_max(self, k:list[int]):
+        all_values = []
+        for ki in k:
+            batch, _, _ = self.__getitem__(ki)
+            all_values.append(batch[:, 0])
+
+        combined_data = torch.stack(all_values)
+
+        v_min = float(torch.min(combined_data))
+        v_max = float(torch.max(combined_data))
+
+        return v_min, v_max
+
+    # def show(self, ax, idx: int, mask: bool = False, sample_idx: int = 0, time_idx: int = 0):
+    #     """Show a gaussian field"""
+    #     batch, theta, _ = self.__getitem__(idx)
+    #
+    #     if self.space_dim == 1:
+    #
+    #         img = batch[sample_idx, 0]
+    #
+    #         if mask:
+    #             img = img.clone()
+    #             img[batch[sample_idx, 1].to(bool)] = np.nan
+    #
+    #         title_text = self.model.to_title(theta[0], alt_format=True)
+    #
+    #         ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
+    #         # ax.colorbar(label="Signal")
+    #         ax.set_title(title_text, fontsize=10)
+    #         # ax.set_xlabel("Space")
+    #         # ax.set_ylabel("Time")
+    #
+    #     elif self.space_dim == 2:
+    #
+    #         for i in range(len(ax)):
+    #
+    #             img = batch[sample_idx, 0, i]
+    #
+    #             if mask:
+    #                 img = img.clone()
+    #                 img[batch[sample_idx, 1, i].to(bool)] = np.nan
+    #
+    #             title_text = self.model.to_title(theta[0], alt_format=True)
+    #
+    #             ax[i].imshow(img, aspect="equal", extent=[0, 1, 0, 1])
+    #             ax[i].set_title(
+    #                 f"Time {i}" if i != len(ax) // 2 else title_text + f"\n\nTime {i}",
+    #                 fontsize=10,
+    #             )
+    #             # ax[i].set_xlabel("Space 1")
+    #             # ax[i].set_ylabel(r"$\it{Space 2}$")
+
+    def show(self, ax, idx: int, mask: np.ndarray = None, sample_idx: int = 0, time_idx: int = 0):
         """Show a gaussian field"""
         batch, theta, _ = self.__getitem__(idx)
+
+        title_text = self.model.to_title(theta[0], alt_format=True)
 
         if self.space_dim == 1:
 
             img = batch[sample_idx, 0]
 
-            if mask:
+            if not (mask is None):
                 img = img.clone()
-                img[batch[sample_idx, 1].to(bool)] = np.nan
-
-            title_text = self.model.to_title(theta[0], alt_format=True)
+                img[:,~mask] = np.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
-            # ax.colorbar(label="Signal")
-            ax.set_title(title_text, fontsize=10)
-            # ax.set_xlabel("Space")
-            # ax.set_ylabel("Time")
+            ax.set_title(title_text  if (mask is None) else "", fontsize=10)
 
         elif self.space_dim == 2:
 
-            for i in range(len(ax)):
+            img = batch[sample_idx, 0, time_idx]
 
-                img = batch[sample_idx, 0, i]
+            if not (mask is None):
+                img = img.clone()
+                img[~mask] = np.nan
 
-                if mask:
-                    img = img.clone()
-                    img[batch[sample_idx, 1, i].to(bool)] = np.nan
-
-                title_text = self.model.to_title(theta[0], alt_format=True)
-
-                ax[i].imshow(img, aspect="equal", extent=[0, 1, 0, 1])
-                ax[i].set_title(
-                    f"Time {i}" if i != len(ax) // 2 else title_text + f"\n\nTime {i}",
-                    fontsize=10,
-                )
-                # ax[i].set_xlabel("Space 1")
-                # ax[i].set_ylabel(r"$\it{Space 2}$")
+            ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
+            ax.set_title(
+                (
+                    title_text + f"\n\nTime {time_idx}" if (mask is None) else ""
+                ),
+                fontsize=10,
+            )
 
     def kriging(self, sample: np.ndarray, theta_pred: np.ndarray) -> np.ndarray:
         """Kriging"""

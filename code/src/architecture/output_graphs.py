@@ -2,15 +2,25 @@ import numpy as np
 import torch
 from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
+from pathlib import Path
 
 from utils import THETA_COLORS, CMAP, baseline_mae, format_seconds
+from architecture.train_test import Trainer
 
 
-def list_trainers_name(trainers, num_dataset):
+def list_trainers_name(trainers : list[Trainer], num_dataset : list):
+    """returns a string containing for each trainer of trainers: its network's label and its dataset it train/test on"""
     return " - ".join([trainer.network.label + f" [{n}]" for n, trainer in zip(num_dataset,trainers)])
 
-def train_graph(trainers, res_path, num_dataset=0):
-
+def train_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list[int] =0):
+    """
+    boxplot with train scores
+    trainers : A list of Trainer
+    res_path : path to save results
+    num_dataset : used to choose which training dataset the score should be shown on
+        if an int => same index is used for every Trainer
+        if a list[int] : should be the same size as trainers
+    """
     if isinstance(num_dataset, int) :
         num_dataset = [num_dataset]*len(trainers)
 
@@ -60,7 +70,15 @@ def train_graph(trainers, res_path, num_dataset=0):
     fig_box_train.savefig(res_path / "conclusion_graphs" / f"score_train - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
     fig_box_train.savefig(res_path / "conclusion_graphs" / f"score_train - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def test_graph(trainers, res_path, num_dataset=0):
+def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list[int] =0):
+    """
+    boxplot with test scores
+    trainers : A list of Trainer
+    res_path : path to save results
+    num_dataset : used to choose which testing dataset the score should be shown on
+        if an int => same index is used for every Trainer
+        if a list[int] : should be the same size as trainers
+    """
 
     if isinstance(num_dataset, int) :
         num_dataset = [num_dataset]*len(trainers)
@@ -111,11 +129,20 @@ def test_graph(trainers, res_path, num_dataset=0):
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
 
-def test_alt_graph(trainers, res_path):
+def test_alt_graph(trainers : list[Trainer], res_path: Path):
+    """
+    For every Trainer of trainers, show a test score boxplot on every test datasets of the Trainer
+    trainers : A list of Trainer
+    res_path : path to save results
+    """
+
     for trainer in trainers :
         _test_alt_graph(trainer, res_path)
 
-def _test_alt_graph(trainer, res_path):
+def _test_alt_graph(trainer : Trainer, res_path: Path):
+    """
+    Show a test score boxplot on every test datasets of the Trainer
+    """
 
     theta_names = trainer.test_dataset_hist[0].model.get_param_names(alt_format=True)
 
@@ -165,10 +192,22 @@ def _test_alt_graph(trainer, res_path):
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.network.label}.pdf", format="pdf", bbox_inches="tight")
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.network.label}.png", format="png", bbox_inches="tight")
 
-def time_hist(trainers, res_path, num_dataset=0):
+def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int | list[int] =0, num_dataset_test: int | list[int] =0):
+    #todo : séparer num_dataset pour train/test ou faire une somme
+    """
+    boxplot with simulation, train and test times
+    trainers : A list of Trainer
+    res_path : path to save results
+    num_dataset : used to choose which datasets the times should be shown on
+        if an int => same index is used for every Trainer
+        if a list[int] : should be the same size as trainers
+    """
 
-    if isinstance(num_dataset, int) :
-        num_dataset = [num_dataset]*len(trainers)
+    if isinstance(num_dataset_train, int) :
+        num_dataset_train = [num_dataset_train]*len(trainers)
+
+    if isinstance(num_dataset_test, int) :
+        num_dataset_test = [num_dataset_test]*len(trainers)
 
     simu_times, train_times, test_times = [], [], []
     labels = []
@@ -178,13 +217,13 @@ def time_hist(trainers, res_path, num_dataset=0):
         path = (
             trainer.res_path
             / "loss_evolution"
-            / f"history - {trainer.network.label} [{num_dataset[j]}].pt"
+            / f"history - {trainer.network.label} [{num_dataset_train[j]}].pt"
         )
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
+            / f"outputs - {trainer.network.label} [{num_dataset_test[j]}].pt"
         )
         test_times.append(torch.load(path)["test_time"])
 
@@ -214,11 +253,20 @@ def time_hist(trainers, res_path, num_dataset=0):
     plt.tight_layout()
     plt.show()
 
-    fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
-    fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
+    fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, zip(num_dataset_train,num_dataset_test))}.pdf", format="pdf", bbox_inches="tight")
+    fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, zip(num_dataset_train,num_dataset_test))}.png", format="png", bbox_inches="tight")
 
 
-def target_graph(trainers, res_path, k=0, num_dataset=0):
+def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset: int | list[int] =0):
+    """
+    Several scatter plots showing the true values and estimates of each trainer's networks for each deepset for each pair of parameters.
+    trainers : A list of Trainer
+    res_path : path to save results
+    k : index of theta
+    num_dataset : used to choose which testing dataset should be shown on
+        if an int => same index is used for every Trainer
+        if a list[int] : should be the same size as trainers
+    """
 
     if isinstance(num_dataset, int) :
         num_dataset = [num_dataset]*len(trainers)
@@ -350,6 +398,17 @@ def target_graph(trainers, res_path, k=0, num_dataset=0):
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
 def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0):
+    """
+    Visualisation containing observation, true gaussian field, kriging and MAE of kriging
+    trainers : A list of Trainer
+    res_path : path to save results
+    nb_examples : number of examples (number of rows)
+    num_dataset : used to choose which testing dataset should be shown on
+        if an int => same index is used for every Trainer
+        if a list[int] : should be the same size as trainers
+    k : index where the first example start
+    """
+
     if isinstance(num_dataset, int) :
         num_dataset = [num_dataset]*len(trainers)
 
@@ -365,6 +424,7 @@ def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0):
             return
 
 def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None):
+    """Visualisation containing observation, true gaussian field, kriging and MAE of kriging"""
     p = 4
     fig_map, axs = plt.subplots(
         nb_examples, p, figsize=(4 * p, nb_examples * 3.5), constrained_layout=True

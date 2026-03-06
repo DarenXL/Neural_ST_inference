@@ -61,9 +61,9 @@ class Trainer:
 
     def train(
         self,
-        train_loader:torch.DataLoader,
+        train_loader,
         nb_epochs:int,
-        test_loader:torch.DataLoader=None,
+        test_loader=None,
         freq_epochs_test:int=10,
         print_result:bool=False,
     ):
@@ -86,7 +86,7 @@ class Trainer:
                 train_loader, test_loader, nb_epochs, freq_epochs_test, print_result
             )
 
-    def test(self, test_loader:torch.DataLoader, theta0:torch.Tensor=None, print_result:bool=False):
+    def test(self, test_loader, theta0:torch.Tensor=None, print_result:bool=False):
         """"
         Test the neural network.
         keeps track of the datasets used.

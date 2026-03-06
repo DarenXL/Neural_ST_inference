@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
-from sklearn.externals.array_api_compat.numpy import Array
+import matplotlib.animation as animation
 
 THETA_COLORS = [
     {
@@ -180,11 +180,8 @@ def sampling_poisson_1D(
 
     return mask
 
-
-def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
-    """Concatenate each element of a batch with a mask based on Poisson Sampling"""
-    deepset_size = batch.shape[0]
-    space_size = batch.shape[-1]
+def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) -> np.ndarray:
+    """Create a mask based on Poisson Sampling"""
 
     if missing_ratio is None:
         missing_ratio = np.random.random() * 0.35 + 0.6
@@ -192,25 +189,32 @@ def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarr
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing
 
+    if space_shape == 1:
+        # if nb_visible < (space_size + 1) // 2:
+        #     max_index = space_size - (nb_visible - 1)
+        #     base = np.random.choice(max_index, size=nb_visible, replace=False)
+        #     base = np.sort(base)
+        #     visibles = base + np.arange(nb_visible)
+        # else:
+        #     visibles = np.random.choice(space_size, size=nb_visible, replace=False)
+
+        visibles = sampling_poisson_1D(space_size, nb_visible, nb_visible, 0.1)
+        # visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
+    else:
+        visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
+
+    return visibles
+
+def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
+    """Concatenate each element of a batch with a mask based on Poisson Sampling"""
+    deepset_size = batch.shape[0]
+    space_size = batch.shape[-1]
+
     mask = np.ones_like(batch)
 
     for i in range(deepset_size):
-        if len(batch.shape) == 4:
-            # if nb_visible < (space_size + 1) // 2:
-            #     max_index = space_size - (nb_visible - 1)
-            #     base = np.random.choice(max_index, size=nb_visible, replace=False)
-            #     base = np.sort(base)
-            #     visibles = base + np.arange(nb_visible)
-            # else:
-            #     visibles = np.random.choice(space_size, size=nb_visible, replace=False)
 
-            visibles = sampling_poisson_1D(space_size, nb_visible, nb_visible, 0.1)
-            # visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
-        else:
-            visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
-
-        mask[i, :, :, visibles] = 0
-        # mask[i, :, visibles] = 0
+        mask[i, :, :, create_mask(space_size, 1 if len(batch.shape) == 4 else 2, missing_ratio)] = 0
 
     return np.concatenate([batch, mask], axis=1)
 
@@ -241,7 +245,7 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
 
         for i in range(len(axs[0])):
             # dataset.show(axs[0, i], k + i)
-            dataset.show(axs[0, i], k + i, mask=True)
+            dataset.show(axs[0, i], k + i, mask=None)
 
             # axs[1, i].set_xlabel(r"$\it{Space}$")
             # axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
@@ -251,10 +255,11 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
     else:
         fig.suptitle(r"Example over time")
 
-        dataset.show(axs[0], k)
         # dataset.show(axs[1], k, mask=True)
 
         for i in range(len(axs[0])):
+
+            dataset.show(axs[0, i], k, mask=None, time_idx=i)
 
             # axs[1, i].set_xlabel(r"$\it{Space 1}$")
             # axs[1, i].set_ylabel(r"$\it{Space 2}$")
@@ -302,8 +307,13 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
         fig.suptitle(r"Examples on different $\theta$")
 
         for i in range(len(axs[0])):
+            mask = create_mask(
+                dataset.space_size, dataset.space_dim,
+                missing_ratio=dataset.missing_ratio,
+            )
+
             dataset.show(axs[0, i], k + i)
-            dataset.show(axs[1, i], k + i, mask=True)
+            dataset.show(axs[1, i], k + i, mask=mask)
 
             axs[1, i].set_xlabel(r"$\it{Space}$")
             axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
@@ -312,10 +322,15 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
     else:
         fig.suptitle(r"Example over time")
 
-        dataset.show(axs[0], k)
-        dataset.show(axs[1], k, mask=True)
+        mask = create_mask(
+                dataset.space_size, dataset.space_dim,
+                missing_ratio=dataset.missing_ratio,
+            )
 
         for i in range(len(axs[0])):
+
+            dataset.show(axs[0, i], k, time_idx=i)
+            dataset.show(axs[1, i], k, mask=mask, time_idx=i)
 
             axs[1, i].set_xlabel(r"$\it{Space 1}$")
             axs[1, i].set_ylabel(r"$\it{Space 2}$")
@@ -345,6 +360,69 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
     fig.savefig(
         data_path / "examples" / f"{label}_mask.png", format="png", bbox_inches="tight"
     )
+
+
+def show_example_gif(
+    dataset, data_path: Path, num_time_steps: int, k=0, label="example"
+):
+
+    fig, axs = plt.subplots(
+        nrows=2, ncols=4, figsize=(14, 8), layout="constrained", squeeze=False
+    )
+    fig.suptitle(r"Examples on different $\theta$")
+
+    masks = []
+    for _ in range(len(axs[0])):
+        mask = create_mask(
+            dataset.space_size,
+            dataset.space_dim,
+            missing_ratio=dataset.missing_ratio,
+        )
+        masks.append(mask)
+
+    cbar = None
+
+    v_min, v_max = dataset.get_min_max(np.arange(k, k+len(axs[0])))
+
+    dataset.show(axs[0, 0], k, time_idx=0)
+    sample_im = axs[0, 0].get_images()[0]
+    sample_im.set_clim(v_min, v_max)
+    sample_im.set_cmap(CMAP)
+
+    cbar = fig.colorbar(sample_im, ax=axs, location="right", shrink=1.25, pad=0.03)
+    cbar.set_label("")
+
+    def update(t):
+        for i in range(len(axs[0])):
+            axs[0, i].clear()
+            axs[1, i].clear()
+
+            dataset.show(axs[0, i], k + i, time_idx=t)
+            dataset.show(axs[1, i], k + i, mask=masks[i], time_idx=t)
+
+            for im in axs[0, i].get_images() + axs[1, i].get_images():
+                im.set_clim(v_min, v_max)
+                im.set_cmap(CMAP)
+
+            axs[1, i].set_xlabel(r"$\it{Space 1}$")
+            if i == 0:
+                axs[0, i].set_ylabel(r"$\it{Space 2}$")
+                axs[1, i].set_ylabel(r"$\it{Space 2}$")
+
+        return [ax.get_images() for ax in axs.flat]
+
+    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=500)
+
+    out_dir = data_path / "examples"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    gif_path = out_dir / f"{label}_animated.gif"
+
+    anim.save(gif_path, writer="pillow")
+
+    plt.close(fig)
+
+    print(gif_path)
 
 
 def unique_preserve_order(x: torch.Tensor) -> torch.Tensor:
