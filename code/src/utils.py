@@ -221,11 +221,11 @@ def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarr
 
 def deepset_collate(batch: np.ndarray):
     """used in the loader to merge batch and deepset dimensions"""
-    data, theta, deepset = map(torch.stack, zip(*batch))
+    data_list, theta_list, deepset_list = zip(*batch)
 
-    data = data.flatten(0, 1)
-    theta = theta.flatten(0, 1)
-    deepset = deepset.flatten(0, 1)
+    data = torch.cat(data_list, dim=0)
+    theta = torch.cat(theta_list, dim=0)
+    deepset = torch.cat(deepset_list, dim=0)
 
     data[:, 0][data[:, 1] == 1] = 0
 

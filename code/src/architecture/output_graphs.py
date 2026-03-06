@@ -4,7 +4,7 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
 
-from utils import THETA_COLORS, CMAP, baseline_mae, format_seconds
+from utils import THETA_COLORS, CMAP, baseline_mae, format_seconds, unique_preserve_order
 from architecture.train_test import Trainer
 
 
@@ -119,7 +119,8 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
         axs[i].axhline(
             baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline " + name
         )
-        # axs[i].legend()
+        if i == len(axs) - 1 :
+            axs[i].legend()
 
     fig_box.suptitle(f"Test error comparaison")
     fig_box.tight_layout()
@@ -256,7 +257,6 @@ def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int |
     fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, zip(num_dataset_train,num_dataset_test))}.pdf", format="pdf", bbox_inches="tight")
     fig_time.savefig(res_path / "conclusion_graphs" / f"times - {list_trainers_name(trainers, zip(num_dataset_train,num_dataset_test))}.png", format="png", bbox_inches="tight")
 
-
 def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset: int | list[int] =0):
     """
     Several scatter plots showing the true values and estimates of each trainer's networks for each deepset for each pair of parameters.
@@ -300,6 +300,8 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
             / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
         )
         all_preds = torch.load(path)["final_all_theta"]
+
+        assert mask.shape == all_preds.shape, "Target graph do not work on test dataset with merge_test_deepset = True"
 
         filtered_preds = all_preds[mask].detach().cpu().numpy()
 

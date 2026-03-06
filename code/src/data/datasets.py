@@ -9,7 +9,6 @@ from models.base import SimulationModel
 from utils import add_missing_mask
 import matplotlib.pyplot as plt
 
-
 class GenericSimulationDataset(Dataset):
     def __init__(
         self,
@@ -18,7 +17,8 @@ class GenericSimulationDataset(Dataset):
         time_size=40,
         space_dim=1,
         space_size=40,
-        deepset_size=5,
+        min_deepset_size=1,
+        max_deepset_size=5,
         missing_ratio=0,
     ):
         self.model = model
@@ -26,7 +26,8 @@ class GenericSimulationDataset(Dataset):
         self.time_size = time_size
         self.space_dim = space_dim
         self.space_size = space_size
-        self.deepset_size = deepset_size
+        self.min_deepset_size = max(min_deepset_size, 1)
+        self.max_deepset_size = max_deepset_size
         self.missing_ratio = missing_ratio
 
         self.path = None
@@ -50,7 +51,8 @@ class GenericSimulationDataset(Dataset):
                 "space_dim": self.space_dim,
                 "space_size": self.space_size,
                 "theta_size": self.theta_size,
-                "deepset_size": self.deepset_size,
+                "min_deepset_size": self.min_deepset_size,
+                "max_deepset_size": self.max_deepset_size,
                 "missing_ratio": self.missing_ratio,
                 "time_generation": self.time_generation,
                 "model_class": self.model.__class__.__name__,
@@ -72,7 +74,8 @@ class GenericSimulationDataset(Dataset):
             time_size=config["time_size"],
             space_dim=config["space_dim"],
             space_size=config["space_size"],
-            deepset_size=config["deepset_size"],
+            min_deepset_size=config["min_deepset_size"],
+            max_deepset_size=config["max_deepset_size"],
             missing_ratio=config["missing_ratio"],
         )
 
@@ -97,7 +100,7 @@ class GenericSimulationDataset(Dataset):
                 self.time_size,
                 self.space_dim,
                 self.space_size,
-                self.deepset_size,
+                self.max_deepset_size,
             )
 
             np.save(f"{path}/samples/sample_{idx}.npy", batch)
@@ -236,14 +239,20 @@ class GenericSimulationDataset(Dataset):
     def __getitem__(self, idx):
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
 
-        # if self.missing_ratio > 0:
+        deepset_size = torch.randint(low=self.min_deepset_size,high=self.max_deepset_size+1, size=(1,)).item()
+        deepset_idx = torch.randperm(self.max_deepset_size)[:deepset_size]
+        batch = batch[deepset_idx]
+
+        if deepset_size == 1:
+            batch = np.expand_dims(batch, axis=0)
+
         batch = add_missing_mask(batch, self.missing_ratio)
 
         theta_vec = self.get_theta_tensor()[idx]
 
-        theta_tiled = theta_vec.tile(self.deepset_size, 1)
+        theta_tiled = theta_vec.tile(deepset_size, 1)
 
-        deepset = torch.ones(self.deepset_size, dtype=int) * idx
+        deepset = torch.ones(deepset_size, dtype=int) * idx
 
         return (torch.from_numpy(batch), theta_tiled, deepset)
 
@@ -257,7 +266,7 @@ class NlsSimulationDataset(GenericSimulationDataset):
         self.pi = torch.stack(
             [
                 torch.randint(0, self.theta_size, (self.theta_size,))
-                for _ in range(self.deepset_size)
+                for _ in range(self.max_deepset_size)
             ]
         )
 
@@ -270,15 +279,24 @@ class NlsSimulationDataset(GenericSimulationDataset):
 
         batch = np.load(f"{self.path}/samples/sample_{sample_idx}.npy")
         # if self.missing_ratio > 0:
+        deepset_size = torch.randint(
+            low=self.min_deepset_size, high=self.max_deepset_size + 1, size=(1,)
+        ).item()
+        deepset_idx = torch.randperm(self.max_deepset_size)[:deepset_size]
+        batch = batch[deepset_idx]
+
+        if deepset_size == 1:
+            batch = np.expand_dims(batch, axis=0)
+
         batch = add_missing_mask(batch, self.missing_ratio)
 
         if is_perm == 0:
             true_theta = self.all_thetas[sample_idx]
-            theta = true_theta.repeat(self.deepset_size, 1)
+            theta = true_theta.repeat(deepset_size, 1)
         else:
             fake_indices = self.pi[:, sample_idx]
-            theta = self.all_thetas[fake_indices]
+            theta = self.all_thetas[fake_indices][:deepset_size]
 
-        classi = torch.full((self.deepset_size,), is_perm, dtype=torch.int64)
+        classi = torch.full((deepset_size,), is_perm, dtype=torch.int64)
 
         return torch.from_numpy(batch), theta, classi

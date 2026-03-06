@@ -86,7 +86,7 @@ class Trainer:
                 train_loader, test_loader, nb_epochs, freq_epochs_test, print_result
             )
 
-    def test(self, test_loader, theta0:torch.Tensor=None, print_result:bool=False):
+    def test(self, test_loader, theta0:torch.Tensor=None, merge_test_deepset=True, print_result:bool=False):
         """"
         Test the neural network.
         keeps track of the datasets used.
@@ -101,7 +101,7 @@ class Trainer:
         if self.network.nls:
             self.test_nls(test_loader, theta0, print_result)
         else:
-            self.test_generic(test_loader, print_result)
+            self.test_generic(test_loader, merge_test_deepset=merge_test_deepset)
 
     def train_generic(
         self, train_loader, test_loader, nb_epochs, freq_epochs_test, print_result=False
@@ -170,15 +170,16 @@ class Trainer:
                     for data_test, theta_test, deepset_test in test_loader:
                         data_test = data_test.to(self.device).float()
                         theta_test = theta_test.to(self.device)
-                        # deepset_test = deepset_test.to(self.device)
-                        # deepset_mapped_test, theta_test = map_deepset(
-                        #     deepset_test, theta_test, self.device
-                        # )
-                        # output = self.network(data_test, deepset_mapped_test)
 
-                        output = self.network(
-                            data_test, torch.arange(len(deepset_test))
+                        deepset_test = deepset_test.to(self.device)
+                        deepset_mapped_test, theta_test = map_deepset(
+                            deepset_test, theta_test, self.device
                         )
+                        output = self.network(data_test, deepset_mapped_test)
+
+                        # output = self.network(
+                        #     data_test, torch.arange(len(deepset_test))
+                        # )
 
                         errors = torch.abs(output - theta_test)
                         test_errors_list.append(errors.detach().cpu())
@@ -273,7 +274,7 @@ class Trainer:
             bbox_inches="tight",
         )
 
-    def test_generic(self, loader_test, print_result=False):
+    def test_generic(self, loader_test, merge_test_deepset=True, print_result=False):
         all_loss_test = []
         all_theta_final = []
         all_true_theta = []
@@ -292,12 +293,16 @@ class Trainer:
             for i, (data_test, theta_test, deepset_test) in enumerate(t):
                 data_test = data_test.to(self.device).float()
                 theta_test = theta_test.to(self.device)
-                # deepset_test = deepset_test.to(self.device)
 
-                # deepset_mapped, theta_target = map_deepset(
-                #     deepset_test, theta_test, self.device
-                # )
-                output = self.network(data_test, torch.arange(len(deepset_test)))
+                if merge_test_deepset:
+                    deepset_test = deepset_test.to(self.device)
+
+                    deepset_mapped, theta_target = map_deepset(
+                        deepset_test, theta_test, self.device
+                    )
+                    output = self.network(data_test, deepset_mapped)
+                else :
+                    output = self.network(data_test, torch.arange(len(deepset_test)))
 
                 loss = torch.abs(output - theta_test).detach().cpu()
                 theta_final = output.detach().cpu()
