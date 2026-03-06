@@ -39,7 +39,7 @@ time_size = 5
 space_dim = 2
 space_size = 20
 max_deepset_size = 5
-missing_ratios = [0.75]
+missing_ratios = [0.70]
 
 # Amount of data
 

@@ -399,7 +399,7 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0):
+def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0, simu_cond=False):
     """
     Visualisation containing observation, true gaussian field, kriging and MAE of kriging
     trainers : A list of Trainer
@@ -421,11 +421,11 @@ def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0):
 
     for j, trainer in enumerate(trainers) :
         if not trainer.network.nls:
-            visualise_output(trainer, res_path, nb_examples, num_dataset[j], k, mask=mask)
+            visualise_output(trainer, res_path, nb_examples, num_dataset[j], k, mask=mask, simu_cond=simu_cond)
         else :
             return
 
-def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None):
+def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None, simu_cond=False):
     """Visualisation containing observation, true gaussian field, kriging and MAE of kriging"""
     p = 4
     fig_map, axs = plt.subplots(
@@ -490,7 +490,8 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=
             masked_sample.detach().numpy(), theta_pred
         )
 
-        sample_pred = sample_krig + sample_uncond - sample_krig_uncond
+        if simu_cond :
+            sample_krig = sample_krig + sample_uncond - sample_krig_uncond
 
         axs[i, 2].imshow(
             sample_krig if space_dim == 1 else sample_krig[0], cmap="viridis", extent=[0, 1, 0, 1]
