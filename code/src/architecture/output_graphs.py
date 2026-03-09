@@ -114,7 +114,7 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
         )
         axs[i].tick_params(axis="x", labelrotation=45)
         axs[i].set_title("MAE – " + name)
-        axs[i].set_ylabel("MAE")
+        axs[i].set_ylabel("MAE" if i == 0 else "")
 
         axs[i].axhline(
             baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline " + name

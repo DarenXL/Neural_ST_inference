@@ -121,7 +121,7 @@ class GenericSimulationDataset(Dataset):
     def get_min_max(self, k:list[int]):
         all_values = []
         for ki in k:
-            batch, _, _ = self.__getitem__(ki)
+            batch, _ = self.get_grid(ki)
             all_values.append(batch[:, 0])
 
         combined_data = torch.stack(all_values)
@@ -131,51 +131,12 @@ class GenericSimulationDataset(Dataset):
 
         return v_min, v_max
 
-    # def show(self, ax, idx: int, mask: bool = False, sample_idx: int = 0, time_idx: int = 0):
-    #     """Show a gaussian field"""
-    #     batch, theta, _ = self.__getitem__(idx)
-    #
-    #     if self.space_dim == 1:
-    #
-    #         img = batch[sample_idx, 0]
-    #
-    #         if mask:
-    #             img = img.clone()
-    #             img[batch[sample_idx, 1].to(bool)] = np.nan
-    #
-    #         title_text = self.model.to_title(theta[0], alt_format=True)
-    #
-    #         ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
-    #         # ax.colorbar(label="Signal")
-    #         ax.set_title(title_text, fontsize=10)
-    #         # ax.set_xlabel("Space")
-    #         # ax.set_ylabel("Time")
-    #
-    #     elif self.space_dim == 2:
-    #
-    #         for i in range(len(ax)):
-    #
-    #             img = batch[sample_idx, 0, i]
-    #
-    #             if mask:
-    #                 img = img.clone()
-    #                 img[batch[sample_idx, 1, i].to(bool)] = np.nan
-    #
-    #             title_text = self.model.to_title(theta[0], alt_format=True)
-    #
-    #             ax[i].imshow(img, aspect="equal", extent=[0, 1, 0, 1])
-    #             ax[i].set_title(
-    #                 f"Time {i}" if i != len(ax) // 2 else title_text + f"\n\nTime {i}",
-    #                 fontsize=10,
-    #             )
-    #             # ax[i].set_xlabel("Space 1")
-    #             # ax[i].set_ylabel(r"$\it{Space 2}$")
-
     def show(self, ax, idx: int, mask: np.ndarray = None, sample_idx: int = 0, time_idx: int = 0):
         """Show a gaussian field"""
-        batch, theta, _ = self.__getitem__(idx)
+        batch, _ = self.get_grid(idx)
+        theta = self.get_theta_tensor()[idx]
 
-        title_text = self.model.to_title(theta[0], alt_format=True)
+        title_text = self.model.to_title(theta, alt_format=True)
 
         if self.space_dim == 1:
 
@@ -236,15 +197,26 @@ class GenericSimulationDataset(Dataset):
         else:
             return y_full.reshape(self.time_size, self.space_size, self.space_size)
 
-    def __getitem__(self, idx):
+    def get_grid(self, idx, deepset_size=None):
+        """Load the sample idx"""
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
 
-        deepset_size = torch.randint(low=self.min_deepset_size,high=self.max_deepset_size+1, size=(1,)).item()
+        if deepset_size is None :
+            deepset_size = torch.randint(
+                low=self.min_deepset_size, high=self.max_deepset_size + 1, size=(1,)
+            ).item()
         deepset_idx = torch.randperm(self.max_deepset_size)[:deepset_size]
+
         batch = batch[deepset_idx]
 
         if deepset_size == 1:
             batch = np.expand_dims(batch, axis=0)
+
+        return batch, deepset_size
+
+    def __getitem__(self, idx):
+
+        batch, deepset_size = self.get_grid(idx)
 
         batch = add_missing_mask(batch, self.missing_ratio)
 

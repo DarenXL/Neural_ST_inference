@@ -30,7 +30,7 @@ res_path = create_res_path("../results/spatiotemporal")
 # Neural Network train options
 
 batch_size = 50
-nb_epochs = 250
+nb_epochs = 50
 freq_epochs_test = 10
 
 # Data options
@@ -43,8 +43,8 @@ missing_ratios = [0.70]
 
 # Amount of data
 
-train_size = 5000
-test_size = 1000
+train_size = 20
+test_size = 10
 
 ######################################
 ######################################
@@ -126,7 +126,6 @@ CNN = CNN_ST_network(
     in_channels=2,
     out_dim=dataset_train.model.nb_params,
     spatial_dim=space_dim,
-    pool_option="separately",
 ).to(device)
 
 # Creation the Trainer used train, test and show results

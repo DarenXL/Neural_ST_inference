@@ -29,7 +29,7 @@
 
 == Informations générales
 
-La thèse a lieu entre le laboratoire de géoscience de *Mines Paris - PSL* et l'*AgroParisTech*.
+La thèse a lieu entre le laboratoire STIM de *Mines Paris - PSL* et l'*AgroParisTech*.
 
 - Encadrants Mines Paris : Thomas Romary et Nicolas Dessassis
 - Encadrante AgroParisTech : Lucia Clarotto
@@ -110,7 +110,7 @@ $ Y(bold(s_i),t_j; theta) = Z(bold(s_i), t_j; theta) + tau epsilon_(i,j), quad t
 On note les observations $bold(z)_"obs"$ et les suppose être une réalisation de la variable aléatoire ci-dessus. Cela implique de choisir une *fonction de covariance $C_theta$* (et donc une matrice covariance $bold(Sigma)_theta$).
 
 #v(10pt)
-L'objectif est d'*estimer les paramètres* de la covariance qui a généré les observations.
+L'objectif est d'estimer le modèle. Cela revient à *estimer les paramètres* de la covariance qui a généré les observations.
 #linebreak()
 
 #line(length:100%, stroke: theme_color)
@@ -166,9 +166,9 @@ $bold(z)^((1)), ..., bold(z)^((N))$ sont simulées à partir du modèle choisi $
 == Prédiction
 
 Krigeage
-- utilisé pour estimer les valeurs à des localisations non mesurées $(s'_i,t'_j)$ en fonction de valeurs connues aux localisations $(s_i,t_j)$ à proximité
-- On suppose $z_"obs" (s_i,t_j)$ réalisation de $ Z(bold(s_i), t_j; theta^*) + tau epsilon_(i,j) $
-- On veut prédire $z_"pred" (s'_i,t'_j)$ "réalisation" de $ Z(bold(s'_i), t'_j; theta^*) $
+- Utilisé pour estimer les valeurs à des localisations non mesurées $(s'_i,t'_j)$ en fonction de valeurs connues aux localisations $(s_i,t_j)$ à proximité
+- On suppose $z(s_i,t_j)$ réalisation de $ Z(bold(s_i), t_j; theta^*) + tau epsilon_(i,j) $
+- On veut prédire $z(s'_i,t'_j)$ "réalisation" de $ Z(bold(s'_i), t'_j; theta^*) $
 - Au format matriciel, grâce à $C_(theta^*)$, on construit :
     $ (bold(Z), bold(Z)') ~ cal(N)(0, mat(bold(V)_"obs-obs",bold(Sigma)_"obs-pred";bold(Sigma)_"pred-obs",bold(Sigma)_"pred-pred")
     " avec " bold(V)_"obs-obs" = bold(Sigma)_"obs-obs" + tau^2"id" $
@@ -233,7 +233,7 @@ On passe par une architecture *deepset*.
 
   line((3.5*l, l/2), (5*l, l/2), mark: (end: "stealth"), name:"nn")
   content(("nn.start", 50%, "nn.end"), anchor: "south", [*Neural network* \ \ ])
-  content(("nn.start", 50%, "nn.end"), anchor: "north",  align(center)[#v(l*16pt) 2D CNN])
+  content(("nn.start", 50%, "nn.end"), anchor: "north",  align(center)[\ 2D CNN])
 
   rect((5.5*l,0),(7*l,l), name:"data")
   content("data", [*Résumé*])
@@ -256,7 +256,7 @@ On passe par une architecture *deepset*.
 
   line((3.5*l, -r+l/2), (5*l, -r+l/2), mark: (end: "stealth"), name:"nn")
   content(("nn.start", 50%, "nn.end"), anchor: "south", [*Neural network* \ \ ])
-  content(("nn.start", 50%, "nn.end"), anchor: "north",  align(center)[#v(l*16pt) 2D CNN])
+  content(("nn.start", 50%, "nn.end"), anchor: "north",  align(center)[\ 2D CNN])
 
   rect((5.5*l,-r),(7*l,-r+l), name:"data")
   content("data", text(theme_color)[*Résumé*])
@@ -265,11 +265,35 @@ On passe par une architecture *deepset*.
   content("nn",  anchor: "west", text(theme_color)[ #h(l*10pt) *Moyenne*])
 })
 
+- Batch size = $N$ | Deepset size = $K$ | Data shape = $T$, $D_1$ et $D_2$
+- Data + Mask = 2 = $C_"in"$ | Dim couche cachée = $C_"hidden"$ | $theta$ size = $C_"out"$
+
+#v(10pt)
+
+#table(
+  columns: (17%,17%, 17%, 17%, 17%, 17%),
+  inset: (top:8pt,bottom:8pt,left:2pt, right:2pt),
+  align: center+horizon,
+  table.header(
+    [*Sortie \ Dataset*], [*Sortie \ Dataloader `collate_fn`*],
+    [*Sortie \ Conv*],[*Sortie \ pool*],[*Sortie \ Aggregation*], [*Sortie \ MLP*],
+  ),
+    [$N$ \ $K$ \ $C_"in"$ \ $T$ \ $D_1$ \ $D_2$],
+    [$N times K$ \ $C_"in"$ \ $T$ \ $D_1$ \ $D_2$],
+    [$N times K$ \ $C_"hidden"$ \ $T'$ \ $D'_1$ \ $D'_2$],
+    [$N times K$ \ $C_"hidden"$],
+    [$N$ \ $C_"hidden"$],
+    [$N$ \ $C_"out"$],
+)
+
+
 == Résultats
 
 #align(center)[
 #image("fig/visualisation - jointly max 1D-Space CNN [0].pdf")
 #image("fig/score_test_alt - jointly max 1D-Space CNN.pdf")
+#image("fig/visualisation - jointly separately 2D-Space CNN [0].pdf")
+#image("fig/score_test_alt - jointly separately 2D-Space CNN.pdf")
 ]
 
 == BONUS : NLS
@@ -327,13 +351,13 @@ freq_epochs_test = 10
 
 time_size = 5
 space_dim = 2
-space_size = 30
+space_size = 20
 
-deepset_size = 5
-missing_ratios = [.90,.75]
+max_deepset_size = 5
+missing_ratios = [.90,.70]
 
-train_size = 5
-test_size = 5`
+train_size = 5000
+test_size = 1000`
 
 - *Création du modèle*
 `model = AdvectionModel()
@@ -362,7 +386,6 @@ $->$ idem dataset test
     in_channels=2,
     out_dim=dataset_train.model.nb_params,
     spatial_dim=space_dim,
-    pool_option="separately",
 ).to(device)
 trainer_separately = Trainer(CNN, device, res_path)
 trainer_separately.train(
@@ -374,6 +397,8 @@ trainer_separately.train(
 )
 for loader in loaders_test:
     trainer_separately.test(loader)`
+
+#pagebreak()
 
 - *Visualisation des résultats*
 `trainers = [trainer_separately] 
@@ -444,11 +469,11 @@ En particulier `__getitem__(self, idx)` :
 
 #line(length:100%, stroke: theme_color)
 
-A quoi ressemble un graphe en spatio-temporel ? 
+A quoi ressemble un graphe en spatio-temporel ?
+- Il faut trouver quels poids mettre sur les noeuds et les arêtes
 - J'ai une idée
-// Idée :
-// - Les poids des nœuds sont les mesures
-// - Les poids des arêtes sont (dist_spatiale, 0) ou (0, pas_de_temps)
+// - Poids des nœuds : les mesures
+// - Poids des arêtes : (|dist_spatiale1|, |dist_spatiale2|, 0) ou (0, 0, pas_de_temps)
 
 #align(center,image("fig/example_animated.gif"))
 
@@ -462,6 +487,13 @@ Commencer par un architecture simple pour vérifier que le code fonctionne.
 
 $->$ Les fonctions d’entraînement/test devraient fonctionner sans modifications.
 
+#v(15pt)
+
+*Attention deepset.* Dans le code spatial (voir `RapportV3.ipynb`) :
+- Dans un même batch, les "répiques" sont fusionnées
+- CàD un seul graphe mais les répliques n'ont aucune connexions entres elles
+$->$ Ne pas essayer ça tout de suite
+
 #pause
 
 #line(length:100%, stroke: theme_color)
@@ -471,5 +503,6 @@ Puis réfléchir à une autre architecture :
 
 == Visualisation
 
-Visualiser et comparer les résultats.
+- Visualiser les graphes
+- Visualiser et comparer les résultats.
 
