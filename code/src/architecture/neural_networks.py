@@ -6,12 +6,13 @@ from utils import *
 
 
 class CNN_ST_network(nn.Module):
-    def __init__(self, in_channels=2, hidden=32, out_dim=4, spatial_dim=1, option="jointly", pool_option="avg", nls=False, label=None):
+    def __init__(self, in_channels=2, hidden=32, out_dim=4, spatial_dim=1, option="jointly", pool_option="avg", nls=False, nls_sim=False, label=None):
         super().__init__()
 
         self.option_type = option
         self.spatial_dim = spatial_dim
         self.nls = nls
+        self.nls_sim = nls_sim
 
         if label is None:
             self.label = f"{option} {pool_option} {spatial_dim}D-Space CNN" + (" nls" if nls else "")
@@ -81,7 +82,7 @@ class CNN_ST_network(nn.Module):
             #     self.temporal_pool = nn.AdaptiveMaxPool1d(1)
 
         self.dense = nn.Sequential(
-            nn.Linear(hidden + (out_dim * nls), hidden),
+            nn.Linear(hidden + (out_dim * self.nls) if self.nls_sim == False else 2*hidden, hidden),
             nn.ReLU(),
             nn.Linear(hidden, out_dim)
         )
@@ -90,6 +91,8 @@ class CNN_ST_network(nn.Module):
 
         B = x.shape[0]
         T = x.shape[2]
+
+        # print(deepset)
 
         if self.option_type == "jointly":
             summary = self.conv(x)
@@ -115,7 +118,14 @@ class CNN_ST_network(nn.Module):
         if not self.nls:
             summary = global_mean_pool(summary, deepset)
         else:
-            summary = torch.cat((summary, theta.float()), dim=1)
+            if not self.nls_sim :
+                summary = torch.cat((summary, theta.float()), dim=1)
+            else :
+                theta_summary = self.conv(theta.float())
+                theta_summary = self.pool(theta_summary)
+                theta_summary = theta_summary.view(theta_summary.shape[0], -1)
+                theta_summary = global_mean_pool(theta_summary, deepset)
+                summary = torch.cat((summary, theta_summary), dim=1)
 
         out = self.dense(summary)
         return out

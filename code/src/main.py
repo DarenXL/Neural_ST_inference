@@ -20,12 +20,12 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 # Path to data saving file
 
-data_path = create_data_path("../data/spatiotemporal_adv")
+data_path = create_data_path("code/data/spatiotemporal_adv")
 # data_path = Path("./code/data/spatiotemporal_adv").resolve() / "2D-try"
 
 # Path to results saving file
 
-res_path = create_res_path("../results/spatiotemporal")
+res_path = create_res_path("code/results/spatiotemporal")
 
 # Neural Network train options
 
@@ -35,16 +35,16 @@ freq_epochs_test = 10
 
 # Data options
 
-time_size = 5
-space_dim = 2
-space_size = 20
+time_size = 30
+space_dim = 1
+space_size = 30
 max_deepset_size = 5
 missing_ratios = [0.70]
 
 # Amount of data
 
-train_size = 20
-test_size = 10
+train_size = 1000
+test_size = 200
 
 ######################################
 ######################################
@@ -112,40 +112,52 @@ for ratio in missing_ratios:
 
 # Show data example
 
-show_example(
-    datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+# show_example(
+#     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+# )
+
+dataset_gridsearch = GenericSimulationDataset(
+    model=model,
+    theta_size=50,
+    time_size=time_size,
+    space_dim=space_dim,
+    space_size=space_size,
+    max_deepset_size=max_deepset_size,
+    missing_ratio=None,
 )
+print(f"\nData gridsearch generation : {model.__class__.__name__}")
+dataset_gridsearch.generate(data_path / "gridsearch")
 
 ############################
 ####### Architecture #######
 ############################
 
-# Creation of the Neural Network
-
-CNN = CNN_ST_network(
-    in_channels=2,
-    out_dim=dataset_train.model.nb_params,
-    spatial_dim=space_dim,
-).to(device)
-
-# Creation the Trainer used train, test and show results
-
-trainer_separately = Trainer(CNN, device, res_path)
-
-# Training (and testing at the same time)
-
-trainer_separately.train(
-    train_loader=loader_train,
-    test_loader=loaders_test[0],
-    nb_epochs=nb_epochs,
-    freq_epochs_test=freq_epochs_test,
-    print_result=True,
-)
-
-# Testing
-
-for loader in loaders_test:
-    trainer_separately.test(loader, merge_test_deepset=True)
+# # Creation of the Neural Network
+#
+# CNN = CNN_ST_network(
+#     in_channels=2,
+#     out_dim=dataset_train.model.nb_params,
+#     spatial_dim=space_dim,
+# ).to(device)
+#
+# # Creation the Trainer used train, test and show results
+#
+# trainer_separately = Trainer(CNN, device, res_path)
+#
+# # Training (and testing at the same time)
+#
+# trainer_separately.train(
+#     train_loader=loader_train,
+#     test_loader=loaders_test[0],
+#     nb_epochs=nb_epochs,
+#     freq_epochs_test=freq_epochs_test,
+#     print_result=True,
+# )
+#
+# # Testing
+#
+# for loader in loaders_test:
+#     trainer_separately.test(loader)
 
 ##################################
 ##################################
@@ -157,40 +169,42 @@ for loader in loaders_test:
 ####### Model #######
 #####################
 
-# dataset_train_nls = NlsSimulationDataset(dataset_train)
-# loader_train_nls = DataLoader(
-#     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
-# )
-#
-#
-# datasets_test_nls = []
-# loaders_test_nls = []
-# for ds in datasets_test :
-#     dataset = NlsSimulationDataset(ds)
-#     loaders_test_nls.append(DataLoader(
-#         dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
-#     ))
-#
-#     datasets_test_nls.append(dataset)
+dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=True)
+loader_train_nls = DataLoader(
+    dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+)
+
+datasets_test_nls = []
+loaders_test_nls = []
+for ds in datasets_test :
+    dataset = NlsSimulationDataset(ds, simu_nls=False)
+    loaders_test_nls.append(DataLoader(
+        dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
+    ))
+
+    datasets_test_nls.append(dataset)
+
+batch = dataset_train_nls[0]
 
 ############################
 ####### Architecture #######
 ############################
 
-# CNN = CNN_ST_network(
-#     in_channels=2,
-#     out_dim=dataset_train.model.nb_params,
-#     spatial_dim=space_dim,
-#     nls=True,
-# ).to(device)
-# trainer_nls = Trainer(CNN, device, res_path)
-# trainer_nls.train(
-#     train_loader=loader_train_nls,
-#     nb_epochs=nb_epochs,
-#     print_result=True
-# )
-# for loader in loaders_test_nls:
-#     trainer_nls.test(loader)
+CNN = CNN_ST_network(
+    in_channels=2,
+    out_dim=dataset_train.model.nb_params,
+    spatial_dim=space_dim,
+    nls=True,
+    nls_sim=True,
+).to(device)
+trainer_nls = Trainer(CNN, device, res_path)
+trainer_nls.train(
+    train_loader=loader_train_nls,
+    nb_epochs=nb_epochs,
+    print_result=True
+)
+for loader in loaders_test_nls:
+    trainer_nls.test(loader, dataset_gridsearch)
 
 ###########################################
 ###########################################
@@ -198,7 +212,7 @@ for loader in loaders_test:
 ###########################################
 ###########################################
 
-trainers = [trainer_separately]
+trainers = [trainer_nls]
 
 train_graph(trainers, res_path)
 time_hist(trainers, res_path)
@@ -206,5 +220,5 @@ test_alt_graph(trainers, res_path)
 
 for i in range(len(datasets_test)):
     test_graph(trainers, res_path, num_dataset=i)
-    # target_graph(trainers, res_path, k=0, num_dataset=i)
+    target_graph(trainers, res_path, k=0, num_dataset=i)
     visualise(trainers, res_path, num_dataset=i)

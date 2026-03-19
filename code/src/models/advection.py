@@ -2,6 +2,7 @@ import numpy as np
 import gstlearn as gl
 from .base import SimulationModel
 from scipy.special import gamma, kv
+from scipy.stats import qmc
 
 def _simulate_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, std, deepset_size=5):
     adv = np.round(adv).astype(int)
@@ -182,6 +183,20 @@ class AdvectionModel(SimulationModel):
             'range_space': np.random.uniform(self.lower_bound[2], self.upper_bound[2], (n,)),
             'std': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,))
         }
+        # sampler = qmc.LatinHypercube(d=4)
+        #
+        # sample = sampler.random(n)
+        #
+        # l_bounds = self.lower_bound[:4]
+        # u_bounds = self.upper_bound[:4]
+        # sample_scaled = qmc.scale(sample, l_bounds, u_bounds)
+        #
+        # return {
+        #     "adv": sample_scaled[:, 0].astype(int),
+        #     "range_time": sample_scaled[:, 1],
+        #     "range_space": sample_scaled[:, 2],
+        #     "std": sample_scaled[:, 3],
+        # }
 
     def simulate(self, p, t_size, s_dim, s_size, d_size):
         return _simulate_matern_grid_func(

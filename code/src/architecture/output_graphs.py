@@ -45,6 +45,9 @@ def train_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | lis
             )
             losses.append(torch.load(path)["final_train_losses"])
 
+    if len(losses) == 0:
+        return
+
     for i, name in enumerate(theta_names):
 
         axs[i].boxplot(
@@ -289,7 +292,11 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
 
     target_true_theta = true_all_theta[k]
 
+    # print(true_all_theta, target_true_theta)
+
     mask = torch.isclose(true_all_theta, target_true_theta, atol=1e-5).all(dim=1)
+
+    # print(mask)
 
     preds_dict = {}
 
@@ -301,7 +308,9 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
         )
         all_preds = torch.load(path)["final_all_theta"]
 
-        assert mask.shape == all_preds.shape, "Target graph do not work on test dataset with merge_test_deepset = True"
+        # print(mask.shape, all_preds.shape)
+
+        assert mask.shape[0] == all_preds.shape[0], "Target graph do not work on : \n - test dataset with merge_test_deepset = True \n - deepset random sizes"
 
         filtered_preds = all_preds[mask].detach().cpu().numpy()
 

@@ -221,15 +221,46 @@ def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarr
 
 def deepset_collate(batch: np.ndarray):
     """used in the loader to merge batch and deepset dimensions"""
-    data_list, theta_list, deepset_list = zip(*batch)
+    zipped = list(zip(*batch))
 
-    data = torch.cat(data_list, dim=0)
-    theta = torch.cat(theta_list, dim=0)
-    deepset = torch.cat(deepset_list, dim=0)
+    data = torch.cat(zipped[0], dim=0)
+    theta = torch.cat(zipped[1], dim=0)
+    deepset = torch.cat(zipped[2], dim=0)
 
     data[:, 0][data[:, 1] == 1] = 0
 
+    if len(zipped) == 4:
+        classi = torch.cat(zipped[3], dim=0)
+        return data, theta, deepset, classi
+
     return data, theta, deepset
+
+# def deepset_collate_noise(batch: np.ndarray):
+#     """used in the loader to merge batch and deepset dimensions"""
+#     data_list, theta_list, deepset_list = zip(*batch)
+#
+#     data = torch.cat(data_list, dim=0).repeat([5,1,1,1])
+#     theta = torch.cat(theta_list, dim=0).repeat([5,1])
+#     deepset = torch.cat(deepset_list, dim=0).repeat(5)
+#
+#     noise = torch.rand(data.shape, dtype=data.dtype, device=data.device) - 0.5
+#     data[:, 0][data[:, 1] == 1] = noise[:, 0][data[:, 1] == 1]
+#     data = data[:,0].unsqueeze(1)
+#
+#     return data, theta, deepset
+#
+# def deepset_collate_noise_mask(batch: np.ndarray):
+#     """used in the loader to merge batch and deepset dimensions"""
+#     data_list, theta_list, deepset_list = zip(*batch)
+#
+#     data = torch.cat(data_list, dim=0).repeat([5,1,1,1])
+#     theta = torch.cat(theta_list, dim=0).repeat([5, 1])
+#     deepset = torch.cat(deepset_list, dim=0).repeat(5)
+#
+#     noise = torch.rand(data.shape, dtype=data.dtype, device=data.device) - 0.5
+#     data[:, 0][data[:, 1] == 1] = noise[:, 0][data[:, 1] == 1]
+#
+#     return data, theta, deepset
 
 
 def show_example(dataset, data_path: Path, k=0, label="example"):
@@ -466,11 +497,17 @@ def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
 
 def global_mean_pool(x: torch.Tensor, deepset: torch.Tensor) -> torch.Tensor:
     """Apply deepset on summary statistics"""
-    num_groups = deepset.max().item() + 1
-    out = torch.zeros(num_groups, x.size(1), device=x.device)
-    out.index_add_(0, deepset, x)
-    return out / torch.bincount(deepset).float().unsqueeze(1)
+    # num_groups = deepset.max().item() + 1
+    # out = torch.zeros(num_groups, x.size(1), device=x.device)
+    # out.index_add_(0, deepset, x)
+    # return out / torch.bincount(deepset).float().unsqueeze(1)
 
+    unique_keys, inverse_indices = torch.unique(deepset, dim=0, return_inverse=True)
+    num_groups = unique_keys.size(0)
+    out = torch.zeros(num_groups, x.size(1), device=x.device, dtype=x.dtype)
+    out.index_add_(0, inverse_indices, x)
+    counts = torch.bincount(inverse_indices, minlength=num_groups).to(x.dtype)
+    return out / counts.unsqueeze(1)
 
 def format_seconds(s: float) -> str:
     """Times in second to h-m-s format"""

@@ -213,6 +213,7 @@ Simulation conditionelle
 // Un batch peut contenir plusieurs répliques donc on n'utilise l'architecture *deepset*.
 Si on a des données répliquées (on les sait générées sur un même $theta$), on veut les utliser pour améliorer l'estimation du modèle.
 On passe par une architecture *deepset*.
+Dans le train, le réseau apprend qu'un theta peut avoir plusieurs simus (ou l'inverse).
 
 #cetz.canvas(length: 3cm, {
   import cetz.draw: *
