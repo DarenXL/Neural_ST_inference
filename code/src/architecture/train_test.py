@@ -358,15 +358,19 @@ class Trainer:
 
                 if self.network.nls_sim :
                     batched_data, theta, deepset, classi = batch
+                    deepset = deepset.to(self.device)
+                    _, deepset_mapped = torch.unique_consecutive(
+                        deepset, return_inverse=True, dim=0
+                    )
                 else :
                     batched_data, theta, classi = batch
-                    deepset=None
+                    deepset_mapped=None
 
                 batched_data = batched_data.to(self.device).float()
                 theta = theta.to(self.device)
                 classi = classi.to(self.device)
 
-                output = self.network(batched_data, deepset=deepset, theta=theta)
+                output = self.network(batched_data, deepset=deepset_mapped, theta=theta)
 
                 loss = CE(output, classi).mean()
 
@@ -562,7 +566,7 @@ class Trainer:
                         simu, _ = dataset_gridsearch.get_grid(k, deepset_size=dataset_gridsearch.max_deepset_size)
                         simu = torch.from_numpy(simu)
                         simu = torch.concatenate((simu, torch.ones_like(simu)), dim=1)
-                        h = self.network(data_single, deepset=torch.zeros(len(simu)), theta=simu)
+                        h = self.network(data_single, deepset=torch.zeros(len(simu),dtype=int), theta=simu)
                     else :
                         h = self.network(
                             data_single, theta=dataset_gridsearch.get_theta_tensor()[k].unsqueeze(dim=0)

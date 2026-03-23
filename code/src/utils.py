@@ -458,28 +458,53 @@ def show_example_gif(
 
 def unique_preserve_order(x: torch.Tensor) -> torch.Tensor:
     """remove all duplicates without changing the order"""
-    seen = []
-    out = []
-    for v in x.tolist():
-        if v not in seen:
-            seen.append(v)
-            out.append(v)
-    return torch.tensor(out, device=x.device)
+    # seen = []
+    # out = []
+    # for v in x.tolist():
+    #     if v not in seen:
+    #         seen.append(v)
+    #         out.append(v)
+    # return torch.tensor(out, device=x.device)
+
+    unique, inverse = torch.unique(x, dim=0, return_inverse=True)
+    first_indices = torch.full(
+        (unique.size(0),), x.size(0), device=x.device, dtype=torch.long
+    )
+    indices = torch.arange(x.size(0), device=x.device)
+    first_indices.scatter_reduce_(
+        0, inverse, indices, reduce="amin", include_self=False
+    )
+    sorted_indices, _ = torch.sort(first_indices)
+
+    return x[sorted_indices]
 
 
 def map_deepset(
     deepset: torch.Tensor, theta: torch.Tensor, device
 ) -> tuple[torch.Tensor, torch.Tensor]:
     """Adjusts the shape of theta to be equal to the output of the neural network after deepset"""
-    unique_ds = unique_preserve_order(deepset)
 
-    deepset_mapped = torch.tensor(
-        [unique_ds.tolist().index(int(ds)) for ds in deepset], device=device
+    # unique_ds = unique_preserve_order(deepset)
+    #
+    # deepset_mapped = torch.tensor(
+    #     [unique_ds.tolist().index(int(ds)) for ds in deepset], device=device
+    # )
+    #
+    # theta = torch.stack([theta[deepset == v][0] for v in unique_ds])
+    #
+    # return deepset_mapped, theta
+
+    unique_ds, deepset_mapped = torch.unique_consecutive(
+        deepset, return_inverse=True, dim=0
     )
 
-    theta = torch.stack([theta[deepset == v][0] for v in unique_ds])
+    mask = torch.cat(
+        [torch.tensor([True], device=deepset.device), deepset[1:] != deepset[:-1]]
+    )
 
-    return deepset_mapped, theta
+    theta_reduced = theta[mask]
+
+    return deepset_mapped, theta_reduced
 
 
 def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
@@ -497,17 +522,17 @@ def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
 
 def global_mean_pool(x: torch.Tensor, deepset: torch.Tensor) -> torch.Tensor:
     """Apply deepset on summary statistics"""
-    # num_groups = deepset.max().item() + 1
-    # out = torch.zeros(num_groups, x.size(1), device=x.device)
-    # out.index_add_(0, deepset, x)
-    # return out / torch.bincount(deepset).float().unsqueeze(1)
+    num_groups = deepset.max().item() + 1
+    out = torch.zeros(num_groups, x.size(1), device=x.device)
+    out.index_add_(0, deepset, x)
+    return out / torch.bincount(deepset).float().unsqueeze(1)
 
-    unique_keys, inverse_indices = torch.unique(deepset, dim=0, return_inverse=True)
-    num_groups = unique_keys.size(0)
-    out = torch.zeros(num_groups, x.size(1), device=x.device, dtype=x.dtype)
-    out.index_add_(0, inverse_indices, x)
-    counts = torch.bincount(inverse_indices, minlength=num_groups).to(x.dtype)
-    return out / counts.unsqueeze(1)
+    # unique_keys, inverse_indices = torch.unique(deepset, dim=0, return_inverse=True)
+    # num_groups = unique_keys.size(0)
+    # out = torch.zeros(num_groups, x.size(1), device=x.device, dtype=x.dtype)
+    # out.index_add_(0, inverse_indices, x)
+    # counts = torch.bincount(inverse_indices, minlength=num_groups).to(x.dtype)
+    # return out / counts.unsqueeze(1)
 
 def format_seconds(s: float) -> str:
     """Times in second to h-m-s format"""

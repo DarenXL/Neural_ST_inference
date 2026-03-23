@@ -43,8 +43,8 @@ missing_ratios = [0.70]
 
 # Amount of data
 
-train_size = 1000
-test_size = 200
+train_size = 10
+test_size = 10
 
 ######################################
 ######################################
