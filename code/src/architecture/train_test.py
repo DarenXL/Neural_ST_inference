@@ -95,8 +95,13 @@ class Trainer:
             assert (
                 test_loader.dataset.model.param_names
                 == self.test_dataset_hist[0].model.param_names
-            )
+            ), "loader's model do not correspond with the precedent ones"
+
+        assert isinstance(test_loader.sampler, torch.utils.data.SequentialSampler), "DataLoader must be shuffle=False"
+
         self.test_dataset_hist.append(test_loader.dataset)
+
+
 
         if self.network.nls:
             self.test_nls_grid(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
@@ -171,15 +176,15 @@ class Trainer:
                         data_test = data_test.to(self.device).float()
                         theta_test = theta_test.to(self.device)
 
-                        deepset_test = deepset_test.to(self.device)
-                        deepset_mapped_test, theta_test = map_deepset(
-                            deepset_test, theta_test, self.device
-                        )
-                        output = self.network(data_test, deepset_mapped_test)
-
-                        # output = self.network(
-                        #     data_test, torch.arange(len(deepset_test))
+                        # deepset_test = deepset_test.to(self.device)
+                        # deepset_mapped_test, theta_test = map_deepset(
+                        #     deepset_test, theta_test, self.device
                         # )
+                        # output = self.network(data_test, deepset_mapped_test)
+
+                        output = self.network(
+                            data_test, torch.arange(len(deepset_test))
+                        )
 
                         errors = torch.abs(output - theta_test)
                         test_errors_list.append(errors.detach().cpu())
@@ -533,85 +538,90 @@ class Trainer:
         # return full_loss_tensor, all_theta_final, time_total
 
     def test_nls_grid(self, loader_test, dataset_gridsearch, print_result=False):
-        all_loss_test = []
-        all_theta_final = []
-        all_true_theta = []
 
-        model_ref = loader_test.dataset.model
-        simu_nls = self.network.nls_sim # self.train_dataset_hist[-1].simu_nls
+        with torch.no_grad():
 
-        time_start = time.time()
+            all_loss_test = []
+            all_theta_final = []
+            all_true_theta = []
 
-        t = tqdm(loader_test, total=len(loader_test)//2, desc="Inference NLS")
+            model_ref = loader_test.dataset.model
+            simu_nls = self.network.nls_sim # self.train_dataset_hist[-1].simu_nls
 
-        for i, batch in enumerate(t):
-            data_batch, theta_batch, classi_batch = batch
+            time_start = time.time()
 
-            data_batch = data_batch.to(self.device).float()
-            theta_batch = theta_batch.to(self.device)
+            t = tqdm(loader_test, total=len(loader_test)//2, desc="Inference NLS")
 
-            for j in range(data_batch.size(0)):
+            for i, batch in enumerate(t):
+                data_batch, theta_batch, _ = batch
+                deepset_batch = torch.arange(len(data_batch),dtype=int).to(self.device)
 
-                if classi_batch[j] == 1:
-                    continue
+                data_batch = data_batch.to(self.device).float()
+                theta_batch = theta_batch.to(self.device)
 
-                data_single = data_batch[j].unsqueeze(0)
-                true_theta_single = theta_batch[j]
+                batch_size = data_batch.shape[0]
+                max_logl = torch.full((batch_size,), float("-inf"), device=self.device)
+                max_theta = torch.zeros((batch_size, dataset_gridsearch.get_theta_tensor().shape[1]), dtype=torch.float64, device=self.device)
 
-                max_logl = float('-inf')
-                max_theta = None
+                for k in range(len(dataset_gridsearch)):  # //2 if N
 
-                for k in range(len(dataset_gridsearch)):  # //2 if NLS
-                    if simu_nls :
-                        simu, _ = dataset_gridsearch.get_grid(k, deepset_size=dataset_gridsearch.max_deepset_size)
-                        simu = torch.from_numpy(simu)
+                    current_theta = dataset_gridsearch.get_theta_tensor()[k].to(self.device)
+
+                    if simu_nls:
+                        simu, _ = dataset_gridsearch.get_grid(
+                            k, deepset_size=dataset_gridsearch.max_deepset_size
+                        )
+                        simu = torch.from_numpy(simu).to(self.device)
                         simu = torch.concatenate((simu, torch.ones_like(simu)), dim=1)
-                        h = self.network(data_single, deepset=torch.zeros(len(simu),dtype=int), theta=simu)
-                    else :
+                        # simu = simu.repeat(batch_size, *([1] * (simu.ndim -1)))
+                        simu = simu.unsqueeze(0).expand(batch_size, *([-1] * (simu.ndim))).reshape(-1, *simu.shape[1:])
                         h = self.network(
-                            data_single, theta=dataset_gridsearch.get_theta_tensor()[k].unsqueeze(dim=0)
+                            data_batch,
+                            deepset=deepset_batch.repeat_interleave(dataset_gridsearch.max_deepset_size),
+                            theta=simu,
+                        )
+                    else:
+                        h = self.network(
+                            data_batch,
+                            theta=current_theta.unsqueeze(0).repeat((batch_size,1)),
                         )
 
-                    if h[:,1] - h[:,0] > max_logl or max_logl is None:
-                        max_logl = h[:,1] - h[:,0]
-                        max_theta = dataset_gridsearch.get_theta_tensor()[k]
+                    logl = (h[:, 1] - h[:, 0]).detach()
+                    mask = logl > max_logl
+                    max_logl[mask] = logl[mask]
+                    max_theta[mask] = current_theta.detach()
 
-                    # print(max_logl, max_theta)
-
-                loss = torch.abs(max_theta - true_theta_single).detach().cpu()
+                loss = torch.abs(max_theta - theta_batch).detach().cpu()
                 theta_final = max_theta.detach().cpu()
 
-                all_loss_test.append(loss.unsqueeze(0))
-                all_theta_final.append(theta_final.unsqueeze(0))
-                all_true_theta.append(true_theta_single.detach().cpu().unsqueeze(0))
+                all_loss_test.append(loss)
+                all_theta_final.append(theta_final)
+                all_true_theta.append(theta_batch.detach().cpu())
 
-            if i % 5 == 0 and len(all_loss_test) > 0:
-                current_mae = torch.cat(all_loss_test).mean().item()
-                t.set_postfix(Loss=f"{current_mae:.4f}")
 
-        time_total = time.time() - time_start
+            time_total = time.time() - time_start
 
-        full_loss_tensor = torch.cat(all_loss_test, dim=0)
-        all_theta_final = torch.cat(all_theta_final, dim=0)
-        all_true_theta = torch.cat(all_true_theta, dim=0)
+            full_loss_tensor = torch.cat(all_loss_test, dim=0)
+            all_theta_final = torch.cat(all_theta_final, dim=0)
+            all_true_theta = torch.cat(all_true_theta, dim=0)
 
-        mean_loss = full_loss_tensor.mean(dim=0)
-        std_loss = full_loss_tensor.std(dim=0)
+            mean_loss = full_loss_tensor.mean(dim=0)
+            std_loss = full_loss_tensor.std(dim=0)
 
-        if print_result:
-            print(f"Time to test : {time_total:.2f}s")
+            if print_result:
+                print(f"Time to test : {time_total:.2f}s")
 
-            print(
-                f"Test Loss (MAE) per param: "
-                + model_ref.to_title(mean_loss, alt_format=True)
-            )
+                print(
+                    f"Test Loss (MAE) per param: "
+                    + model_ref.to_title(mean_loss, alt_format=True)
+                )
 
-        results = {
-            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-            "test_time": time_total,
-            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
-            "true_all_theta": all_true_theta,
-        }
-        self._save_results(results)
+            results = {
+                "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
+                "test_time": time_total,
+                "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
+                "true_all_theta": all_true_theta,
+            }
+            self._save_results(results)
 
-        # return full_loss_tensor, all_theta_final, time_total
+            # return full_loss_tensor, all_theta_final, time_total

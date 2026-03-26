@@ -76,8 +76,8 @@ class GenericSimulationDataset(Dataset):
             time_size=config["time_size"],
             space_dim=config["space_dim"],
             space_size=config["space_size"],
-            min_deepset_size=config["min_deepset_size"],
-            max_deepset_size=config["max_deepset_size"],
+            # min_deepset_size=config["min_deepset_size"],
+            # max_deepset_size=config["max_deepset_size"],
             missing_ratio=config["missing_ratio"],
         )
 
@@ -145,7 +145,7 @@ class GenericSimulationDataset(Dataset):
             img = batch[sample_idx, 0]
 
             if not (mask is None):
-                img = img.clone()
+                img = img.copy()
                 img[:,~mask] = np.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
@@ -156,7 +156,7 @@ class GenericSimulationDataset(Dataset):
             img = batch[sample_idx, 0, time_idx]
 
             if not (mask is None):
-                img = img.clone()
+                img = img.copy()
                 img[~mask] = np.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
@@ -253,7 +253,7 @@ class NlsSimulationDataset(GenericSimulationDataset):
         is_perm = idx // self.theta_size
         sample_idx = idx % self.theta_size
 
-        batch, deepset_idx = self.get_grid(sample_idx)
+        batch, deepset_idx = self.get_grid(sample_idx, self.max_deepset_size)
         deepset_size = len(deepset_idx)
 
         batch = add_missing_mask(batch, self.missing_ratio)

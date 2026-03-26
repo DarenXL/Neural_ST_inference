@@ -116,17 +116,17 @@ for ratio in missing_ratios:
 #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
 # )
 
-dataset_gridsearch = GenericSimulationDataset(
-    model=model,
-    theta_size=50,
-    time_size=time_size,
-    space_dim=space_dim,
-    space_size=space_size,
-    max_deepset_size=max_deepset_size,
-    missing_ratio=None,
-)
-print(f"\nData gridsearch generation : {model.__class__.__name__}")
-dataset_gridsearch.generate(data_path / "gridsearch")
+# dataset_gridsearch = GenericSimulationDataset(
+#     model=model,
+#     theta_size=50,
+#     time_size=time_size,
+#     space_dim=space_dim,
+#     space_size=space_size,
+#     max_deepset_size=max_deepset_size,
+#     missing_ratio=None,
+# )
+# print(f"\nData gridsearch generation : {model.__class__.__name__}")
+# dataset_gridsearch.generate(data_path / "gridsearch")
 
 ############################
 ####### Architecture #######
@@ -169,42 +169,40 @@ dataset_gridsearch.generate(data_path / "gridsearch")
 ####### Model #######
 #####################
 
-dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=True)
-loader_train_nls = DataLoader(
-    dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
-)
+# dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=True)
+# loader_train_nls = DataLoader(
+#     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+# )
 
-datasets_test_nls = []
-loaders_test_nls = []
-for ds in datasets_test :
-    dataset = NlsSimulationDataset(ds, simu_nls=False)
-    loaders_test_nls.append(DataLoader(
-        dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
-    ))
-
-    datasets_test_nls.append(dataset)
-
-batch = dataset_train_nls[0]
+# datasets_test_nls = []
+# loaders_test_nls = []
+# for ds in datasets_test :
+#     dataset = NlsSimulationDataset(ds, simu_nls=False)
+#     loaders_test_nls.append(DataLoader(
+#         dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
+#     ))
+#
+#     datasets_test_nls.append(dataset)
 
 ############################
 ####### Architecture #######
 ############################
 
-CNN = CNN_ST_network(
-    in_channels=2,
-    out_dim=dataset_train.model.nb_params,
-    spatial_dim=space_dim,
-    nls=True,
-    nls_sim=True,
-).to(device)
-trainer_nls = Trainer(CNN, device, res_path)
-trainer_nls.train(
-    train_loader=loader_train_nls,
-    nb_epochs=nb_epochs,
-    print_result=True
-)
-for loader in loaders_test_nls:
-    trainer_nls.test(loader, dataset_gridsearch)
+# CNN = CNN_ST_network(
+#     in_channels=2,
+#     out_dim=dataset_train.model.nb_params,
+#     spatial_dim=space_dim,
+#     nls=True,
+#     nls_sim=True,
+# ).to(device)
+# trainer_nls = Trainer(CNN, device, res_path)
+# trainer_nls.train(
+#     train_loader=loader_train_nls,
+#     nb_epochs=nb_epochs,
+#     print_result=True
+# )
+# for loader in loaders_test:
+#     trainer_nls.test(loader, dataset_gridsearch)
 
 ###########################################
 ###########################################
@@ -212,13 +210,13 @@ for loader in loaders_test_nls:
 ###########################################
 ###########################################
 
-trainers = [trainer_nls]
-
-train_graph(trainers, res_path)
-time_hist(trainers, res_path)
-test_alt_graph(trainers, res_path)
-
-for i in range(len(datasets_test)):
-    test_graph(trainers, res_path, num_dataset=i)
-    target_graph(trainers, res_path, k=0, num_dataset=i)
-    visualise(trainers, res_path, num_dataset=i)
+# trainers = [trainer_nls]
+#
+# train_graph(trainers, res_path)
+# time_hist(trainers, res_path)
+# test_alt_graph(trainers, res_path)
+#
+# for i in range(len(datasets_test)):
+#     test_graph(trainers, res_path, num_dataset=i)
+#     target_graph(trainers, res_path, k=0, num_dataset=i)
+#     visualise(trainers, res_path, num_dataset=i)
