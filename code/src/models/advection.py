@@ -147,7 +147,20 @@ def matern_adv_cov(coords1, coords2, space_dim, adv, range_time, range_space, st
             * kv(nu, np.sqrt(2 * nu) * d)
         )
 
+
+
         return K
+
+def matern_adv_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_space, std):
+    cov_oo = matern_adv_cov(coords_in, coords_in, space_dim, adv, range_time, range_space, std)
+
+    cov_mo = matern_adv_cov(coords_out, coords_in, space_dim, adv, range_time, range_space, std)
+
+    cov_oo += 1e-6 * np.eye(cov_oo.shape[0])
+
+    y_miss = cov_mo @ np.linalg.solve(cov_oo, y)
+
+    return y_miss
 
 
 class AdvectionModel(SimulationModel):
@@ -205,9 +218,12 @@ class AdvectionModel(SimulationModel):
             deepset_size=d_size
         )
 
-    def get_cov(self, coords1, coords2, space_dim, theta_values):
-        return matern_adv_cov(
-            coords1, coords2, space_dim,
+    def kriging(self, coords_in, coords_out, y, space_dim, theta_values):
+        return matern_adv_krig(
+            coords_in, coords_out, y, space_dim,
             theta_values[0], theta_values[1], theta_values[2], theta_values[3]
         )
         # return matern_adv_cov(coords1, coords2, space_dim, *theta_values)
+
+    def get_mle(self, coords, obs):
+        pass

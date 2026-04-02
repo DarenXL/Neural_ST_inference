@@ -7,6 +7,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 from models.base import SimulationModel
 from utils import add_missing_mask
+import gstlearn as gl
 import matplotlib.pyplot as plt
 
 class GenericSimulationDataset(Dataset):
@@ -37,8 +38,6 @@ class GenericSimulationDataset(Dataset):
 
     def __len__(self):
         return self.theta_size
-
-
 
     def get_theta_tensor(self) -> torch.Tensor:
         """Return every theta in a tensor"""
@@ -120,22 +119,30 @@ class GenericSimulationDataset(Dataset):
 
         return batch
 
+    def generate_from_theta(self, theta_values: np.ndarray) -> np.ndarray:
+        theta_dict = dict(zip(self.model.param_names, theta_values))
+
+        batch = self.model.simulate(
+            theta_dict, self.time_size, self.space_dim, self.space_size, 1
+        )
+        return batch
+
     def get_min_max(self, k:list[int]):
         all_values = []
         for ki in k:
-            batch, _ = self.get_grid(ki)
+            batch, _ = self.get_grid(ki, deepset_size=self.max_deepset_size)
             all_values.append(batch[:, 0])
 
-        combined_data = torch.stack(all_values)
+        combined_data = np.stack(all_values)
 
-        v_min = float(torch.min(combined_data))
-        v_max = float(torch.max(combined_data))
+        v_min = float(np.min(combined_data))
+        v_max = float(np.max(combined_data))
 
         return v_min, v_max
 
     def show(self, ax, idx: int, mask: np.ndarray = None, sample_idx: int = 0, time_idx: int = 0):
         """Show a gaussian field"""
-        batch, _ = self.get_grid(idx)
+        batch, _ = self.get_grid(idx, deepset_size=1, shuffle=False)
         theta = self.get_theta_tensor()[idx]
 
         title_text = self.model.to_title(theta, alt_format=True)
@@ -167,39 +174,56 @@ class GenericSimulationDataset(Dataset):
                 fontsize=10,
             )
 
-    def kriging(self, sample: np.ndarray, theta_pred: np.ndarray) -> np.ndarray:
-        """Kriging"""
-        y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(-1)
+    def sample_to_coord(self, sample):
+        y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(
+            -1
+        )  # .T.reshape(-1,order="F")
 
         t = np.linspace(0, 1, self.time_size)
         s = np.linspace(0, 1, self.space_size)
 
-        if self.space_dim == 1:
-            coords = np.array([(ti, si) for ti in t for si in s])
-        else:
-            coords = np.array([(ti, si, sj) for ti in t for si in s for sj in s])
+        axes = [t, s] if self.space_dim == 1 else [t, s, s]
+        grid = np.meshgrid(*axes, indexing="ij")
+        coords = np.stack(grid, axis=-1).reshape(-1, len(axes))
+
+        return coords, y, mask_obs
+
+    def kriging_from_sample(self, sample: np.ndarray, theta: np.ndarray) -> np.ndarray:
+        """Kriging"""
+
+        coords, y, mask_obs = self.sample_to_coord(sample)
 
         y_obs = y[~mask_obs]
         coords_obs = coords[~mask_obs]
         coords_miss = coords[mask_obs]
 
-        cov_oo = self.model.get_cov(coords_obs, coords_obs, self.space_dim, theta_pred)
-
-        cov_mo = self.model.get_cov(coords_miss, coords_obs, self.space_dim, theta_pred)
-
-        cov_oo += 1e-6 * np.eye(cov_oo.shape[0])
-
-        y_miss = cov_mo @ np.linalg.solve(cov_oo, y_obs)
+        krig = self.model.kriging(
+            coords_obs, coords_miss, y_obs, self.space_dim, theta
+        )
 
         y_full = y.copy()
-        y_full[mask_obs] = y_miss
+        y_full[mask_obs] = krig
 
         if self.space_dim == 1:
-            return y_full.reshape(self.time_size, self.space_size)
+            return y_full.reshape(self.time_size, self.space_size)  # , order="F"
         else:
             return y_full.reshape(self.time_size, self.space_size, self.space_size)
 
-    def get_grid(self, idx, deepset_size=None):
+    def get_likelihood_from_sample(self, sample: np.ndarray, theta: np.ndarray):
+
+        coords, y, mask_obs = self.sample_to_coord(sample)
+
+        y_obs = y[~mask_obs]
+        coords_obs = coords[~mask_obs]
+        # coords_miss = coords[mask_obs]
+
+        return self.model.get_likelihood(coords_obs, y_obs, theta)
+
+    def get_likelihood(self, coords_obs: np.ndarray, y_obs: np.ndarray, theta: np.ndarray):
+
+        return self.model.get_likelihood(coords_obs, y_obs, theta)
+
+    def get_grid(self, idx, deepset_size=None, shuffle=True):
         """Load the sample idx"""
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
 
@@ -209,10 +233,12 @@ class GenericSimulationDataset(Dataset):
             ).item()
         deepset_idx = torch.randperm(self.max_deepset_size)[:deepset_size]
 
-        batch = batch[deepset_idx]
-
-        if deepset_size == 1:
-            batch = np.expand_dims(batch, axis=0)
+        if shuffle :
+            batch = batch[deepset_idx]
+            if deepset_size == 1:
+                batch = np.expand_dims(batch, axis=0)
+        else :
+            batch = batch[np.arange(deepset_size)]
 
         return batch, deepset_idx
 

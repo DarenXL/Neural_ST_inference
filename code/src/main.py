@@ -1,18 +1,23 @@
+import matplotlib.pyplot as plt
 from torch.utils.data import Dataset, DataLoader
 
 import gstlearn.document as gdoc
+import copy
 
 gdoc.setNoScroll()
 
 from utils import *
 from models.advection import AdvectionModel
-from models.gneiting import GneitingModel
+from models.gneiting_adv import GneitingAdvModel
+from models.gneiting_sep import GneitingSepModel
 from data.datasets import GenericSimulationDataset, NlsSimulationDataset
 from architecture.train_test import *
-from architecture.neural_networks import CNN_ST_network, CNN_ST_network_longer
+from architecture.neural_networks import CNN_ST_network
 from architecture.output_graphs import *
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
+
+# runfile("/home/aloret/PycharmProjects/Neural_ST_inference/code/src/main.py")
 
 #########################
 ####### Variables #######
@@ -29,8 +34,8 @@ res_path = create_res_path("code/results/spatiotemporal")
 
 # Neural Network train options
 
-batch_size = 50
-nb_epochs = 50
+batch_size = 40
+nb_epochs = 400
 freq_epochs_test = 10
 
 # Data options
@@ -39,12 +44,12 @@ time_size = 30
 space_dim = 1
 space_size = 30
 max_deepset_size = 5
-missing_ratios = [0.70]
+missing_ratios = [0.92]
 
 # Amount of data
 
-train_size = 10
-test_size = 10
+train_size = 5
+test_size = 5
 
 ######################################
 ######################################
@@ -58,8 +63,8 @@ test_size = 10
 
 # Model choice
 
-model = AdvectionModel()
-# model = GneitingModel()
+model = GneitingAdvModel(space_dim=space_dim)
+# model = AdvectionModel()
 
 # Creation of the class dataset and its θ
 
@@ -86,24 +91,24 @@ loader_train = DataLoader(
 
 # Creation of the several datasets used to test
 
+dataset_test = GenericSimulationDataset(
+    model=model,
+    theta_size=test_size,
+    time_size=time_size,
+    space_dim=space_dim,
+    space_size=space_size,
+    max_deepset_size=max_deepset_size,
+    missing_ratio=None,
+)
+dataset_test.generate(data_path / "test")
+
 datasets_test = []
 loaders_test = []
 
 for ratio in missing_ratios:
-    specific_test_path = data_path / "test" / f"ratio_{ratio}"
 
-    dataset = GenericSimulationDataset(
-        model=model,
-        theta_size=test_size,
-        time_size=time_size,
-        space_dim=space_dim,
-        space_size=space_size,
-        max_deepset_size=5,
-        missing_ratio=ratio,
-    )
-
-    print(f"\nData test {ratio} generation : {model.__class__.__name__}")
-    dataset.generate(specific_test_path)
+    dataset = copy.deepcopy(dataset_test)
+    dataset.missing_ratio = ratio
 
     datasets_test.append(dataset)
     loaders_test.append(
@@ -112,8 +117,11 @@ for ratio in missing_ratios:
 
 # Show data example
 
-# show_example(
-#     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+show_example(
+    dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+)
+# show_example_gif(
+#     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
 # )
 
 # dataset_gridsearch = GenericSimulationDataset(
@@ -132,6 +140,14 @@ for ratio in missing_ratios:
 ####### Architecture #######
 ############################
 
+# # batch = dataset_train[0]
+# # theta = batch[1][0]
+# # batch = batch[0][0]
+# # plt.imshow(batch[1])
+# # plt.show()
+# # # dataset_train.mle(batch)
+# # print(dataset_train.kriging(batch.detach().numpy(), theta).shape)
+#
 # # Creation of the Neural Network
 #
 # CNN = CNN_ST_network(
@@ -210,13 +226,13 @@ for ratio in missing_ratios:
 ###########################################
 ###########################################
 
-# trainers = [trainer_nls]
+# trainers = [trainer_separately]
 #
-# train_graph(trainers, res_path)
-# time_hist(trainers, res_path)
-# test_alt_graph(trainers, res_path)
+# # train_graph(trainers, res_path)
+# # time_hist(trainers, res_path)
+# # test_alt_graph(trainers, res_path)
 #
 # for i in range(len(datasets_test)):
-#     test_graph(trainers, res_path, num_dataset=i)
-#     target_graph(trainers, res_path, k=0, num_dataset=i)
+#     # test_graph(trainers, res_path, num_dataset=i)
+#     # target_graph(trainers, res_path, k=0, num_dataset=i)
 #     visualise(trainers, res_path, num_dataset=i)

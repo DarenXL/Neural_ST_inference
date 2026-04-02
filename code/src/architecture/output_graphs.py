@@ -430,7 +430,7 @@ def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0, simu_cond=F
 
     for j, trainer in enumerate(trainers) :
         if not trainer.network.nls:
-            visualise_output(trainer, res_path, nb_examples, num_dataset[j], k, mask=mask, simu_cond=simu_cond)
+            visualise_output_alt(trainer, res_path, nb_examples, num_dataset[j], k, mask=mask, simu_cond=simu_cond)
         else :
             return
 
@@ -486,7 +486,7 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=
             .numpy()
         )
 
-        sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
+        sample_uncond = dataset.generate_from_theta(theta_pred)[0][0] # dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
         sample_uncond_masked = sample_uncond.copy()
         sample_uncond_masked[np.array(masked_sample[1], dtype=bool)] = 0
 
@@ -566,5 +566,121 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=
 
     fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.pdf", format="pdf", bbox_inches="tight")
     fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation - {list_trainers_name([trainer], [num_dataset])}.png", format="png", bbox_inches="tight")
+
+    plt.show()
+
+def visualise_output_alt(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None, simu_cond=False):
+    """Visualisation containing observation, true gaussian field, kriging and MAE of kriging"""
+    p = 5
+    fig_map, axs = plt.subplots(
+        nb_examples, p, figsize=(4 * p, nb_examples * 3.5), constrained_layout=True
+    )
+    fig_map.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
+
+    dataset = trainer.test_dataset_hist[num_dataset]
+    space_dim = dataset.space_dim
+
+    if space_dim == 1 :
+        label_x = r"$\it{Space}$"
+        label_y = r"$\it{Time}$"
+    else:
+        label_x = r"$\it{Space 1}$"
+        label_y = r"$\it{Space 2}$"
+
+    for i in range(nb_examples):
+        full_sample, true_theta, _ = dataset[i+k]
+        full_sample, true_theta = full_sample[0], true_theta[0]
+
+        axs[i, 1].imshow(full_sample[0] if space_dim == 1 else full_sample[0,0], cmap="viridis", extent=[0, 1, 0, 1])
+        axs[i, 1].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 1].set_title(
+            (r"= Simu with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
+        )
+
+        masked_sample = full_sample.clone()
+        if not(mask is None):
+            masked_sample[1] = mask[i]
+        masked_sample[0][np.array(masked_sample[1], dtype=bool)] = 0
+
+        masked_sample_nan = masked_sample.detach().numpy().copy()
+        masked_sample_nan[0][np.array(masked_sample[1], dtype=bool)] = np.nan
+
+        axs[i, 0].imshow(masked_sample_nan[0] if space_dim == 1 else masked_sample_nan[0,0], cmap="viridis", extent=[0, 1, 0, 1])
+        axs[i, 0].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 0].set_ylabel(label_y)
+        axs[i, 0].set_title(
+            (r"= Data with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
+        )
+
+        theta_pred = (
+            trainer.network(
+                masked_sample.unsqueeze(0).float(),
+                deepset=torch.tensor([0]),
+            )[0]
+            .detach()
+            .numpy()
+        )
+
+        # sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
+        sample_uncond = dataset.generate_from_theta(theta_pred)[0][0]
+        sample_uncond_masked = sample_uncond.copy()
+        sample_uncond_masked[np.array(masked_sample[1], dtype=bool)] = 0
+
+        sample_krig_uncond = dataset.kriging_from_sample(
+            np.stack([sample_uncond_masked, masked_sample[1]]),
+            theta_pred,
+        )
+
+        sample_krig = dataset.kriging_from_sample(
+            masked_sample.detach().numpy(), theta_pred
+        )
+
+        axs[i, 2].imshow(
+            sample_krig if space_dim == 1 else sample_krig[0], extent=[0, 1, 0, 1]
+        )
+        axs[i, 2].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 2].set_title(
+            (r"= Prediction with kriging =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
+        )
+
+        sample_krig = sample_krig + sample_uncond - sample_krig_uncond
+
+        axs[i, 3].imshow(
+            sample_uncond if space_dim == 1 else sample_uncond[0], extent=[0, 1, 0, 1]
+        )
+        axs[i, 3].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 3].set_title(
+            (r"= Prediction with simulation =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
+        )
+
+        axs[i, 4].imshow(
+            sample_krig if space_dim == 1 else sample_krig[0], extent=[0, 1, 0, 1]
+        )
+        axs[i, 4].set_xlabel(label_x if i == (nb_examples -1) else "")
+        axs[i, 4].set_title(
+            (r"= Prediction with conditional simulation =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
+        )
+
+    data_images = [
+        axs[i, j].get_images()[0] for i in range(nb_examples) for j in range(5)
+    ]
+    if data_images:
+        v_min = min(np.nanmin(im.get_array()) for im in data_images)
+        v_max = max(np.nanmax(im.get_array()) for im in data_images)
+
+        # cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
+        # data_cmap = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+
+        for im in data_images:
+            im.set_clim(v_min, v_max)
+            im.set_cmap(CMAP)
+
+        cbar_data = fig_map.colorbar(
+            data_images[0], ax=axs[:, :5], location="right", shrink=1, pad=0.05
+        )
+        cbar_data.set_label("") # 'Value'
+
+    fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation_alt - {list_trainers_name([trainer], [num_dataset])}.pdf", format="pdf", bbox_inches="tight")
+    fig_map.savefig(res_path / "conclusion_graphs" / f"visualisation_alt - {list_trainers_name([trainer], [num_dataset])}.png", format="png", bbox_inches="tight")
 
     plt.show()

@@ -5,6 +5,7 @@ import torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
+import gstlearn as gl
 
 THETA_COLORS = [
     {
@@ -205,6 +206,31 @@ def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) ->
 
     return visibles
 
+def show_mask(outshape, dim=1):
+    lambda_p = [2, 2, 7, 7]
+    lambda_d = [2, 12, 2, 12]
+
+    fig, axs = plt.subplots(
+        nrows=1, ncols=4, figsize=(14, 5), layout="constrained"
+    )
+
+    if dim == 2 :
+        for ax, lp, ld in zip(axs, lambda_p,lambda_d):
+            sampling = sampling_poisson_2D(outshape, lp, ld, .1)
+            res = np.zeros_like(sampling, dtype=float)
+            res[~sampling] = np.nan
+            ax.imshow(res, cmap=CMAP)
+            ax.set_title(r"$\lambda_p = $"+str(lp)+r", $\lambda_d =$"+str(ld))
+    else :
+        for ax, lp, ld in zip(axs, lambda_p,lambda_d):
+            sampling = sampling_poisson_1D(outshape, lp, ld, .1)
+            res = np.zeros((outshape,outshape), dtype=float)
+            res[:,~sampling] = np.nan
+            ax.imshow(res, cmap=CMAP)
+            ax.set_title(r"$\lambda_p = $"+str(lp)+r", $\lambda_d =$"+str(ld))
+
+    plt.show()
+
 def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
     """Concatenate each element of a batch with a mask based on Poisson Sampling"""
     deepset_size = batch.shape[0]
@@ -262,12 +288,30 @@ def deepset_collate(batch: np.ndarray):
 #
 #     return data, theta, deepset
 
+def coords_to_grid(coords):
+    pass
+
+def grid_to_db(grid):
+
+    grid, mask = grid[0], grid[1]
+
+    space_size = grid.shape[0]
+    time_size = grid.shape[-1]
+
+    ### ATTENTION ORDRE SPACE SIZE // TIME SIZE
+
+    if grid.ndim == 2 :
+        grid = grid.transpose((1,0))
+        dbgrid = gl.DbGrid.create(
+            nx=[space_size, time_size], dx=[1.0 / space_size, 1.0 / time_size]
+        )
+
 
 def show_example(dataset, data_path: Path, k=0, label="example"):
     """Plot examples of gaussian fields"""
 
     fig, axs = plt.subplots(
-        nrows=1, ncols=4, figsize=(14, 5), layout="constrained", squeeze=False
+        nrows=1, ncols=2, figsize=(8, 4), layout="constrained", squeeze=False
     )
 
     if dataset.space_dim == 1:
@@ -392,7 +436,6 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
         data_path / "examples" / f"{label}_mask.png", format="png", bbox_inches="tight"
     )
 
-
 def show_example_gif(
     dataset, data_path: Path, num_time_steps: int, k=0, label="example"
 ):
@@ -442,7 +485,7 @@ def show_example_gif(
 
         return [ax.get_images() for ax in axs.flat]
 
-    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=500)
+    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=100)
 
     out_dir = data_path / "examples"
     out_dir.mkdir(parents=True, exist_ok=True)

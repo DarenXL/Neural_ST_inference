@@ -29,5 +29,9 @@ class SimulationModel(ABC):
         pass
 
     @abstractmethod
-    def get_cov(self, coords1, coords2, space_dim, theta_values):
+    def kriging(self, coords_in, coords_out, y, space_dim, theta_values):
+        pass
+
+    @abstractmethod
+    def get_likelihood(self, coords, y, theta):
         pass
