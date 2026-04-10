@@ -10,7 +10,7 @@ from architecture.train_test import Trainer
 
 def list_trainers_name(trainers : list[Trainer], num_dataset : list):
     """returns a string containing for each trainer of trainers: its network's label and its dataset it train/test on"""
-    return " - ".join([trainer.network.label + f" [{n}]" for n, trainer in zip(num_dataset,trainers)])
+    return " - ".join([trainer.estimation_label + f" [{n}]" for n, trainer in zip(num_dataset,trainers)])
 
 def train_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list[int] =0):
     """
@@ -36,12 +36,12 @@ def train_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | lis
     losses = []
     labels = []
     for j, trainer in enumerate(trainers):
-        if not trainer.network.nls:
-            labels.append(trainer.network.label)
+        if not trainer.nls:
+            labels.append(trainer.estimation_label)
             path = (
                 trainer.res_path
                 / "loss_evolution"
-                / f"history - {trainer.network.label} [{num_dataset[j]}].pt"
+                / f"history - {trainer.estimation_label} [{num_dataset[j]}].pt"
             )
             losses.append(torch.load(path)["final_train_losses"])
 
@@ -87,22 +87,22 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
         num_dataset = [num_dataset]*len(trainers)
 
     # assert all(item.test_dataset_hist[0].model.param_names == trainers[0].test_dataset_hist[0].model.param_names for item in trainers)
-    theta_names = trainers[0].test_dataset_hist[num_dataset[0]].model.param_names
+    theta_names = trainers[0].test_dataset_hist[0].model.get_param_names(alt_format=True)
 
     baseline, baseline_theta_mean = baseline_mae(
         trainers[0].test_dataset_hist[num_dataset[0]]
     )
 
-    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(18, 7))
+    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
 
     losses = []
-    labels = []
+    labels = ["CNN"]
     for j, trainer in enumerate(trainers):
-        labels.append(trainer.network.label)
+        # labels.append(trainer.estimation_label)
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
+            / f"outputs - {trainer.estimation_label} [{num_dataset[j]}].pt"
         )
         losses.append(torch.load(path)["final_test_losses"])
 
@@ -125,7 +125,7 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
         if i == len(axs) - 1 :
             axs[i].legend()
 
-    fig_box.suptitle(f"Test error comparaison")
+    fig_box.suptitle(f"Test error - ~80% missing values")
     fig_box.tight_layout()
     plt.show()
 
@@ -166,7 +166,7 @@ def _test_alt_graph(trainer : Trainer, res_path: Path):
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.network.label} [{j}].pt"
+            / f"outputs - {trainer.estimation_label} [{j}].pt"
         )
         losses.append(torch.load(path)["final_test_losses"])
 
@@ -189,12 +189,12 @@ def _test_alt_graph(trainer : Trainer, res_path: Path):
         if i == len(axs) - 1 :
             axs[i].legend()
 
-    fig_box.suptitle(f"Test error comparaison - {trainer.network.label}")
+    fig_box.suptitle(f"Test error comparaison - {trainer.estimation_label}")
     fig_box.tight_layout()
     plt.show()
 
-    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.network.label}.pdf", format="pdf", bbox_inches="tight")
-    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.network.label}.png", format="png", bbox_inches="tight")
+    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.estimation_label}.pdf", format="pdf", bbox_inches="tight")
+    fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.estimation_label}.png", format="png", bbox_inches="tight")
 
 def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int | list[int] =0, num_dataset_test: int | list[int] =0):
     #todo : séparer num_dataset pour train/test ou faire une somme
@@ -216,18 +216,18 @@ def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int |
     simu_times, train_times, test_times = [], [], []
     labels = []
     for j, trainer in enumerate(trainers):
-        labels.append(trainer.network.label)
+        labels.append(trainer.estimation_label)
         simu_times.append(trainer.train_dataset_hist[0].time_generation)
         path = (
             trainer.res_path
             / "loss_evolution"
-            / f"history - {trainer.network.label} [{num_dataset_train[j]}].pt"
+            / f"history - {trainer.estimation_label} [{num_dataset_train[j]}].pt"
         )
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.network.label} [{num_dataset_test[j]}].pt"
+            / f"outputs - {trainer.estimation_label} [{num_dataset_test[j]}].pt"
         )
         test_times.append(torch.load(path)["test_time"])
 
@@ -286,7 +286,7 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
     path0 = (
         trainers[0].res_path
         / "complete_outputs"
-        / f"outputs - {trainers[0].network.label} [{num_dataset[0]}].pt"
+        / f"outputs - {trainers[0].estimation_label} [{num_dataset[0]}].pt"
     )
     true_all_theta = torch.load(path0)["true_all_theta"]
 
@@ -304,7 +304,7 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.network.label} [{num_dataset[j]}].pt"
+            / f"outputs - {trainer.estimation_label} [{num_dataset[j]}].pt"
         )
         all_preds = torch.load(path)["final_all_theta"]
 
@@ -316,7 +316,7 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
 
         color = getattr(trainer, "color", THETA_COLORS[-j]['test'])
 
-        preds_dict[trainer.network.label] = {
+        preds_dict[trainer.estimation_label] = {
             "pred": filtered_preds,
             "color": color,
         }
@@ -429,7 +429,7 @@ def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0, simu_cond=F
         mask.append(full_sample[0][1])
 
     for j, trainer in enumerate(trainers) :
-        if not trainer.network.nls:
+        if not trainer.nls:
             visualise_output_alt(trainer, res_path, nb_examples, num_dataset[j], k, mask=mask, simu_cond=simu_cond)
         else :
             return

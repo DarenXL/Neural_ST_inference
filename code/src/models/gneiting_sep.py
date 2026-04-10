@@ -189,24 +189,6 @@ class GneitingSepModel(SimulationModel):
     def kriging(self, coords1, coords2, y, space_dim, theta_values):
         return matern_sep_cov(coords1, coords2, y, space_dim, *theta_values)
 
-    def get_mle(self, coords, obs):
+    def get_likelihood(self, coords, y, theta):
 
-        print(coords)
-        print(obs)
-
-        db = gl.Db.create()
-        names = []
-        for i in range(len(coords[0])):
-            db.addColumns(coords[:,i], radix='x'+str(i+1))
-            names.append('x'+str(i+1))
-        db.setLocators(names, gl.ELoc.X)
-
-        modelnew = gl.Model.createFromParam(type=gl.ECov.fromKey("GNEITING_M"), param=1)
-        mop = gl.ModelOptimParam.create(False)
-        modelnew.fitNew(db=db, verbose=False, mop=mop, nb_neighVecchia=20)
-
-        # print(modelnew.getCovAniso(0).getSill(0,0) / modelnew.getCovAniso(0).getScale(0)**2)
-
-        return modelnew.getCovAniso(0).getScale(0), np.sqrt(
-            modelnew.getCovAniso(0).getSill(0, 0)
-        )
+        pass

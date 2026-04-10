@@ -38,8 +38,8 @@ freq_epochs_test = 10
 # Data options
 
 time_size = 30
-space_dim = 1
-space_size = 30
+space_dim = 2
+space_size = 20
 max_deepset_size = 5
 missing_ratios = [0.70, .85, .92]
 

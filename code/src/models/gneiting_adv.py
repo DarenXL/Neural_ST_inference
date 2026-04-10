@@ -5,10 +5,10 @@ from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
 
-def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, std, deepset_size=5):
+def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5):
     range_time = np.maximum(range_time, np.array(0.05))
     range_space = np.maximum(range_space, np.array(0.05))
-    std = np.maximum(std, np.array(0.1))
+    # std = np.maximum(std, np.array(0.1))
 
     typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
     ns = 2000
@@ -77,12 +77,13 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
             ]
         ).transpose(0, 3, 2, 1)
 
-    return np.expand_dims(np.stack(batch)*std, 1)
+    # return np.expand_dims(np.stack(batch)*std, 1)
+    return np.expand_dims(np.stack(batch), 1)
 
-def get_gst_model(space_dim, adv, range_time, range_space, std):
+def get_gst_model(space_dim, adv, range_time, range_space):
     range_time = np.maximum(range_time, np.array(0.05))
     range_space = np.maximum(range_space, np.array(0.05))
-    std = np.maximum(std, np.array(0.1))
+    # std = np.maximum(std, np.array(0.1))
 
     typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
     ns = 2000
@@ -125,9 +126,9 @@ def get_gst_model(space_dim, adv, range_time, range_space, std):
 
     return model
 
-def matern_adv_cov(coords_in, coords_out, y, space_dim, adv, range_time, range_space, std):
+def matern_adv_cov(coords_in, coords_out, y, space_dim, adv, range_time, range_space):
 
-    model = get_gst_model(space_dim, adv, range_time, range_space, std)
+    model = get_gst_model(space_dim, adv, range_time, range_space)
 
     dbin = gl.Db.create()
     dbout = gl.Db.create()
@@ -153,16 +154,16 @@ class GneitingAdvModel(SimulationModel):
         self.space_dim = space_dim
 
         if self.space_dim == 1 :
-            self._names = ['adv', 'range_time', 'range_space', 'std']
-            self._names_alt = ["adv", r"$\rho_t$", r"$\rho_s$", r"$\sigma$"]
-            self.lower_bound = (-1, 0.05, 0.05, 0.1)
-            self.upper_bound = (1, 0.15, 0.25, 1.)
+            self._names = ['adv', 'range_time', 'range_space']
+            self._names_alt = ["adv", r"$\rho_t$", r"$\rho_s$"]
+            self.lower_bound = (-1, 0.05, 0.05)
+            self.upper_bound = (1, 0.15, 0.25)
 
         elif self.space_dim == 2 :
-            self._names = ['adv1', 'adv2', 'range_time', 'range_space', 'std']
-            self._names_alt = ["adv1", "adv2", r"$\rho_t$", r"$\rho_s$", r"$\sigma$"]
-            self.lower_bound = (-1, -1, .05, 0.05, 0.1)
-            self.upper_bound = (1, 1, .25, 0.25, 1.)
+            self._names = ['adv1', 'adv2', 'range_time', 'range_space']
+            self._names_alt = ["adv1", "adv2", r"$\rho_t$", r"$\rho_s$"]
+            self.lower_bound = (-1, -1, .05, 0.05)
+            self.upper_bound = (1, 1, .25, 0.25)
 
     @property
     def param_names(self):
@@ -180,14 +181,14 @@ class GneitingAdvModel(SimulationModel):
     def to_title(self, vals, alt_format=False):
         if self.space_dim == 1 :
             if not alt_format:
-                return fr"adv: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}" + "\n" + fr"$\rho_s: {vals[2]:.2f} | $\sigma$: {vals[3]:.2f}"
+                return fr"adv: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}" + "\n" + fr"$\rho_s: {vals[2]:.2f}"
             else :
-                return fr"adv: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}| $\sigma$: {vals[3]:.2f}"
+                return fr"adv: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
         elif self.space_dim == 2 :
             if not alt_format:
-                return fr"adv1: {vals[0]:.2f} | adv2: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f}" + "\n" + fr"$\rho_s$: {vals[3]:.2f} | $\sigma$: {vals[4]:.2f}"
+                return fr"adv1: {vals[0]:.2f} | adv2: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f}" + "\n" + fr"$\rho_s$: {vals[3]:.2f}"
             else :
-                return fr"adv1: {vals[0]:.2f} | adv2: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f} | $\sigma$: {vals[4]:.2f}"
+                return fr"adv1: {vals[0]:.2f} | adv2: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}"
 
     def sample_thetas(self, n):
         if self.space_dim == 1 :
@@ -201,9 +202,6 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": np.random.uniform(
                     self.lower_bound[2], self.upper_bound[2], (n,)
                 ),
-                "std": np.random.uniform(
-                    self.lower_bound[3], self.upper_bound[3], (n,)
-                ),
             }
         elif self.space_dim == 2 :
             return {
@@ -211,7 +209,6 @@ class GneitingAdvModel(SimulationModel):
                 'adv2': np.random.uniform(self.lower_bound[1], self.upper_bound[1], (n,)),
                 'range_time': np.random.uniform(self.lower_bound[2], self.upper_bound[2], (n,)),
                 'range_space': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
-                'std': np.random.uniform(self.lower_bound[4], self.upper_bound[4], (n,))
             }
 
     def simulate(self, p, t_size, s_dim, s_size, d_size):
@@ -219,13 +216,13 @@ class GneitingAdvModel(SimulationModel):
         if self.space_dim == 1 :
             return _simulate_gneiting_matern_grid_func(
                 t_size, s_dim, s_size,
-                p['adv'], p['range_time'], p['range_space'], p['std'],
+                p['adv'], p['range_time'], p['range_space'],
                 deepset_size=d_size
             )
         elif self.space_dim == 2 :
             return _simulate_gneiting_matern_grid_func(
                 t_size, s_dim, s_size,
-                [p['adv1'], p['adv2']], p['range_time'], p['range_space'], p['std'],
+                [p['adv1'], p['adv2']], p['range_time'], p['range_space'],
                 deepset_size=d_size
             )
 
@@ -233,16 +230,18 @@ class GneitingAdvModel(SimulationModel):
         if self.space_dim == 1 :
             return matern_adv_cov(
                 coords_in, coords_out, y, space_dim,
-                theta_values[0], theta_values[1], theta_values[2], theta_values[3]
+                theta_values[0], theta_values[1], theta_values[2]
             )
         elif self.space_dim == 2 :
             return matern_adv_cov(
                 coords_in, coords_out, y, space_dim,
-                [theta_values[0], theta_values[1]], theta_values[2], theta_values[3], theta_values[4]
+                [theta_values[0], theta_values[1]], theta_values[2], theta_values[3]
             )
 
     def get_likelihood(self, coords, y, theta):
         model = get_gst_model(self.space_dim, *theta)
+
+        # print(coords.shape)
 
         dbgrid = gl.Db.create()
         names = []
@@ -251,10 +250,14 @@ class GneitingAdvModel(SimulationModel):
             names.append("x" + str(i + 1))
         dbgrid.setLocators(names, gl.ELoc.X)
 
+        # print(y)
+
         dbgrid.addColumns(y, radix="z1")
         dbgrid.setLocator("z1", gl.ELoc.Z)
 
-        ndat = 100
+        # print(dbgrid)
+
+        ndat = 500
         v = np.arange(dbgrid.getNSample())
         np.random.shuffle(v)
         inddat = v[0:ndat]

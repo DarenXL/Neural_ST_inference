@@ -8,6 +8,7 @@ from tqdm import tqdm
 import time
 
 from utils import map_deepset, baseline_mae, THETA_COLORS, unique_preserve_order
+from scipy.optimize import minimize
 
 import torch
 import time
@@ -15,13 +16,15 @@ from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 
-
 class Trainer:
     def __init__(self, network, device, res_path, optimizer=None):
 
         self.network = network.to(device)
         self.device = device
         self.res_path = Path(res_path)
+
+        self.estimation_label = self.network.label
+        self.nls = self.network.nls
 
         if optimizer is None:
             if self.network.nls:
@@ -100,8 +103,6 @@ class Trainer:
         assert isinstance(test_loader.sampler, torch.utils.data.SequentialSampler), "DataLoader must be shuffle=False"
 
         self.test_dataset_hist.append(test_loader.dataset)
-
-
 
         if self.network.nls:
             self.test_nls_grid(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
@@ -596,7 +597,6 @@ class Trainer:
                 all_loss_test.append(loss)
                 all_theta_final.append(theta_final)
                 all_true_theta.append(theta_batch.detach().cpu())
-
 
             time_total = time.time() - time_start
 

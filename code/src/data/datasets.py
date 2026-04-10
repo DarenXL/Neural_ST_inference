@@ -75,8 +75,8 @@ class GenericSimulationDataset(Dataset):
             time_size=config["time_size"],
             space_dim=config["space_dim"],
             space_size=config["space_size"],
-            # min_deepset_size=config["min_deepset_size"],
-            # max_deepset_size=config["max_deepset_size"],
+            min_deepset_size=config["min_deepset_size"],
+            max_deepset_size=config["max_deepset_size"],
             missing_ratio=config["missing_ratio"],
         )
 
@@ -186,6 +186,8 @@ class GenericSimulationDataset(Dataset):
         grid = np.meshgrid(*axes, indexing="ij")
         coords = np.stack(grid, axis=-1).reshape(-1, len(axes))
 
+        # print(np.sum(mask_obs))
+
         return coords, y, mask_obs
 
     def kriging_from_sample(self, sample: np.ndarray, theta: np.ndarray) -> np.ndarray:
@@ -216,6 +218,8 @@ class GenericSimulationDataset(Dataset):
         y_obs = y[~mask_obs]
         coords_obs = coords[~mask_obs]
         # coords_miss = coords[mask_obs]
+
+        # print("get_likelihood_from_sample", coords_obs.shape)
 
         return self.model.get_likelihood(coords_obs, y_obs, theta)
 

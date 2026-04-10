@@ -12,6 +12,7 @@ from models.gneiting_adv import GneitingAdvModel
 from models.gneiting_sep import GneitingSepModel
 from data.datasets import GenericSimulationDataset, NlsSimulationDataset
 from architecture.train_test import *
+from architecture.mle_test import *
 from architecture.neural_networks import CNN_ST_network
 from architecture.output_graphs import *
 
@@ -35,7 +36,7 @@ res_path = create_res_path("code/results/spatiotemporal")
 # Neural Network train options
 
 batch_size = 40
-nb_epochs = 400
+nb_epochs = 200
 freq_epochs_test = 10
 
 # Data options
@@ -43,12 +44,12 @@ freq_epochs_test = 10
 time_size = 30
 space_dim = 1
 space_size = 30
-max_deepset_size = 5
-missing_ratios = [0.92]
+max_deepset_size = 1
+missing_ratios = [0.7]
 
 # Amount of data
 
-train_size = 5
+train_size = 2000
 test_size = 5
 
 ######################################
@@ -117,9 +118,9 @@ for ratio in missing_ratios:
 
 # Show data example
 
-show_example(
-    dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-)
+# show_example_mask(
+#     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+#)
 # show_example_gif(
 #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
 # )
@@ -140,40 +141,37 @@ show_example(
 ####### Architecture #######
 ############################
 
-# # batch = dataset_train[0]
-# # theta = batch[1][0]
-# # batch = batch[0][0]
-# # plt.imshow(batch[1])
-# # plt.show()
-# # # dataset_train.mle(batch)
-# # print(dataset_train.kriging(batch.detach().numpy(), theta).shape)
-#
-# # Creation of the Neural Network
-#
-# CNN = CNN_ST_network(
-#     in_channels=2,
-#     out_dim=dataset_train.model.nb_params,
-#     spatial_dim=space_dim,
-# ).to(device)
-#
-# # Creation the Trainer used train, test and show results
-#
-# trainer_separately = Trainer(CNN, device, res_path)
-#
-# # Training (and testing at the same time)
-#
-# trainer_separately.train(
-#     train_loader=loader_train,
-#     test_loader=loaders_test[0],
-#     nb_epochs=nb_epochs,
-#     freq_epochs_test=freq_epochs_test,
-#     print_result=True,
-# )
-#
-# # Testing
-#
-# for loader in loaders_test:
-#     trainer_separately.test(loader)
+
+
+# Creation of the Neural Network
+
+CNN = CNN_ST_network(
+    in_channels=2,
+    out_dim=dataset_train.model.nb_params,
+    spatial_dim=space_dim,
+).to(device)
+
+# Creation the Trainer used train, test and show results
+
+trainer_separately = Trainer(CNN, device, res_path)
+
+# Training (and testing at the same time)
+
+trainer_separately.train(
+    train_loader=loader_train,
+    test_loader=loaders_test[0],
+    nb_epochs=nb_epochs,
+    freq_epochs_test=freq_epochs_test,
+    print_result=True,
+)
+
+# Testing
+
+for loader in loaders_test:
+    trainer_separately.test(loader)
+
+mle_trainer = MLE(device, res_path)
+mle_trainer.test_mle(datasets_test[0])
 
 ##################################
 ##################################
@@ -226,13 +224,13 @@ show_example(
 ###########################################
 ###########################################
 
-# trainers = [trainer_separately]
-#
-# # train_graph(trainers, res_path)
-# # time_hist(trainers, res_path)
-# # test_alt_graph(trainers, res_path)
-#
-# for i in range(len(datasets_test)):
-#     # test_graph(trainers, res_path, num_dataset=i)
-#     # target_graph(trainers, res_path, k=0, num_dataset=i)
+trainers = [mle_trainer]
+
+# train_graph(trainers, res_path)
+# time_hist(trainers, res_path)
+test_alt_graph(trainers, res_path)
+
+for i in range(len(datasets_test)):
+    test_graph(trainers, res_path, num_dataset=i)
+#     target_graph(trainers, res_path, k=0, num_dataset=i)
 #     visualise(trainers, res_path, num_dataset=i)

@@ -227,3 +227,6 @@ class AdvectionModel(SimulationModel):
 
     def get_mle(self, coords, obs):
         pass
+
+    def get_likelihood(self, coords, y, theta):
+        pass

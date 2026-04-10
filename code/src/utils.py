@@ -288,30 +288,12 @@ def deepset_collate(batch: np.ndarray):
 #
 #     return data, theta, deepset
 
-def coords_to_grid(coords):
-    pass
-
-def grid_to_db(grid):
-
-    grid, mask = grid[0], grid[1]
-
-    space_size = grid.shape[0]
-    time_size = grid.shape[-1]
-
-    ### ATTENTION ORDRE SPACE SIZE // TIME SIZE
-
-    if grid.ndim == 2 :
-        grid = grid.transpose((1,0))
-        dbgrid = gl.DbGrid.create(
-            nx=[space_size, time_size], dx=[1.0 / space_size, 1.0 / time_size]
-        )
-
 
 def show_example(dataset, data_path: Path, k=0, label="example"):
     """Plot examples of gaussian fields"""
 
     fig, axs = plt.subplots(
-        nrows=1, ncols=2, figsize=(8, 4), layout="constrained", squeeze=False
+        nrows=1, ncols=4, figsize=(14, 4), layout="constrained", squeeze=False
     )
 
     if dataset.space_dim == 1:
@@ -370,7 +352,7 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
     )
 
 
-def show_example_mask(dataset, data_path: Path, k=0, label="example"):
+def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None):
     """Plot examples of gaussian fields and their masked apearance"""
 
     fig, axs = plt.subplots(
@@ -382,10 +364,12 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
         fig.suptitle(r"Examples on different $\theta$")
 
         for i in range(len(axs[0])):
-            mask = create_mask(
-                dataset.space_size, dataset.space_dim,
-                missing_ratio=dataset.missing_ratio,
-            )
+
+            if mask is None :
+                mask = create_mask(
+                    dataset.space_size, dataset.space_dim,
+                    missing_ratio=dataset.missing_ratio,
+                )
 
             dataset.show(axs[0, i], k + i)
             dataset.show(axs[1, i], k + i, mask=mask)
@@ -397,10 +381,11 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
     else:
         fig.suptitle(r"Example over time")
 
-        mask = create_mask(
-                dataset.space_size, dataset.space_dim,
-                missing_ratio=dataset.missing_ratio,
-            )
+        if mask is None:
+            mask = create_mask(
+                    dataset.space_size, dataset.space_dim,
+                    missing_ratio=dataset.missing_ratio,
+                )
 
         for i in range(len(axs[0])):
 
@@ -422,7 +407,7 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
             im.set_cmap(CMAP)
 
         cbar = fig.colorbar(
-            all_images[-1], ax=axs, location="right", shrink=1.2, pad=0.025
+            all_images[-1], ax=axs, location="right", shrink=1.1, pad=0.025
         )
         cbar.set_label("")  # 'Value'
 
@@ -435,6 +420,8 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example"):
     fig.savefig(
         data_path / "examples" / f"{label}_mask.png", format="png", bbox_inches="tight"
     )
+
+
 
 def show_example_gif(
     dataset, data_path: Path, num_time_steps: int, k=0, label="example"
