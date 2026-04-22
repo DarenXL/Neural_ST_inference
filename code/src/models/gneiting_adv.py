@@ -6,48 +6,9 @@ from scipy.special import gamma, kv
 from scipy.stats import qmc
 
 def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5):
-    range_time = np.maximum(range_time, np.array(0.05))
-    range_space = np.maximum(range_space, np.array(0.05))
-    # std = np.maximum(std, np.array(0.1))
 
-    typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
     ns = 2000
-
-    alpha = 2.0
-    beta = 1.0
-    nu = 1.0
-    rr = 1
-    range_space = [range_space]*space_dim
-    angles = [0]*space_dim
-    sep = 1.
-
-    # speed = adv.copy()
-    # adv = adv/np.sqrt(np.sum(adv**2)) # direction of advection
-    proj_mat = np.eye(space_dim+1)
-    proj_mat[0:space_dim, space_dim] = -np.array(adv)
-
-    ctxt = gl.CovContext(1, gl.SpaceRN.create(space_dim))
-
-    fac = gl.CorGneiting.create(
-        ctxt=ctxt,
-        type=gl.ECov.fromKey(typem),
-        alpha=alpha,
-        beta=beta,
-        timeRange=range_time,
-        params=nu,
-        kappas=rr,
-        ranges=range_space,
-        angles=angles,
-        flagRange=False,
-        separability=sep,
-    )
-
-    ctxtFac = gl.CovContext(1, gl.SpaceRN.create(space_dim+1))
-    cov  = gl.CorFactorized.create(ctxt = ctxtFac)
-    err = cov.addFactor(cov = fac, proj = proj_mat)
-
-    model = gl.ModelGeneric()
-    model.setCov(cov)
+    model = get_gst_model(space_dim, adv, range_time, range_space)
 
     if space_dim == 1:
 
@@ -86,7 +47,6 @@ def get_gst_model(space_dim, adv, range_time, range_space):
     # std = np.maximum(std, np.array(0.1))
 
     typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
-    ns = 2000
 
     alpha = 2.0
     beta = 1.0
@@ -257,10 +217,4 @@ class GneitingAdvModel(SimulationModel):
 
         # print(dbgrid)
 
-        ndat = 500
-        v = np.arange(dbgrid.getNSample())
-        np.random.shuffle(v)
-        inddat = v[0:ndat]
-        dat = gl.Db.createReduce(dbgrid, ranks=inddat)
-
-        return model.computeLogLikelihood(dat)
+        return model.computeLogLikelihood(dbgrid)

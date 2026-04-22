@@ -174,7 +174,7 @@ class GenericSimulationDataset(Dataset):
                 fontsize=10,
             )
 
-    def sample_to_coord(self, sample):
+    def sample_to_coord(self, sample, shuffle :int = None):
         y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(
             -1
         )  # .T.reshape(-1,order="F")
@@ -187,6 +187,19 @@ class GenericSimulationDataset(Dataset):
         coords = np.stack(grid, axis=-1).reshape(-1, len(axes))
 
         # print(np.sum(mask_obs))
+
+        if not(shuffle is None):
+            v = np.random.permutation(coords.shape[0])
+            v = v[~mask_obs]
+            v = v[0:shuffle]
+            print(
+                mask_obs.sum(),
+                v.shape
+            )
+            coords = coords[v, :]
+            y = y[v]
+            mask_obs = mask_obs[v]
+            print(coords.shape, y.shape, mask_obs.shape)
 
         return coords, y, mask_obs
 

@@ -5,41 +5,10 @@ from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
 
-def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, range_time, range_space, std, deepset_size=5):
-    sep = np.maximum(sep, np.array(0.05))
-    sep = np.minimum(sep, np.array(.95))
-    range_time = np.maximum(range_time, np.array(0.05))
-    range_space = np.maximum(range_space, np.array(0.05))
-    std = np.maximum(std, np.array(0.1))
-
-    typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
+def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, range_time, range_space, deepset_size=5):
     ns = 2000
 
-    alpha = 2.0
-    beta = 1.0
-    nu = 1.0
-    rr = 1
-    range_space = [range_space]*space_dim
-    angles = [0]*space_dim
-
-    ctxt = gl.CovContext(1, gl.SpaceRN.create(space_dim))
-
-    fac = gl.CorGneiting.create(
-        ctxt=ctxt,
-        type=gl.ECov.fromKey(typem),
-        alpha=alpha,
-        beta=beta,
-        timeRange=range_time,
-        params=nu,
-        kappas=rr,
-        ranges=range_space,
-        angles=angles,
-        flagRange=False,
-        separability=sep,
-    )
-
-    model = gl.ModelGeneric()
-    model.setCov(fac)
+    model = get_gst_model(space_dim, sep, range_time, range_space)
 
     if space_dim == 1:
 
@@ -69,26 +38,22 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, r
             ]
         ).transpose(0, 3, 2, 1)
 
-    return np.expand_dims(np.stack(batch)*std, 1)
+    return np.expand_dims(np.stack(batch), 1)
 
-
-def matern_sep_cov(coords_in, coords_out, y, space_dim, sep, range_time, range_space, std):
-
+def get_gst_model(space_dim, sep, range_time, range_space):
     sep = np.maximum(sep, np.array(0.05))
-    sep = np.minimum(sep, np.array(.95))
+    sep = np.minimum(sep, np.array(0.95))
     range_time = np.maximum(range_time, np.array(0.05))
     range_space = np.maximum(range_space, np.array(0.05))
-    std = np.maximum(std, np.array(0.1))
 
     typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
-    ns = 2000
 
     alpha = 2.0
     beta = 1.0
     nu = 1.0
     rr = 1
-    range_space = [range_space]*space_dim
-    angles = [0]*space_dim
+    range_space = [range_space] * space_dim
+    angles = [0] * space_dim
 
     ctxt = gl.CovContext(1, gl.SpaceRN.create(space_dim))
 
@@ -108,6 +73,15 @@ def matern_sep_cov(coords_in, coords_out, y, space_dim, sep, range_time, range_s
 
     model = gl.ModelGeneric()
     model.setCov(fac)
+
+    return model
+
+
+def matern_sep_cov(
+    coords_in, coords_out, y, space_dim, sep, range_time, range_space, std
+):
+
+    model = get_gst_model(space_dim, sep, range_time, range_space)
 
     dbin = gl.Db.create()
     dbout = gl.Db.create()
@@ -132,10 +106,10 @@ class GneitingSepModel(SimulationModel):
     def __init__(self, space_dim=1):
         self.space_dim = space_dim
 
-        self._names = ["sep", "range_time", "range_space", "std"]
-        self._names_alt = ["sep", r"$\rho_t$", r"$\rho_s$", r"$\sigma$"]
-        self.lower_bound = (0.05, 0.05, 0.05, 0.1)
-        self.upper_bound = (1.0, 0.15, 0.25, 1.0)
+        self._names = ["sep", "range_time", "range_space"]
+        self._names_alt = ["sep", r"$\rho_t$", r"$\rho_s$"]
+        self.lower_bound = (0.05, 0.05, 0.05)
+        self.upper_bound = (1.0, 0.15, 0.25)
 
     @property
     def param_names(self):
@@ -156,10 +130,10 @@ class GneitingSepModel(SimulationModel):
             return (
                 rf"sep: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}"
                 + "\n"
-                + rf"$\rho_s: {vals[2]:.2f} | $\sigma$: {vals[3]:.2f}"
+                + rf"$\rho_s: {vals[2]:.2f}"
             )
         else:
-            return rf"sep: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}| $\sigma$: {vals[3]:.2f}"
+            return rf"sep: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
 
     def sample_thetas(self, n):
         return {
@@ -170,7 +144,6 @@ class GneitingSepModel(SimulationModel):
             "range_space": np.random.uniform(
                 self.lower_bound[2], self.upper_bound[2], (n,)
             ),
-            "std": np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
         }
 
     def simulate(self, p, t_size, s_dim, s_size, d_size):
@@ -182,7 +155,6 @@ class GneitingSepModel(SimulationModel):
             p["sep"],
             p["range_time"],
             p["range_space"],
-            p["std"],
             deepset_size=d_size,
         )
 
@@ -191,4 +163,20 @@ class GneitingSepModel(SimulationModel):
 
     def get_likelihood(self, coords, y, theta):
 
-        pass
+        model = get_gst_model(self.space_dim, *theta)
+
+        dbgrid = gl.Db.create()
+        names = []
+        for i in range(len(coords[0])):
+            dbgrid.addColumns(coords[:, i], radix="x" + str(i + 1))
+            names.append("x" + str(i + 1))
+        dbgrid.setLocators(names, gl.ELoc.X)
+
+        # print(y)
+
+        dbgrid.addColumns(y, radix="z1")
+        dbgrid.setLocator("z1", gl.ELoc.Z)
+
+        # print(dbgrid)
+
+        return model.computeLogLikelihood(dbgrid)

@@ -49,8 +49,8 @@ missing_ratios = [0.7]
 
 # Amount of data
 
-train_size = 2000
-test_size = 5
+train_size = 20
+test_size = 10
 
 ######################################
 ######################################
@@ -64,7 +64,8 @@ test_size = 5
 
 # Model choice
 
-model = GneitingAdvModel(space_dim=space_dim)
+model = GneitingAdvModel(space_dim=space_dim) # baseline [0.5083, 0.0253, 0.0501] | [-0.0162,  0.0999,  0.1524]
+# model = GneitingSepModel(space_dim=space_dim) # baseline [0.2359, 0.0255, 0.0509] | [0.5378, 0.0986, 0.1488]
 # model = AdvectionModel()
 
 # Creation of the class dataset and its θ
@@ -120,7 +121,7 @@ for ratio in missing_ratios:
 
 # show_example_mask(
 #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-#)
+# )
 # show_example_gif(
 #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
 # )
@@ -141,8 +142,6 @@ for ratio in missing_ratios:
 ####### Architecture #######
 ############################
 
-
-
 # Creation of the Neural Network
 
 CNN = CNN_ST_network(
@@ -151,27 +150,42 @@ CNN = CNN_ST_network(
     spatial_dim=space_dim,
 ).to(device)
 
+# quantile_CNN = CNN_ST_network(
+#     in_channels=2,
+#     hidden=16,
+#     out_dim=dataset_train.model.nb_params,
+#     spatial_dim=space_dim,
+# ).to(device)
+
 # Creation the Trainer used train, test and show results
 
-trainer_separately = Trainer(CNN, device, res_path)
-
-# Training (and testing at the same time)
-
-trainer_separately.train(
-    train_loader=loader_train,
-    test_loader=loaders_test[0],
-    nb_epochs=nb_epochs,
-    freq_epochs_test=freq_epochs_test,
-    print_result=True,
-)
-
-# Testing
-
-for loader in loaders_test:
-    trainer_separately.test(loader)
+# trainer_separately = Trainer(
+#     CNN,
+#     device,
+#     res_path,
+#     # quantiles=[0.05, 0.95],
+#     # quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+# )
+#
+# # Training (and testing at the same time)
+#
+# trainer_separately.train(
+#     train_loader=loader_train,
+#     test_loader=loaders_test[0],
+#     nb_epochs=nb_epochs,
+#     freq_epochs_test=freq_epochs_test,
+#     print_result=True,
+# )
+#
+# # Testing
+#
+# for loader in loaders_test:
+#     res = trainer_separately.test(loader) # res = ...
 
 mle_trainer = MLE(device, res_path)
 mle_trainer.test_mle(datasets_test[0])
+
+# print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] > res["all_quantiles"][0.95]).float() , dim=0))
 
 ##################################
 ##################################
@@ -230,7 +244,7 @@ trainers = [mle_trainer]
 # time_hist(trainers, res_path)
 test_alt_graph(trainers, res_path)
 
-for i in range(len(datasets_test)):
-    test_graph(trainers, res_path, num_dataset=i)
+# for i in range(len(datasets_test)):
+#     test_graph(trainers, res_path, num_dataset=i)
 #     target_graph(trainers, res_path, k=0, num_dataset=i)
 #     visualise(trainers, res_path, num_dataset=i)

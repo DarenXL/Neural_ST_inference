@@ -38,14 +38,14 @@ freq_epochs_test = 10
 # Data options
 
 time_size = 30
-space_dim = 2
-space_size = 20
-max_deepset_size = 5
-missing_ratios = [0.70, .85, .92]
+space_dim = 1
+space_size = 30
+max_deepset_size = 1
+missing_ratios = [0.70] #, .85, .92]
 
 # Amount of data
 
-train_size = 20
+train_size = 12
 test_size = 4
 
 ######################################
@@ -60,7 +60,9 @@ test_size = 4
 
 # Model choice
 
-model = GneitingAdvModel(space_dim=space_dim)
+model = GneitingAdvModel(space_dim=space_dim) # baseline [0.5083, 0.0253, 0.0501] | [-0.0162,  0.0999,  0.1524]
+# model = GneitingSepModel(space_dim=space_dim) # baseline [0.2359, 0.0255, 0.0509] | [0.5378, 0.0986, 0.1488]
+# model = AdvectionModel()
 
 # Creation of the class dataset and its θ
 
@@ -133,9 +135,22 @@ CNN = CNN_ST_network(
     pool_option="max"
 ).to(device)
 
+quantile_CNN = CNN_ST_network(
+    in_channels=2,
+    hidden=16,
+    out_dim=dataset_train.model.nb_params,
+    spatial_dim=space_dim,
+).to(device)
+
 # Creation the Trainer used train, test and show results
 
-trainer = Trainer(CNN, device, res_path)
+trainer = Trainer(
+    CNN,
+    device,
+    res_path,
+    quantiles=[0.05, 0.95],
+    quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+)
 
 # Training (and testing at the same time)
 
@@ -150,7 +165,7 @@ trainer.train(
 # Testing
 
 for loader in loaders_test:
-    trainer.test(loader)
+    res = trainer.test(loader)
 
 ###########################################
 ###########################################
@@ -168,4 +183,7 @@ for i in range(len(datasets_test)):
     test_graph(trainers, res_path, num_dataset=i)
     target_graph(trainers, res_path, k=0, num_dataset=i)
     visualise(trainers, res_path, num_dataset=i)
+
+print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] > res["all_quantiles"][0.95]).float() , dim=0))
+
 

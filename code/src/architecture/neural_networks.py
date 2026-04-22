@@ -6,7 +6,7 @@ from utils import *
 
 
 class CNN_ST_network(nn.Module):
-    def __init__(self, in_channels=2, hidden=32, out_dim=4, spatial_dim=1, pool_option="avg", nls=False, nls_sim=False, label=None):
+    def __init__(self, in_channels=2, hidden=32, out_dim=4, spatial_dim=1, pool_option="max", nls=False, nls_sim=False, label=None):
         super().__init__()
 
         self.spatial_dim = spatial_dim

@@ -96,9 +96,9 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
     fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
 
     losses = []
-    labels = ["CNN"]
+    labels = []
     for j, trainer in enumerate(trainers):
-        # labels.append(trainer.estimation_label)
+        labels.append(trainer.estimation_label)
         path = (
             trainer.res_path
             / "complete_outputs"
@@ -125,7 +125,7 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
         if i == len(axs) - 1 :
             axs[i].legend()
 
-    fig_box.suptitle(f"Test error - ~80% missing values")
+    fig_box.suptitle(f"Test error") # - ~80% missing values
     fig_box.tight_layout()
     plt.show()
 

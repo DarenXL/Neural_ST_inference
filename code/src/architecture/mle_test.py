@@ -45,11 +45,11 @@ class MLE:
 
         def obj(theta):
             res = -likelihood(coords, y, theta)
-            print(" " ,res)
+            print(" " ,res, " | ", theta)
             return res
 
         res = minimize(
-            obj, theta0, method="Nelder-Mead", bounds=bounds, options={"maxiter": 100, 'disp': False} # "Powell"
+            obj, theta0, method="Nelder-Mead", bounds=bounds, options={"maxiter": 2000, 'disp': False} # "Powell"
         )
         return res.x, res
 
@@ -88,12 +88,12 @@ class MLE:
 
                 for j in range(len(data_test)):
 
-                    print(j)
+                    print(j, "Truth :", theta_test)
 
-                    coords, y, mask = dataset.sample_to_coord(data_test[j])
+                    coords, y, mask = dataset.sample_to_coord(data_test[j], shuffle=400)
 
                     output, _ = self.mle(dataset.get_likelihood, coords, y, theta0, bounds=bounds)
-                    print(output)
+
                     output = torch.from_numpy(output)
 
                     loss = torch.abs(output - theta_test[j])
@@ -102,18 +102,10 @@ class MLE:
                     all_theta_final.append(output)
                     all_true_theta.append(theta_test[j])
 
-        print("avant")
-        print(all_loss_test)
-        print(all_theta_final)
-        print(all_true_theta)
         time_total = time.time() - time_start
         full_loss_tensor = torch.stack(all_loss_test, dim=0)
         all_theta_final = torch.stack(all_theta_final, dim=0)
         all_true_theta = torch.stack(all_true_theta, dim=0)
-        print("arpès")
-        print(all_loss_test)
-        print(all_theta_final)
-        print(all_true_theta)
 
         results = {
             "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
