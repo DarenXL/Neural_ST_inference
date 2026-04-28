@@ -197,7 +197,7 @@ def _test_alt_graph(trainer : Trainer, res_path: Path):
     fig_box.savefig(res_path / "conclusion_graphs" / f"score_test_alt - {trainer.estimation_label}.png", format="png", bbox_inches="tight")
 
 def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int | list[int] =0, num_dataset_test: int | list[int] =0):
-    #todo : séparer num_dataset pour train/test ou faire une somme
+    # todo : séparer num_dataset pour train/test ou faire une somme
     """
     boxplot with simulation, train and test times
     trainers : A list of Trainer
@@ -217,19 +217,22 @@ def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int |
     labels = []
     for j, trainer in enumerate(trainers):
         labels.append(trainer.estimation_label)
-        simu_times.append(trainer.train_dataset_hist[0].time_generation)
-        path = (
-            trainer.res_path
-            / "loss_evolution"
-            / f"history - {trainer.estimation_label} [{num_dataset_train[j]}].pt"
-        )
-        train_times.append(torch.load(path)["train_time"])
-        path = (
-            trainer.res_path
-            / "complete_outputs"
-            / f"outputs - {trainer.estimation_label} [{num_dataset_test[j]}].pt"
-        )
-        test_times.append(torch.load(path)["test_time"])
+        simu_times.append(trainer.simu_time)
+        train_times.append(trainer.train_time)
+        test_times.append(trainer.test_time)
+        # trainer.train_dataset_hist[0].time_generation
+        # path = (
+        #     trainer.res_path
+        #     / "loss_evolution"
+        #     / f"history - {trainer.estimation_label} [{num_dataset_train[j]}].pt"
+        # )
+        # train_times.append(torch.load(path)["train_time"])
+        # path = (
+        #     trainer.res_path
+        #     / "complete_outputs"
+        #     / f"outputs - {trainer.estimation_label} [{num_dataset_test[j]}].pt"
+        # )
+        # test_times.append(torch.load(path)["test_time"])
 
     x = np.arange(len(labels))
     width = 0.3

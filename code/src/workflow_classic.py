@@ -9,6 +9,7 @@ from utils import *
 from models.advection import AdvectionModel
 from models.gneiting_adv import GneitingAdvModel
 from models.gneiting_sep import GneitingSepModel
+from models.gneiting_simple import GneitingModel
 from data.datasets import GenericSimulationDataset, NlsSimulationDataset
 from architecture.train_test import *
 from architecture.neural_networks import CNN_ST_network
@@ -32,7 +33,7 @@ res_path = create_res_path("code/results/spatiotemporal")
 # Neural Network train options
 
 batch_size = 40
-nb_epochs = 40
+nb_epochs = 200
 freq_epochs_test = 10
 
 # Data options
@@ -41,12 +42,12 @@ time_size = 30
 space_dim = 1
 space_size = 30
 max_deepset_size = 1
-missing_ratios = [0.70] #, .85, .92]
+missing_ratios = [.85, .92]
 
 # Amount of data
 
-train_size = 12
-test_size = 4
+train_size = 2000
+test_size = 500
 
 ######################################
 ######################################
@@ -60,7 +61,8 @@ test_size = 4
 
 # Model choice
 
-model = GneitingAdvModel(space_dim=space_dim) # baseline [0.5083, 0.0253, 0.0501] | [-0.0162,  0.0999,  0.1524]
+model = GneitingModel(space_dim=space_dim)
+# model = GneitingAdvModel(space_dim=space_dim) # baseline [0.5083, 0.0253, 0.0501] | [-0.0162,  0.0999,  0.1524]
 # model = GneitingSepModel(space_dim=space_dim) # baseline [0.2359, 0.0255, 0.0509] | [0.5378, 0.0986, 0.1488]
 # model = AdvectionModel()
 
@@ -181,9 +183,9 @@ test_alt_graph(trainers, res_path)
 
 for i in range(len(datasets_test)):
     test_graph(trainers, res_path, num_dataset=i)
-    target_graph(trainers, res_path, k=0, num_dataset=i)
+    # target_graph(trainers, res_path, k=0, num_dataset=i)
     visualise(trainers, res_path, num_dataset=i)
 
-print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] > res["all_quantiles"][0.95]).float() , dim=0))
+print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] < res["all_quantiles"][0.95]).float() , dim=0))
 
 

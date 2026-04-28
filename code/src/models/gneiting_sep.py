@@ -57,6 +57,9 @@ def get_gst_model(space_dim, sep, range_time, range_space):
 
     ctxt = gl.CovContext(1, gl.SpaceRN.create(space_dim))
 
+    proj_mat = np.eye(space_dim + 1)
+    proj_mat[0:space_dim, space_dim] = 0
+
     fac = gl.CorGneiting.create(
         ctxt=ctxt,
         type=gl.ECov.fromKey(typem),
@@ -71,6 +74,10 @@ def get_gst_model(space_dim, sep, range_time, range_space):
         separability=sep,
     )
 
+    ctxtFac = gl.CovContext(1, gl.SpaceRN.create(space_dim + 1))
+    cov = gl.CorFactorized.create(ctxt=ctxtFac)
+    err = cov.addFactor(cov=fac, proj=proj_mat)
+
     model = gl.ModelGeneric()
     model.setCov(fac)
 
@@ -78,7 +85,7 @@ def get_gst_model(space_dim, sep, range_time, range_space):
 
 
 def matern_sep_cov(
-    coords_in, coords_out, y, space_dim, sep, range_time, range_space, std
+    coords_in, coords_out, y, space_dim, sep, range_time, range_space
 ):
 
     model = get_gst_model(space_dim, sep, range_time, range_space)
@@ -87,8 +94,8 @@ def matern_sep_cov(
     dbout = gl.Db.create()
     names = []
     for i in range(len(coords_in[0])):
-        dbin.addColumns(coords_in[:, i], radix="x" + str(i + 1))
-        dbout.addColumns(coords_out[:, i], radix="x" + str(i + 1))
+        dbin.addColumns(coords_in[:, 1-i], radix="x" + str(i + 1))
+        dbout.addColumns(coords_out[:, 1-i], radix="x" + str(i + 1))
         names.append("x" + str(i + 1))
     dbin.setLocators(names, gl.ELoc.X)
     dbout.setLocators(names, gl.ELoc.X)

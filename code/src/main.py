@@ -10,6 +10,7 @@ from utils import *
 from models.advection import AdvectionModel
 from models.gneiting_adv import GneitingAdvModel
 from models.gneiting_sep import GneitingSepModel
+from models.gneiting_simple import GneitingModel
 from data.datasets import GenericSimulationDataset, NlsSimulationDataset
 from architecture.train_test import *
 from architecture.mle_test import *
@@ -36,21 +37,21 @@ res_path = create_res_path("code/results/spatiotemporal")
 # Neural Network train options
 
 batch_size = 40
-nb_epochs = 200
+nb_epochs = 100
 freq_epochs_test = 10
 
 # Data options
 
-time_size = 30
+time_size = 20
 space_dim = 1
-space_size = 30
+space_size = 20
 max_deepset_size = 1
-missing_ratios = [0.7]
+missing_ratios = [0.7,0.9]
 
 # Amount of data
 
-train_size = 20
-test_size = 10
+train_size = 200
+test_size = 5
 
 ######################################
 ######################################
@@ -64,6 +65,7 @@ test_size = 10
 
 # Model choice
 
+# model = GneitingModel(space_dim=space_dim)
 model = GneitingAdvModel(space_dim=space_dim) # baseline [0.5083, 0.0253, 0.0501] | [-0.0162,  0.0999,  0.1524]
 # model = GneitingSepModel(space_dim=space_dim) # baseline [0.2359, 0.0255, 0.0509] | [0.5378, 0.0986, 0.1488]
 # model = AdvectionModel()
@@ -126,18 +128,6 @@ for ratio in missing_ratios:
 #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
 # )
 
-# dataset_gridsearch = GenericSimulationDataset(
-#     model=model,
-#     theta_size=50,
-#     time_size=time_size,
-#     space_dim=space_dim,
-#     space_size=space_size,
-#     max_deepset_size=max_deepset_size,
-#     missing_ratio=None,
-# )
-# print(f"\nData gridsearch generation : {model.__class__.__name__}")
-# dataset_gridsearch.generate(data_path / "gridsearch")
-
 ############################
 ####### Architecture #######
 ############################
@@ -159,33 +149,34 @@ CNN = CNN_ST_network(
 
 # Creation the Trainer used train, test and show results
 
-# trainer_separately = Trainer(
-#     CNN,
-#     device,
-#     res_path,
-#     # quantiles=[0.05, 0.95],
-#     # quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
-# )
-#
-# # Training (and testing at the same time)
-#
-# trainer_separately.train(
-#     train_loader=loader_train,
-#     test_loader=loaders_test[0],
-#     nb_epochs=nb_epochs,
-#     freq_epochs_test=freq_epochs_test,
-#     print_result=True,
-# )
-#
-# # Testing
-#
-# for loader in loaders_test:
-#     res = trainer_separately.test(loader) # res = ...
+trainer_separately = Trainer(
+    CNN,
+    device,
+    res_path,
+    # quantiles=[0.05, 0.95],
+    # quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+)
+
+# Training (and testing at the same time)
+
+trainer_separately.train(
+    train_loader=loader_train,
+    test_loader=loaders_test[0],
+    nb_epochs=nb_epochs,
+    freq_epochs_test=freq_epochs_test,
+    print_result=True,
+)
+
+# Testing
+
+for loader in loaders_test:
+    res = trainer_separately.test(loader) # res = ...
 
 mle_trainer = MLE(device, res_path)
 mle_trainer.test_mle(datasets_test[0])
 
-# print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] > res["all_quantiles"][0.95]).float() , dim=0))
+# # Attention on regarde pour chaque theta independament
+# print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] < res["all_quantiles"][0.95]).float() , dim=0))
 
 ##################################
 ##################################
@@ -197,40 +188,40 @@ mle_trainer.test_mle(datasets_test[0])
 ####### Model #######
 #####################
 
-# dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=True)
-# loader_train_nls = DataLoader(
-#     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
-# )
+dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=False)
+loader_train_nls = DataLoader(
+    dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+)
 
-# datasets_test_nls = []
-# loaders_test_nls = []
-# for ds in datasets_test :
-#     dataset = NlsSimulationDataset(ds, simu_nls=False)
-#     loaders_test_nls.append(DataLoader(
-#         dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
-#     ))
-#
-#     datasets_test_nls.append(dataset)
+datasets_test_nls = []
+loaders_test_nls = []
+for ds in datasets_test :
+    dataset = NlsSimulationDataset(ds, simu_nls=False)
+    loaders_test_nls.append(DataLoader(
+        dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
+    ))
+
+    datasets_test_nls.append(dataset)
 
 ############################
 ####### Architecture #######
 ############################
 
-# CNN = CNN_ST_network(
-#     in_channels=2,
-#     out_dim=dataset_train.model.nb_params,
-#     spatial_dim=space_dim,
-#     nls=True,
-#     nls_sim=True,
-# ).to(device)
-# trainer_nls = Trainer(CNN, device, res_path)
-# trainer_nls.train(
-#     train_loader=loader_train_nls,
-#     nb_epochs=nb_epochs,
-#     print_result=True
-# )
-# for loader in loaders_test:
-#     trainer_nls.test(loader, dataset_gridsearch)
+CNN = CNN_ST_network(
+    in_channels=2,
+    out_dim=dataset_train.model.nb_params,
+    spatial_dim=space_dim,
+    nls=True,
+    nls_sim=False,
+).to(device)
+trainer_nls = Trainer(CNN, device, res_path, quantiles=[.05,.95])
+trainer_nls.train(
+    train_loader=loader_train_nls,
+    nb_epochs=nb_epochs,
+    print_result=True
+)
+for loader in loaders_test:
+    res = trainer_nls.test(loader, dataset_train)
 
 ###########################################
 ###########################################
@@ -238,13 +229,13 @@ mle_trainer.test_mle(datasets_test[0])
 ###########################################
 ###########################################
 
-trainers = [mle_trainer]
+trainers = [trainer_separately, trainer_nls, mle_trainer]
 
 # train_graph(trainers, res_path)
-# time_hist(trainers, res_path)
+time_hist(trainers, res_path)
 test_alt_graph(trainers, res_path)
 
-# for i in range(len(datasets_test)):
-#     test_graph(trainers, res_path, num_dataset=i)
+for i in range(len(datasets_test)):
+    test_graph(trainers, res_path, num_dataset=i)
 #     target_graph(trainers, res_path, k=0, num_dataset=i)
 #     visualise(trainers, res_path, num_dataset=i)

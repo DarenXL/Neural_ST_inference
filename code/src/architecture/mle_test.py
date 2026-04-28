@@ -26,7 +26,9 @@ class MLE:
         self.nls = True # To avoid problem in graphs
 
         self.theta_names = None
-        self.simu_time = None
+        self.simu_time = 0
+        self.train_time = 0
+        self.test_time = 0
 
         self.train_dataset_hist = []
         self.test_dataset_hist = []
@@ -110,7 +112,9 @@ class MLE:
         results = {
             "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
             "test_time": time_total,
+            "train_time": None,
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
         }
+        self.test_time += time_total
         self._save_results(results)

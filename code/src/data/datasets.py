@@ -175,31 +175,37 @@ class GenericSimulationDataset(Dataset):
             )
 
     def sample_to_coord(self, sample, shuffle :int = None):
-        y, mask_obs = sample[0].reshape(-1), np.array(sample[1], dtype=bool).reshape(
-            -1
+        y, mask_obs = sample[0].reshape(-1,order="F"), np.array(sample[1], dtype=bool).reshape(
+            -1,order="F"
         )  # .T.reshape(-1,order="F")
+        # print(sample[1], mask_obs)
 
-        t = np.linspace(0, 1, self.time_size)
-        s = np.linspace(0, 1, self.space_size)
+        t = np.linspace(0, 1, self.time_size+1)[:-1]
+        s = np.linspace(0, 1, self.space_size+1)[:-1]
+        # print("S et T", s, t)
 
-        axes = [t, s] if self.space_dim == 1 else [t, s, s]
+        # axes = [t, s] if self.space_dim == 1 else [t, s, s]
+        axes = [s, t] if self.space_dim == 1 else [s, s, t]
         grid = np.meshgrid(*axes, indexing="ij")
         coords = np.stack(grid, axis=-1).reshape(-1, len(axes))
+        # print("coords", coords)
+        # print("y", y)
 
         # print(np.sum(mask_obs))
 
         if not(shuffle is None):
-            v = np.random.permutation(coords.shape[0])
-            v = v[~mask_obs]
+            # idx = np.random.permutation(coords.shape[0])[~mask_obs]
+            v = np.arange(coords.shape[0])[~mask_obs]
+            v = v[np.random.permutation(len(v))]
             v = v[0:shuffle]
-            print(
-                mask_obs.sum(),
-                v.shape
-            )
+            # print(
+            #     mask_obs,
+            #     v.shape
+            # )
             coords = coords[v, :]
             y = y[v]
             mask_obs = mask_obs[v]
-            print(coords.shape, y.shape, mask_obs.shape)
+            # print(coords, y, mask_obs)
 
         return coords, y, mask_obs
 
@@ -325,7 +331,7 @@ class NlsSimulationDataset(GenericSimulationDataset):
 
             full_batch = np.load(f"{self.path}/samples/sample_{sample_idx}.npy")
             deepset_size = torch.randint(
-                low=self.min_deepset_size, high=self.max_deepset_size, size=(1,)
+                low=self.min_deepset_size, high=self.max_deepset_size, size=(1,) # pb quand self.min_deepset_size == high=self.max_deepset_size
             ).item()
             deepset_idx = torch.randperm(self.max_deepset_size)
             batch = full_batch[deepset_idx[:deepset_size]]

@@ -16,6 +16,7 @@ import time
 from pathlib import Path
 from tqdm import tqdm
 import numpy as np
+import matplotlib.pyplot as plt
 
 class Trainer:
     def __init__(self, network, device, res_path, optimizer=None, quantiles=tuple(), quantile_networks=tuple(), quantile_optimizer=None):
@@ -50,7 +51,9 @@ class Trainer:
             self.quantile_optimizer = quantile_optimizer
 
         self.theta_names = None
-        self.simu_time = None
+        self.simu_time = 0
+        self.train_time = 0
+        self.test_time = 0
 
         self.train_dataset_hist = []
         self.test_dataset_hist = []
@@ -109,6 +112,7 @@ class Trainer:
                 == self.train_dataset_hist[0].dataset.model.param_names
             )
         self.train_dataset_hist.append(train_loader.dataset)
+        self.simu_time += train_loader.dataset.time_generation
 
         if self.network.nls:
             self.train_nls(train_loader, nb_epochs, print_result)
@@ -133,7 +137,8 @@ class Trainer:
         self.test_dataset_hist.append(test_loader.dataset)
 
         if self.network.nls:
-            return self.test_nls_grid(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
+            return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
+            # return self.test_nls_optim(test_loader, print_result=print_result)
         else:
             return self.test_quantiles(test_loader, merge_test_deepset=merge_test_deepset)
 
@@ -447,6 +452,7 @@ class Trainer:
             "final_train_losses": loss_final_train,
             "final_test_losses": loss_final_test,
         }
+        self.train_time += total_time_train
 
         self._save_history(results)
         self.save_network()
@@ -646,6 +652,7 @@ class Trainer:
             "true_all_theta": all_true_theta,
             "all_quantiles":all_quantiles
         }
+        self.test_time += time_total
         self._save_results(results)
 
         return results
@@ -709,6 +716,7 @@ class Trainer:
             "train_loss_history": torch.stack(all_loss_train),  # (Nb_epochs, Nb_params)
             "train_time": total_time_train,
         }
+        self.train_time += total_time_train
 
         self._save_history(results)
         self.save_network()
@@ -769,7 +777,7 @@ class Trainer:
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
 
         if theta0 is None:
-            theta0_latent = torch.zeros(len(model_ref.param_names)).to(self.device)
+            theta0_latent = (lower_bound + upper_bound)/2
         else:
             theta0_latent = theta0
 
@@ -893,7 +901,7 @@ class Trainer:
                             theta=current_theta.unsqueeze(0).repeat((batch_size,1)),
                         )
 
-                    logl = (h[:, 1] - h[:, 0]).detach()
+                    logl = (h[:, 0] - h[:, 1]).detach()
                     mask = logl > max_logl
                     max_logl[mask] = logl[mask]
                     max_theta[mask] = current_theta.detach()
@@ -930,4 +938,162 @@ class Trainer:
             }
             self._save_results(results)
 
-            # return full_loss_tensor, all_theta_final, time_total
+            return results
+
+    def test_nls_grid_quantiles(self, loader_test, dataset_gridsearch, print_result=False):
+
+        plt.show()
+
+        with torch.no_grad():
+
+            all_loss_test = []
+            all_theta_final = []
+            all_true_theta = []
+            all_max_logl = []
+
+            all_mask_quantile = {}
+            count_true_quantile = {}
+            for q in self.quantiles:
+                all_mask_quantile[q] = []
+                count_true_quantile[q] = 0
+
+            model_ref = loader_test.dataset.model
+            simu_nls = self.network.nls_sim  # self.train_dataset_hist[-1].simu_nls
+            print("simu_nls", simu_nls)
+
+            time_start = time.time()
+
+            t = tqdm(loader_test, total=len(loader_test) // 2, desc="Inference NLS")
+
+            for i, batch in enumerate(t):
+                data_batch, theta_batch, _ = batch
+                deepset_batch = torch.arange(len(data_batch), dtype=int).to(self.device)
+
+                data_batch = data_batch.to(self.device).float()
+                theta_batch = theta_batch.to(self.device)
+
+                batch_size = data_batch.shape[0]
+                max_logl = torch.full((batch_size,), float("-inf"), device=self.device)
+                max_theta = torch.zeros(
+                    (batch_size, dataset_gridsearch.get_theta_tensor().shape[1]),
+                    dtype=torch.float64,
+                    device=self.device,
+                )
+
+                surface = []
+
+                for k in range(len(dataset_gridsearch)):  # //2 if N
+
+                    current_theta = dataset_gridsearch.get_theta_tensor()[k].to(
+                        self.device
+                    )
+
+                    if simu_nls:
+                        simu, _ = dataset_gridsearch.get_grid(
+                            k, deepset_size=dataset_gridsearch.max_deepset_size
+                        )
+                        simu = torch.from_numpy(simu).to(self.device)
+                        simu = torch.concatenate((simu, torch.ones_like(simu)), dim=1)
+                        # simu = simu.repeat(batch_size, *([1] * (simu.ndim -1)))
+                        simu = (
+                            simu.unsqueeze(0)
+                            .expand(batch_size, *([-1] * (simu.ndim)))
+                            .reshape(-1, *simu.shape[1:])
+                        )
+                        h = self.network(
+                            data_batch,
+                            deepset=deepset_batch.repeat_interleave(
+                                dataset_gridsearch.max_deepset_size
+                            ),
+                            theta=simu,
+                        )
+                    else:
+                        h = self.network(
+                            data_batch,
+                            theta=current_theta.unsqueeze(0).repeat((batch_size, 1)),
+                        )
+
+                    logl = (h[:, 0] - h[:, 1]).detach()
+                    surface.append(logl)
+
+                    mask = logl > max_logl
+                    max_logl[mask] = logl[mask]
+                    max_theta[mask] = current_theta.detach()
+
+                loss = torch.abs(max_theta - theta_batch).detach().cpu()
+                theta_final = max_theta.detach().cpu()
+
+                all_max_logl.append(max_logl.detach().cpu())
+                all_loss_test.append(loss)
+                all_theta_final.append(theta_final)
+                all_true_theta.append(theta_batch.detach().cpu())
+
+                surface = torch.cat(surface, dim=0)
+                # for q in self.quantiles:
+                #     mask_quantile = 2 * (
+                #         max_logl.detach().cpu() - surface.detach().cpu()
+                #     ) <= chi2.isf(1 - q, len(theta_batch[0]))
+                #
+                #     all_mask_quantile[q].append(mask_quantile)
+                #
+                # h_true_theta = self.network(
+                #             data_batch,
+                #             theta=theta_batch,
+                #         )
+                # logl_true_theta = (h_true_theta[:, 0] - h_true_theta[:, 1]).detach()
+                #
+                # for q in self.quantiles:
+                #     count_true_quantile[q] += (2 * (
+                #         max_logl.detach().cpu() - logl_true_theta.detach().cpu()
+                #     )) <= chi2.isf(1 - q, len(theta_batch[0]))
+                #
+                # plt.scatter(dataset_gridsearch.get_theta_tensor()[:,0],dataset_gridsearch.get_theta_tensor()[:,1], c=surface)
+                # plt.scatter(
+                #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 0],
+                #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 1],
+                #     edgecolors="black",
+                #     linewidths=1,
+                #     facecolors="none",
+                #     s=50,
+                #     label="Quantile",
+                # )
+                # plt.scatter(theta_batch[0,0],theta_batch[0,1],c='black',marker='x')
+                # plt.scatter(theta_final[0,0], theta_final[0,1], c="red", marker="x")
+                # plt.show()
+
+
+
+            time_total = time.time() - time_start
+
+            full_loss_tensor = torch.cat(all_loss_test, dim=0)
+            all_theta_final = torch.cat(all_theta_final, dim=0)
+            all_true_theta = torch.cat(all_true_theta, dim=0)
+            all_max_logl = torch.cat(all_max_logl, dim=0)
+
+            for q in self.quantiles:
+                all_mask_quantile[q] = torch.cat(all_mask_quantile[q], dim=0)
+                print(q,count_true_quantile[q], count_true_quantile[q]/len(all_true_theta))
+                print(all_mask_quantile[q].sum())
+
+            mean_loss = full_loss_tensor.mean(dim=0)
+            std_loss = full_loss_tensor.std(dim=0)
+
+            if print_result:
+                print(f"Time to test : {time_total:.2f}s")
+
+                print(
+                    f"Test Loss (MAE) per param: "
+                    + model_ref.to_title(mean_loss, alt_format=True)
+                )
+
+            results = {
+                "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
+                "test_time": time_total,
+                "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
+                "true_all_theta": all_true_theta,
+                "all_max_logl":all_max_logl,
+            }
+            self.test_time += time_total
+            self._save_results(results)
+
+            return results
