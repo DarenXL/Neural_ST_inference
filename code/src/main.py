@@ -36,22 +36,22 @@ res_path = create_res_path("code/results/spatiotemporal")
 
 # Neural Network train options
 
-batch_size = 40
-nb_epochs = 100
+batch_size = 50
+nb_epochs = 300
 freq_epochs_test = 10
 
 # Data options
 
 time_size = 20
-space_dim = 1
+space_dim = 2
 space_size = 20
 max_deepset_size = 1
-missing_ratios = [0.7,0.9]
+missing_ratios = [0.80]
 
 # Amount of data
 
-train_size = 200
-test_size = 5
+train_size = 4000
+test_size = 500
 
 ######################################
 ######################################
@@ -121,9 +121,9 @@ for ratio in missing_ratios:
 
 # Show data example
 
-# show_example_mask(
-#     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-# )
+show_example_mask(
+    dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+)
 # show_example_gif(
 #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
 # )
@@ -136,16 +136,16 @@ for ratio in missing_ratios:
 
 CNN = CNN_ST_network(
     in_channels=2,
-    out_dim=dataset_train.model.nb_params,
+    theta_dim=dataset_train.model.nb_params,
     spatial_dim=space_dim,
 ).to(device)
 
-# quantile_CNN = CNN_ST_network(
-#     in_channels=2,
-#     hidden=16,
-#     out_dim=dataset_train.model.nb_params,
-#     spatial_dim=space_dim,
-# ).to(device)
+quantile_CNN = CNN_ST_network(
+    in_channels=2,
+    hidden=16,
+    theta_dim=dataset_train.model.nb_params,
+    spatial_dim=space_dim,
+).to(device)
 
 # Creation the Trainer used train, test and show results
 
@@ -153,8 +153,8 @@ trainer_separately = Trainer(
     CNN,
     device,
     res_path,
-    # quantiles=[0.05, 0.95],
-    # quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+    quantiles=[0.05, 0.95],
+    quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
 )
 
 # Training (and testing at the same time)
@@ -172,8 +172,9 @@ trainer_separately.train(
 for loader in loaders_test:
     res = trainer_separately.test(loader) # res = ...
 
-mle_trainer = MLE(device, res_path)
-mle_trainer.test_mle(datasets_test[0])
+# mle_trainer = MLE(device, res_path)
+# mle_trainer.test_mle(datasets_test[0])
+# mle_trainer.test_mle(datasets_test[1])
 
 # # Attention on regarde pour chaque theta independament
 # print("quantiles precision :", torch.mean((res["true_all_theta"] > res["all_quantiles"][0.05]) * (res["true_all_theta"] < res["all_quantiles"][0.95]).float() , dim=0))
@@ -209,12 +210,17 @@ for ds in datasets_test :
 
 CNN = CNN_ST_network(
     in_channels=2,
-    out_dim=dataset_train.model.nb_params,
+    theta_dim=dataset_train.model.nb_params,
     spatial_dim=space_dim,
     nls=True,
     nls_sim=False,
 ).to(device)
-trainer_nls = Trainer(CNN, device, res_path, quantiles=[.05,.95])
+trainer_nls = Trainer(
+    CNN,
+    device,
+    res_path,
+    quantiles=[.05,.95]
+)
 trainer_nls.train(
     train_loader=loader_train_nls,
     nb_epochs=nb_epochs,
@@ -229,13 +235,13 @@ for loader in loaders_test:
 ###########################################
 ###########################################
 
-trainers = [trainer_separately, trainer_nls, mle_trainer]
+trainers = [trainer_separately, trainer_nls]
 
-# train_graph(trainers, res_path)
+train_graph(trainers, res_path)
 time_hist(trainers, res_path)
 test_alt_graph(trainers, res_path)
 
 for i in range(len(datasets_test)):
     test_graph(trainers, res_path, num_dataset=i)
-#     target_graph(trainers, res_path, k=0, num_dataset=i)
-#     visualise(trainers, res_path, num_dataset=i)
+    target_graph(trainers, res_path, k=0, num_dataset=i)
+    visualise(trainers, res_path, num_dataset=i)

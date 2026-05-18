@@ -92,7 +92,7 @@ class MLE:
 
                     print(j, "Truth :", theta_test)
 
-                    coords, y, mask = dataset.sample_to_coord(data_test[j], shuffle=400)
+                    coords, y, mask = dataset.sample_to_coord(data_test[j], shuffle=300)
 
                     output, _ = self.mle(dataset.get_likelihood, coords, y, theta0, bounds=bounds)
 

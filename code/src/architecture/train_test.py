@@ -11,6 +11,10 @@ from utils import map_deepset, baseline_mae, THETA_COLORS, unique_preserve_order
 from scipy.optimize import minimize
 from scipy.stats import chi2
 
+import pyro
+import pyro.distributions as dist
+from pyro.infer import MCMC, NUTS
+
 import torch
 import time
 from pathlib import Path
@@ -137,8 +141,9 @@ class Trainer:
         self.test_dataset_hist.append(test_loader.dataset)
 
         if self.network.nls:
-            return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
-            # return self.test_nls_optim(test_loader, print_result=print_result)
+            # return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
+            return self.test_nls_optim(test_loader, print_result=print_result)
+            # return self.test_nls_MCMC(test_loader)
         else:
             return self.test_quantiles(test_loader, merge_test_deepset=merge_test_deepset)
 
@@ -665,7 +670,7 @@ class Trainer:
 
         time_train_start = time.time()
 
-        CE = nn.CrossEntropyLoss()
+        CE = nn.BCEWithLogitsLoss() # nn.CrossEntropyLoss()
 
         for epoch in t:
             self.network.train()
@@ -687,9 +692,9 @@ class Trainer:
 
                 batched_data = batched_data.to(self.device).float()
                 theta = theta.to(self.device)
-                classi = classi.to(self.device)
+                classi = classi.float().to(self.device)
 
-                output = self.network(batched_data, deepset=deepset_mapped, theta=theta)
+                output = self.network(batched_data, deepset=deepset_mapped, theta=theta).squeeze()
 
                 loss = CE(output, classi).mean()
 
@@ -749,8 +754,7 @@ class Trainer:
             theta_t = activation(theta.unsqueeze(0).to(self.device))
             # theta_t = theta.unsqueeze(0).to(self.device)
             h = self.network(data, deepset, theta=theta_t)
-
-            logL = h[:, 1] - h[:, 0]
+            logL = h # h[:, 1] - h[:, 0]
             return logL
 
         res = torchmin.minimize(
@@ -790,6 +794,7 @@ class Trainer:
         for i, batch in enumerate(t):
             if self.network.nls_sim :
                 data_batch, theta_batch, deepset_batch, classi_batch = batch
+                deepset_batch = unique_preserve_order(deepset_batch)
             else :
                 data_batch, theta_batch, classi_batch = batch
                 deepset_batch = None
@@ -803,7 +808,10 @@ class Trainer:
                     continue
 
                 data_single = data_batch[j].unsqueeze(0)
-                deepset_single = unique_preserve_order(deepset_batch)[j].unsqueeze(0)
+                if not(deepset_batch is None):
+                    deepset_single = deepset_batch[j].unsqueeze(0)
+                else :
+                    deepset_single = None
                 true_theta_single = true_theta_batch[j]
 
                 output, output_not_nan = self._nls_optim(
@@ -848,9 +856,97 @@ class Trainer:
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
         }
+        self.test_time += time_total
         self._save_results(results)
 
         # return full_loss_tensor, all_theta_final, time_total
+
+    def _pyro_model(self, x_obs, lower_bound, upper_bound):
+        theta = pyro.sample("theta", dist.Uniform(lower_bound, upper_bound).to_event(1))
+
+        with torch.no_grad():
+            log_ratio = -self.network(x_obs, theta=theta.unsqueeze(0)).sum()
+
+        pyro.factor("log_ratio_factor", log_ratio)
+
+    def test_nls_MCMC(self, loader_test, num_samples=1000, step_size=0.05, burn_in=200):
+        all_samples = []
+        all_true_theta = []
+        all_theta_final = []
+        all_quantiles = {}
+        for q in self.quantiles :
+            all_quantiles[q] = []
+
+        self.network.eval()
+
+        model_ref = loader_test.dataset.model
+        lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
+        upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
+
+        time_start = time.time()
+
+        t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
+
+        for i, batch in enumerate(t):
+            data_batch, theta_batch, _ = batch
+            data_batch = data_batch.to(self.device).float()
+
+            for j in range(data_batch.size(0)):
+
+                x_obs = data_batch[j].unsqueeze(0)
+                true_theta = theta_batch[j].to(self.device)
+
+                nuts_kernel = NUTS(self._pyro_model, max_tree_depth=3)
+
+                mcmc = MCMC(
+                    nuts_kernel, num_samples=200, warmup_steps=50, num_chains=1
+                )
+
+                mcmc.run(x_obs, lower_bound, upper_bound)
+
+                samples = mcmc.get_samples()["theta"]
+
+                all_samples.append(samples)
+                all_true_theta.append(true_theta.cpu())
+
+                # with torch.no_grad():
+                #     x_obs_repeated = x_obs.expand(samples.size(0), *x_obs.shape[1:])
+                #     log_ratios = -self.network(
+                #         x_obs_repeated, theta=samples
+                #     )
+                #
+                # map_index = torch.argmax(log_ratios)
+                # theta_map = samples[map_index]
+                #
+                # all_theta_final.append(theta_map.cpu())
+
+            #     plt.hist(samples)
+            #     plt.show()
+            #
+            # if i == 10 :
+            #     break
+
+        time_total = time.time() - time_start
+
+        # full_loss_tensor = torch.cat(all_loss_test, dim=0)
+        all_samples = torch.stack(all_samples, dim=0)
+        all_theta_final = torch.mean(all_samples, dim=1) # all_theta_final = torch.stack(all_theta_final, dim=0)
+        all_true_theta = torch.stack(all_true_theta, dim=0)
+        final_test_losses = torch.abs(all_theta_final - all_true_theta)
+        for q in self.quantiles:
+            all_quantiles[q] = torch.quantile(all_samples, q, dim=1)
+
+        results = {
+            "final_test_losses": final_test_losses,  # (Nb_epochs, Nb_params)
+            "test_time": time_total,
+            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
+            "true_all_theta": all_true_theta,
+            "all_quantiles": all_quantiles,
+        }
+        self.test_time += time_total
+        self._save_results(results)
+
+        return results
 
     def test_nls_grid(self, loader_test, dataset_gridsearch, print_result=False):
 
@@ -1013,7 +1109,7 @@ class Trainer:
                             theta=current_theta.unsqueeze(0).repeat((batch_size, 1)),
                         )
 
-                    logl = (h[:, 0] - h[:, 1]).detach()
+                    logl = -h.squeeze(0).detach() # (h[:, 0] - h[:, 1]).detach()
                     surface.append(logl)
 
                     mask = logl > max_logl
@@ -1040,28 +1136,26 @@ class Trainer:
                 #             data_batch,
                 #             theta=theta_batch,
                 #         )
-                # logl_true_theta = (h_true_theta[:, 0] - h_true_theta[:, 1]).detach()
+                # logl_true_theta = -h_true_theta.detach()
                 #
                 # for q in self.quantiles:
                 #     count_true_quantile[q] += (2 * (
                 #         max_logl.detach().cpu() - logl_true_theta.detach().cpu()
                 #     )) <= chi2.isf(1 - q, len(theta_batch[0]))
-                #
+
                 # plt.scatter(dataset_gridsearch.get_theta_tensor()[:,0],dataset_gridsearch.get_theta_tensor()[:,1], c=surface)
-                # plt.scatter(
-                #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 0],
-                #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 1],
-                #     edgecolors="black",
-                #     linewidths=1,
-                #     facecolors="none",
-                #     s=50,
-                #     label="Quantile",
-                # )
+                # # plt.scatter(
+                # #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 0],
+                # #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 1],
+                # #     edgecolors="black",
+                # #     linewidths=1,
+                # #     facecolors="none",
+                # #     s=50,
+                # #     label="Quantile",
+                # # )
                 # plt.scatter(theta_batch[0,0],theta_batch[0,1],c='black',marker='x')
                 # plt.scatter(theta_final[0,0], theta_final[0,1], c="red", marker="x")
                 # plt.show()
-
-
 
             time_total = time.time() - time_start
 
@@ -1070,10 +1164,10 @@ class Trainer:
             all_true_theta = torch.cat(all_true_theta, dim=0)
             all_max_logl = torch.cat(all_max_logl, dim=0)
 
-            for q in self.quantiles:
-                all_mask_quantile[q] = torch.cat(all_mask_quantile[q], dim=0)
-                print(q,count_true_quantile[q], count_true_quantile[q]/len(all_true_theta))
-                print(all_mask_quantile[q].sum())
+            # for q in self.quantiles:
+            #     all_mask_quantile[q] = torch.cat(all_mask_quantile[q], dim=0)
+            #     print(q,count_true_quantile[q], count_true_quantile[q]/len(all_true_theta))
+            #     print(all_mask_quantile[q].sum())
 
             mean_loss = full_loss_tensor.mean(dim=0)
             std_loss = full_loss_tensor.std(dim=0)

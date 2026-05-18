@@ -6,7 +6,7 @@ from utils import *
 
 
 class CNN_ST_network(nn.Module):
-    def __init__(self, in_channels=2, hidden=32, out_dim=4, spatial_dim=1, pool_option="max", nls=False, nls_sim=False, label=None):
+    def __init__(self, in_channels=2, hidden=32, theta_dim=4, spatial_dim=1, pool_option="max", nls=False, nls_sim=False, label=None):
         super().__init__()
 
         self.spatial_dim = spatial_dim
@@ -45,10 +45,12 @@ class CNN_ST_network(nn.Module):
                 self.pool = nn.AdaptiveMaxPool3d(1)
 
         self.dense = nn.Sequential(
-            nn.Linear(hidden + (out_dim * self.nls) if self.nls_sim == False else 2*hidden, hidden),
+            nn.Linear(hidden + (theta_dim * self.nls) if self.nls_sim == False else 2*hidden, hidden),
             nn.ReLU(),
-            nn.Linear(hidden, out_dim)
+            nn.Linear(hidden, 1 if self.nls else theta_dim),
         )
+
+        # self.sigmoid = nn.Sigmoid()
 
     def forward(self, x, deepset=None, theta=None):
 
@@ -78,6 +80,10 @@ class CNN_ST_network(nn.Module):
                 # print()
 
         out = self.dense(summary)
+        # if self.nls :
+        #     return self.sigmoid(out)
+        # else :
+        #     return out
         return out
 
 # class CNN_ST_network(nn.Module):

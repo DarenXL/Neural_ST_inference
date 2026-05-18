@@ -116,7 +116,7 @@ class GneitingSepModel(SimulationModel):
         self._names = ["sep", "range_time", "range_space"]
         self._names_alt = ["sep", r"$\rho_t$", r"$\rho_s$"]
         self.lower_bound = (0.05, 0.05, 0.05)
-        self.upper_bound = (1.0, 0.15, 0.25)
+        self.upper_bound = (1.0, 0.15, 0.5)
 
     @property
     def param_names(self):
