@@ -191,7 +191,8 @@ def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) ->
     """Create a mask based on Poisson Sampling"""
 
     if missing_ratio is None:
-        missing_ratio = np.random.random() * 0.35 + 0.6
+        # missing_ratio = np.random.random() * 0.35 + 0.6
+        missing_ratio = np.random.random() * 0.08 + 0.9
 
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing
@@ -212,29 +213,30 @@ def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) ->
 
     return visibles
 
-def show_mask(outshape, dim=1):
-    lambda_p = [2, 2, 7, 7]
-    lambda_d = [2, 12, 2, 12]
+def show_mask(outshape, dim=1, lambda_p = (3, 3, 12, 12), lambda_d = (3, 12, 3, 12)):
 
     fig, axs = plt.subplots(
         nrows=1, ncols=4, figsize=(14, 5), layout="constrained"
     )
+    CMAP = LinearSegmentedColormap.from_list("custom_data", [cols[3], cols[3]], N=100)
+
 
     if dim == 2 :
         for ax, lp, ld in zip(axs, lambda_p,lambda_d):
             sampling = sampling_poisson_2D(outshape, lp, ld, .1)
             res = np.zeros_like(sampling, dtype=float)
             res[~sampling] = np.nan
-            ax.imshow(res, cmap=CMAP)
+            ax.imshow(res, cmap=CMAP, extent=[0, 1, 0, 1])
             ax.set_title(r"$\lambda_p = $"+str(lp)+r", $\lambda_d =$"+str(ld))
     else :
         for ax, lp, ld in zip(axs, lambda_p,lambda_d):
             sampling = sampling_poisson_1D(outshape, lp, ld, .1)
             res = np.zeros((outshape,outshape), dtype=float)
             res[:,~sampling] = np.nan
-            ax.imshow(res, cmap=CMAP)
+            ax.imshow(res, cmap=CMAP, extent=[0, 1, 0, 1])
             ax.set_title(r"$\lambda_p = $"+str(lp)+r", $\lambda_d =$"+str(ld))
 
+    fig.savefig("mask_poisson.pdf", format="pdf", bbox_inches="tight")
     plt.show()
 
 def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
@@ -559,7 +561,8 @@ def global_mean_pool(x: torch.Tensor, deepset: torch.Tensor) -> torch.Tensor:
     num_groups = deepset.max().item() + 1
     out = torch.zeros(num_groups, x.size(1), device=x.device)
     out.index_add_(0, deepset, x)
-    return out / torch.bincount(deepset).float().unsqueeze(1)
+    counts = torch.bincount(deepset).to(x.device).float().unsqueeze(1)
+    return out / counts
 
     # unique_keys, inverse_indices = torch.unique(deepset, dim=0, return_inverse=True)
     # num_groups = unique_keys.size(0)

@@ -311,7 +311,7 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
         )
         all_preds = torch.load(path)["final_all_theta"]
 
-        # print(mask.shape, all_preds.shape)
+        print(mask.shape, all_preds.shape)
 
         assert mask.shape[0] == all_preds.shape[0], "Target graph do not work on : \n - test dataset with merge_test_deepset = True \n - deepset random sizes"
 
@@ -526,8 +526,7 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=
         axs[i, 3].set_xlabel(label_x if i == (nb_examples -1) else "")
         axs[i, 3].set_title((r"= Mean Absolute Error =" +"\n" if i == 0 else "")
                             +f"Error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy())):.3f}"
-                             f"\nNormalized error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy()))
-                                                     /np.std(abs(full_sample[0].detach().numpy())):.3f}"
+                             f"\nNormalized error : {np.mean(abs(sample_krig - full_sample[0].detach().numpy()))/np.std(abs(full_sample[0].detach().numpy())):.3f}"
                             )
 
     data_images = [

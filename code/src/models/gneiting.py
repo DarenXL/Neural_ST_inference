@@ -189,7 +189,6 @@ class GneitingModel(SimulationModel):
         }
 
     def simulate(self, p, t_size, s_dim, s_size, d_size):
-        # TODO
         s_coords = np.expand_dims(np.arange(1, s_size + 1), 1)
 
         sim_params = {

@@ -13,7 +13,7 @@ from scipy.stats import chi2
 
 import pyro
 import pyro.distributions as dist
-from pyro.infer import MCMC, NUTS
+from pyro.infer import MCMC, NUTS, HMC
 
 import torch
 import time
@@ -93,7 +93,7 @@ class Trainer:
 
     @staticmethod
     def _q_loss(output, target, tau):
-        # Loss de régression quantile
+        target = target.view_as(output)
         loss = torch.max(tau * (target - output), (1 - tau) * (output - target))
         return loss.mean()
 
@@ -142,8 +142,8 @@ class Trainer:
 
         if self.network.nls:
             # return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
-            return self.test_nls_optim(test_loader, print_result=print_result)
-            # return self.test_nls_MCMC(test_loader)
+            # return self.test_nls_optim(test_loader, print_result=print_result)
+            return self.test_nls_MCMC(test_loader)
         else:
             return self.test_quantiles(test_loader, merge_test_deepset=merge_test_deepset)
 
@@ -162,7 +162,7 @@ class Trainer:
         time_train_start = time.time()
         time_test_accumulated = 0
 
-        MAE = torch.nn.L1Loss(reduction="none")
+        MAE = torch.nn.L1Loss(reduction="none").to(self.device)
 
         for epoch in t:
             self.network.train()
@@ -174,9 +174,9 @@ class Trainer:
             for i, (batched_data, theta, deepset) in enumerate(train_loader):
                 self.optimizer.zero_grad()
 
-                batched_data = batched_data.to(self.device).float()
-                theta = theta.to(self.device)
-                deepset = deepset.to(self.device)
+                batched_data = batched_data.to(self.device, non_blocking=True).float()
+                theta = theta.to(self.device, non_blocking=True)
+                deepset = deepset.to(self.device, non_blocking=True)
 
                 deepset_mapped, theta = map_deepset(deepset, theta, self.device)
 
@@ -188,13 +188,13 @@ class Trainer:
                 loss.backward()
                 self.optimizer.step()
 
-                epoch_batch_means.append(loss_vec.mean(dim=0).detach().cpu())
+                epoch_batch_means.append(loss_vec.mean(dim=0).detach()) ###?
 
                 if epoch == nb_epochs - 1:
-                    epoch_full_errors.append(loss_vec.detach().cpu())
+                    epoch_full_errors.append(loss_vec.detach())
 
             mean_epoch = torch.stack(epoch_batch_means).mean(dim=0)
-            all_loss_train.append(mean_epoch)
+            all_loss_train.append(mean_epoch.cpu())
 
             if epoch == nb_epochs - 1:
                 loss_final_train = torch.cat(epoch_full_errors, dim=0)
@@ -211,8 +211,8 @@ class Trainer:
 
                 with torch.no_grad():
                     for data_test, theta_test, deepset_test in test_loader:
-                        data_test = data_test.to(self.device).float()
-                        theta_test = theta_test.to(self.device)
+                        data_test = data_test.to(self.device, non_blocking=True).float()
+                        theta_test = theta_test.to(self.device, non_blocking=True)
 
                         # deepset_test = deepset_test.to(self.device)
                         # deepset_mapped_test, theta_test = map_deepset(
@@ -221,15 +221,15 @@ class Trainer:
                         # output = self.network(data_test, deepset_mapped_test)
 
                         output = self.network(
-                            data_test, torch.arange(len(deepset_test))
+                            data_test, torch.arange(len(deepset_test)).to(self.device)
                         )
 
                         errors = torch.abs(output - theta_test)
-                        test_errors_list.append(errors.detach().cpu())
+                        test_errors_list.append(errors.detach()) ###?
 
                 full_test_errors = torch.cat(test_errors_list, dim=0)
 
-                all_loss_test.append(full_test_errors.mean(dim=0))
+                all_loss_test.append(full_test_errors.mean(dim=0).cpu())
 
                 loss_final_test = full_test_errors
 
@@ -346,9 +346,9 @@ class Trainer:
                 for opt in self.quantile_optimizer:
                     opt.zero_grad()
 
-                batched_data = batched_data.to(self.device).float()
-                theta = theta.to(self.device)
-                deepset = deepset.to(self.device)
+                batched_data = batched_data.to(self.device, non_blocking=True).float()
+                theta = theta.to(self.device, non_blocking=True)
+                deepset = deepset.to(self.device, non_blocking=True)
 
                 deepset_mapped, theta = map_deepset(deepset, theta, self.device)
 
@@ -382,12 +382,12 @@ class Trainer:
                 for opt in self.quantile_optimizer:
                     opt.step()
 
-                epoch_batch_means.append(loss_median.mean(dim=0).detach().cpu())
+                epoch_batch_means.append(loss_median.mean(dim=0).detach())
 
                 if epoch == nb_epochs - 1:
-                    epoch_full_errors.append(loss_median.detach().cpu())
+                    epoch_full_errors.append(loss_median.detach())
 
-            mean_epoch = torch.stack(epoch_batch_means).mean(dim=0)
+            mean_epoch = torch.stack(epoch_batch_means).mean(dim=0).cpu()
             all_loss_train.append(mean_epoch)
 
             if epoch == nb_epochs - 1:
@@ -405,8 +405,8 @@ class Trainer:
 
                 with torch.no_grad():
                     for data_test, theta_test, deepset_test in test_loader:
-                        data_test = data_test.to(self.device).float()
-                        theta_test = theta_test.to(self.device)
+                        data_test = data_test.to(self.device, non_blocking=True).float()
+                        theta_test = theta_test.to(self.device, non_blocking=True)
 
                         # deepset_test = deepset_test.to(self.device)
                         # deepset_mapped_test, theta_test = map_deepset(
@@ -415,13 +415,13 @@ class Trainer:
                         # output = self.network(data_test, deepset_mapped_test)
 
                         output = self.network(
-                            data_test, torch.arange(len(deepset_test))
+                            data_test, torch.arange(len(deepset_test)).to(self.device)
                         )
 
                         errors = torch.abs(output - theta_test)
-                        test_errors_list.append(errors.detach().cpu())
+                        test_errors_list.append(errors.detach())
 
-                full_test_errors = torch.cat(test_errors_list, dim=0)
+                full_test_errors = torch.cat(test_errors_list, dim=0).cpu()
 
                 all_loss_test.append(full_test_errors.mean(dim=0))
 
@@ -530,18 +530,18 @@ class Trainer:
 
         with torch.no_grad():
             for i, (data_test, theta_test, deepset_test) in enumerate(t):
-                data_test = data_test.to(self.device).float()
-                theta_test = theta_test.to(self.device)
+                data_test = data_test.to(self.device, non_blocking=True).float()
+                theta_test = theta_test.to(self.device, non_blocking=True)
 
                 if merge_test_deepset:
-                    deepset_test = deepset_test.to(self.device)
+                    deepset_test = deepset_test.to(self.device, non_blocking=True)
 
                     deepset_mapped, theta_test = map_deepset(
                         deepset_test, theta_test, self.device
                     )
                     output = self.network(data_test, deepset_mapped)
                 else :
-                    output = self.network(data_test, torch.arange(len(deepset_test)))
+                    output = self.network(data_test, torch.arange(len(deepset_test)).to(self.device))
 
                 loss = torch.abs(output - theta_test).detach().cpu()
                 theta_final = output.detach().cpu()
@@ -597,39 +597,39 @@ class Trainer:
 
         with torch.no_grad():
             for i, (data_test, theta_test, deepset_test) in enumerate(t):
-                data_test = data_test.to(self.device).float()
-                theta_test = theta_test.to(self.device)
+                data_test = data_test.to(self.device, non_blocking=True).float()
+                theta_test = theta_test.to(self.device, non_blocking=True)
 
                 if merge_test_deepset:
-                    deepset_test = deepset_test.to(self.device)
+                    deepset_test = deepset_test.to(self.device, non_blocking=True)
 
                     deepset_mapped, theta_test = map_deepset(
                         deepset_test, theta_test, self.device
                     )
                     base_output = self.network(data_test, deepset_mapped)
                 else :
-                    base_output = self.network(data_test, torch.arange(len(deepset_test)))
+                    base_output = self.network(data_test, torch.arange(len(deepset_test)).to(self.device))
 
-                loss = torch.abs(base_output - theta_test).detach().cpu()
-                theta_final = base_output.detach().cpu()
+                loss = torch.abs(base_output - theta_test).detach()
+                theta_final = base_output.detach()
 
                 current_out = base_output
                 for idx in self.lower_indices:
                     q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(data_test, torch.arange(len(deepset_test))))
+                    delta = torch.exp(q_net(data_test, torch.arange(len(deepset_test)).to(self.device)))
                     current_out = current_out - delta
                     all_quantiles[self.quantiles[idx]].append(current_out)
 
                 current_out = base_output
                 for idx in self.upper_indices:
                     q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(data_test, torch.arange(len(deepset_test))))
+                    delta = torch.exp(q_net(data_test, torch.arange(len(deepset_test)).to(self.device)))
                     current_out = current_out + delta
                     all_quantiles[self.quantiles[idx]].append(current_out)
 
                 all_loss_test.append(loss)
                 all_theta_final.append(theta_final)
-                all_true_theta.append(theta_test.detach().cpu())
+                all_true_theta.append(theta_test.detach())
 
                 if i % 5 == 0:
                     current_mae = torch.cat(all_loss_test).mean().item()
@@ -682,7 +682,7 @@ class Trainer:
 
                 if self.network.nls_sim :
                     batched_data, theta, deepset, classi = batch
-                    deepset = deepset.to(self.device)
+                    deepset = deepset.to(self.device, non_blocking=True)
                     _, deepset_mapped = torch.unique_consecutive(
                         deepset, return_inverse=True, dim=0
                     )
@@ -690,9 +690,9 @@ class Trainer:
                     batched_data, theta, classi = batch
                     deepset_mapped=None
 
-                batched_data = batched_data.to(self.device).float()
-                theta = theta.to(self.device)
-                classi = classi.float().to(self.device)
+                batched_data = batched_data.to(self.device, non_blocking=True).float()
+                theta = theta.to(self.device, non_blocking=True)
+                classi = classi.float().to(self.device, non_blocking=True)
 
                 output = self.network(batched_data, deepset=deepset_mapped, theta=theta).squeeze()
 
@@ -701,9 +701,9 @@ class Trainer:
                 loss.backward()
                 self.optimizer.step()
 
-                epoch_batch.append(loss.detach().cpu())
+                epoch_batch.append(loss.detach())
 
-            mean_epoch = torch.stack(epoch_batch).mean()
+            mean_epoch = torch.stack(epoch_batch).mean().cpu()
             all_loss_train.append(mean_epoch)
 
             t.set_description(f"Epoch {epoch + 1}/{nb_epochs}")
@@ -799,8 +799,8 @@ class Trainer:
                 data_batch, theta_batch, classi_batch = batch
                 deepset_batch = None
 
-            data_batch = data_batch.to(self.device).float()
-            true_theta_batch = theta_batch.to(self.device)
+            data_batch = data_batch.to(self.device, non_blocking=True).float()
+            true_theta_batch = theta_batch.to(self.device, non_blocking=True)
 
             for j in range(data_batch.size(0)):
 
@@ -818,16 +818,16 @@ class Trainer:
                     data_single, theta0_latent, activation, deepset=deepset_single
                 )
 
-                loss = torch.abs(output - true_theta_single).detach().cpu()
-                theta_final = output.detach().cpu()
+                loss = torch.abs(output - true_theta_single).detach()
+                theta_final = output.detach()
 
                 if torch.isnan(loss).any():
-                    loss = torch.abs(output_not_nan.cpu() - true_theta_single.cpu())
-                    theta_final = output_not_nan.detach().cpu()
+                    loss = torch.abs(output_not_nan - true_theta_single)
+                    theta_final = output_not_nan.detach()
 
                 all_loss_test.append(loss.unsqueeze(0))
                 all_theta_final.append(theta_final.unsqueeze(0))
-                all_true_theta.append(true_theta_single.detach().cpu().unsqueeze(0))
+                all_true_theta.append(true_theta_single.detach().unsqueeze(0))
 
             if i % 5 == 0 and len(all_loss_test) > 0:
                 current_mae = torch.cat(all_loss_test).mean().item()
@@ -862,12 +862,16 @@ class Trainer:
         # return full_loss_tensor, all_theta_final, time_total
 
     def _pyro_model(self, x_obs, lower_bound, upper_bound):
-        theta = pyro.sample("theta", dist.Uniform(lower_bound, upper_bound).to_event(1))
+        batch_size = x_obs.shape[0]
 
-        with torch.no_grad():
-            log_ratio = -self.network(x_obs, theta=theta.unsqueeze(0)).sum()
+        with pyro.plate("batch_dimensions", batch_size):
+            theta = pyro.sample("theta", dist.Uniform(lower_bound, upper_bound).to_event(1))
 
-        pyro.factor("log_ratio_factor", log_ratio)
+        # with torch.no_grad():
+        log_ratio = -self.network(x_obs, theta=theta).squeeze(-1)
+
+        with pyro.plate("batch_factors", batch_size):
+            pyro.factor("log_ratio_factor", log_ratio)
 
     def test_nls_MCMC(self, loader_test, num_samples=1000, step_size=0.05, burn_in=200):
         all_samples = []
@@ -878,10 +882,19 @@ class Trainer:
             all_quantiles[q] = []
 
         self.network.eval()
+        for param in self.network.parameters():
+            param.requires_grad = False
 
         model_ref = loader_test.dataset.model
         lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
+
+        num_samples = 5000
+        warmup_steps = 1000
+
+        kernel = NUTS(self._pyro_model, max_tree_depth=7, jit_compile=True)
+        # kernel = HMC(self._pyro_model, num_steps=3, jit_compile=True)
+        mcmc = MCMC(kernel, num_samples=num_samples, warmup_steps=warmup_steps, num_chains=1)
 
         time_start = time.time()
 
@@ -891,47 +904,46 @@ class Trainer:
             data_batch, theta_batch, _ = batch
             data_batch = data_batch.to(self.device).float()
 
-            for j in range(data_batch.size(0)):
+            # mcmc.run(data_batch, lower_bound, upper_bound)
 
-                x_obs = data_batch[j].unsqueeze(0)
-                true_theta = theta_batch[j].to(self.device)
+            # samples = mcmc.get_samples()["theta"]
 
-                nuts_kernel = NUTS(self._pyro_model, max_tree_depth=3)
+            batch_chains = []
+            for chain_idx in range(3):
+                mcmc.run(data_batch, lower_bound, upper_bound)
+                chain_samples = mcmc.get_samples()["theta"].cpu()
+                batch_chains.append(chain_samples)
+            samples = torch.stack(batch_chains, dim=0)
+            samples = samples.reshape(-1, samples.shape[2], samples.shape[3])
 
-                mcmc = MCMC(
-                    nuts_kernel, num_samples=200, warmup_steps=50, num_chains=1
-                )
+            all_samples.append(samples)
+            all_true_theta.append(theta_batch)
 
-                mcmc.run(x_obs, lower_bound, upper_bound)
-
-                samples = mcmc.get_samples()["theta"]
-
-                all_samples.append(samples)
-                all_true_theta.append(true_theta.cpu())
-
-                # with torch.no_grad():
-                #     x_obs_repeated = x_obs.expand(samples.size(0), *x_obs.shape[1:])
-                #     log_ratios = -self.network(
-                #         x_obs_repeated, theta=samples
-                #     )
-                #
-                # map_index = torch.argmax(log_ratios)
-                # theta_map = samples[map_index]
-                #
-                # all_theta_final.append(theta_map.cpu())
+            # TODO : réparer MAP
+            # with torch.no_grad():
+            #     x_obs_repeated = x_obs.expand(samples.size(0), *x_obs.shape[1:])
+            #     log_ratios = -self.network(
+            #         x_obs_repeated, theta=samples
+            #     )
+            #
+            # map_index = torch.argmax(log_ratios)
+            # theta_map = samples[map_index]
+            #
+            # all_theta_final.append(theta_map.cpu())
 
             #     plt.hist(samples)
             #     plt.show()
             #
-            # if i == 10 :
-            #     break
 
         time_total = time.time() - time_start
 
         # full_loss_tensor = torch.cat(all_loss_test, dim=0)
-        all_samples = torch.stack(all_samples, dim=0)
+        all_samples = torch.cat(all_samples, dim=1)
+        all_samples = all_samples.permute(1, 0, 2)
+        # all_samples = all_samples.reshape(-1, num_samples, all_samples.shape[-1])
+        print(all_samples.shape)
         all_theta_final = torch.mean(all_samples, dim=1) # all_theta_final = torch.stack(all_theta_final, dim=0)
-        all_true_theta = torch.stack(all_true_theta, dim=0)
+        all_true_theta = torch.concatenate(all_true_theta, dim=0)
         final_test_losses = torch.abs(all_theta_final - all_true_theta)
         for q in self.quantiles:
             all_quantiles[q] = torch.quantile(all_samples, q, dim=1)
@@ -965,10 +977,10 @@ class Trainer:
 
             for i, batch in enumerate(t):
                 data_batch, theta_batch, _ = batch
-                deepset_batch = torch.arange(len(data_batch),dtype=int).to(self.device)
+                deepset_batch = torch.arange(len(data_batch),dtype=int).to(self.device, non_blocking=True)
 
-                data_batch = data_batch.to(self.device).float()
-                theta_batch = theta_batch.to(self.device)
+                data_batch = data_batch.to(self.device, non_blocking=True).float()
+                theta_batch = theta_batch.to(self.device, non_blocking=True)
 
                 batch_size = data_batch.shape[0]
                 max_logl = torch.full((batch_size,), float("-inf"), device=self.device)
@@ -976,13 +988,13 @@ class Trainer:
 
                 for k in range(len(dataset_gridsearch)):  # //2 if N
 
-                    current_theta = dataset_gridsearch.get_theta_tensor()[k].to(self.device)
+                    current_theta = dataset_gridsearch.get_theta_tensor()[k].to(self.device, non_blocking=True)
 
                     if simu_nls:
                         simu, _ = dataset_gridsearch.get_grid(
                             k, deepset_size=dataset_gridsearch.max_deepset_size
                         )
-                        simu = torch.from_numpy(simu).to(self.device)
+                        simu = torch.from_numpy(simu).to(self.device, non_blocking=True)
                         simu = torch.concatenate((simu, torch.ones_like(simu)), dim=1)
                         # simu = simu.repeat(batch_size, *([1] * (simu.ndim -1)))
                         simu = simu.unsqueeze(0).expand(batch_size, *([-1] * (simu.ndim))).reshape(-1, *simu.shape[1:])
@@ -1002,12 +1014,12 @@ class Trainer:
                     max_logl[mask] = logl[mask]
                     max_theta[mask] = current_theta.detach()
 
-                loss = torch.abs(max_theta - theta_batch).detach().cpu()
-                theta_final = max_theta.detach().cpu()
+                loss = torch.abs(max_theta - theta_batch).detach()
+                theta_final = max_theta.detach()
 
                 all_loss_test.append(loss)
                 all_theta_final.append(theta_final)
-                all_true_theta.append(theta_batch.detach().cpu())
+                all_true_theta.append(theta_batch.detach())
 
             time_total = time.time() - time_start
 
@@ -1063,10 +1075,10 @@ class Trainer:
 
             for i, batch in enumerate(t):
                 data_batch, theta_batch, _ = batch
-                deepset_batch = torch.arange(len(data_batch), dtype=int).to(self.device)
+                deepset_batch = torch.arange(len(data_batch), dtype=int).to(self.device, non_blocking=True)
 
-                data_batch = data_batch.to(self.device).float()
-                theta_batch = theta_batch.to(self.device)
+                data_batch = data_batch.to(self.device, non_blocking=True).float()
+                theta_batch = theta_batch.to(self.device, non_blocking=True)
 
                 batch_size = data_batch.shape[0]
                 max_logl = torch.full((batch_size,), float("-inf"), device=self.device)
@@ -1116,13 +1128,13 @@ class Trainer:
                     max_logl[mask] = logl[mask]
                     max_theta[mask] = current_theta.detach()
 
-                loss = torch.abs(max_theta - theta_batch).detach().cpu()
-                theta_final = max_theta.detach().cpu()
+                loss = torch.abs(max_theta - theta_batch).detach()
+                theta_final = max_theta.detach()
 
-                all_max_logl.append(max_logl.detach().cpu())
+                all_max_logl.append(max_logl.detach())
                 all_loss_test.append(loss)
                 all_theta_final.append(theta_final)
-                all_true_theta.append(theta_batch.detach().cpu())
+                all_true_theta.append(theta_batch.detach())
 
                 surface = torch.cat(surface, dim=0)
                 # for q in self.quantiles:

@@ -16,6 +16,11 @@ from architecture.train_test import *
 from architecture.mle_test import *
 from architecture.neural_networks import CNN_ST_network
 from architecture.output_graphs import *
+import warnings
+import torch
+
+warnings.filterwarnings("ignore", category=torch.jit.TracerWarning)
+warnings.filterwarnings("ignore", module="pyro")
 
 device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
@@ -27,31 +32,31 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 # Path to data saving file
 
-data_path = create_data_path("code/data/spatiotemporal_adv")
+data_path = create_data_path("output/data/spatiotemporal_adv")
 # data_path = Path("./code/data/spatiotemporal_adv").resolve() / "2D-try"
 
 # Path to results saving file
 
-res_path = create_res_path("code/results/spatiotemporal")
+res_path = create_res_path("output/results/spatiotemporal")
 
 # Neural Network train options
 
 batch_size = 50
-nb_epochs = 300
+nb_epochs = 30
 freq_epochs_test = 10
 
 # Data options
 
-time_size = 20
-space_dim = 2
-space_size = 20
+time_size = 100
+space_dim = 1
+space_size = 100
 max_deepset_size = 1
-missing_ratios = [0.80]
+missing_ratios = [0.98]
 
 # Amount of data
 
-train_size = 4000
-test_size = 500
+train_size = 5
+test_size = 5
 
 ######################################
 ######################################
@@ -90,7 +95,12 @@ dataset_train.generate(data_path / "train")
 # Creation of the loader used during training (or test)
 
 loader_train = DataLoader(
-    dataset_train, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+    dataset_train,
+    batch_size=batch_size,
+    shuffle=True,
+    collate_fn=deepset_collate,
+    num_workers=4,
+    pin_memory=True,
 )
 
 # Creation of the several datasets used to test
@@ -116,13 +126,14 @@ for ratio in missing_ratios:
 
     datasets_test.append(dataset)
     loaders_test.append(
-        DataLoader(dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate)
+        DataLoader(dataset, batch_size=5, shuffle=False, collate_fn=deepset_collate,    num_workers=4,
+        pin_memory=True)
     )
 
 # Show data example
 
 show_example_mask(
-    dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
 )
 # show_example_gif(
 #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
@@ -136,6 +147,7 @@ show_example_mask(
 
 CNN = CNN_ST_network(
     in_channels=2,
+    hidden=48,
     theta_dim=dataset_train.model.nb_params,
     spatial_dim=space_dim,
 ).to(device)
@@ -191,7 +203,9 @@ for loader in loaders_test:
 
 dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=False)
 loader_train_nls = DataLoader(
-    dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+    dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate,
+    num_workers=4,
+    pin_memory=True
 )
 
 datasets_test_nls = []
@@ -199,7 +213,9 @@ loaders_test_nls = []
 for ds in datasets_test :
     dataset = NlsSimulationDataset(ds, simu_nls=False)
     loaders_test_nls.append(DataLoader(
-        dataset, batch_size=1, shuffle=False, collate_fn=deepset_collate
+        dataset, batch_size=5, shuffle=False, collate_fn=deepset_collate,
+        num_workers=4,
+        pin_memory=True
     ))
 
     datasets_test_nls.append(dataset)
@@ -210,6 +226,7 @@ for ds in datasets_test :
 
 CNN = CNN_ST_network(
     in_channels=2,
+    hidden=48,
     theta_dim=dataset_train.model.nb_params,
     spatial_dim=space_dim,
     nls=True,
@@ -243,5 +260,5 @@ test_alt_graph(trainers, res_path)
 
 for i in range(len(datasets_test)):
     test_graph(trainers, res_path, num_dataset=i)
-    target_graph(trainers, res_path, k=0, num_dataset=i)
+    # target_graph(trainers, res_path, k=0, num_dataset=i)
     visualise(trainers, res_path, num_dataset=i)
