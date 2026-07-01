@@ -13,7 +13,7 @@ from scipy.stats import chi2
 
 import pyro
 import pyro.distributions as dist
-from pyro.infer import MCMC, NUTS, HMC
+from pyro.infer import MCMC, NUTS, HMC, Predictive
 
 import torch
 import time
@@ -631,6 +631,29 @@ class Trainer:
                 all_theta_final.append(theta_final)
                 all_true_theta.append(theta_test.detach())
 
+                for k in range(len(data_test)):
+                    coords, y, mask_obs = loader_test.dataset.sample_to_coord(data_test[k].detach().numpy())
+
+                    cov_true = model_ref.eval_cov(coords[~mask_obs], y[~mask_obs], space_dim=model_ref.space_dim, theta_values=theta_test[k].detach().numpy())
+                    cov_est = model_ref.eval_cov(coords[~mask_obs], y[~mask_obs], space_dim=model_ref.space_dim, theta_values=theta_final[k].detach().numpy())
+
+                    vals_true = cov_true.getValues()
+                    vals_true = np.array(vals_true).reshape(cov_true.getNRows(), cov_true.getNCols())
+
+                    vals_est = cov_est.getValues()
+                    vals_est = np.array(vals_est).reshape(cov_est.getNRows(), cov_est.getNCols())
+
+                    _, logdet_true = np.linalg.slogdet(vals_true)
+                    _, logdet_est = np.linalg.slogdet(vals_est)
+                    term_det = logdet_est - logdet_true
+
+                    term_trace = np.trace(np.linalg.solve(vals_est, vals_true))
+
+                    # Calcul final du KL score
+                    kl_score = 0.5 * (term_det + term_trace - len(vals_true))
+
+                    print("KL score :", kl_score)
+
                 if i % 5 == 0:
                     current_mae = torch.cat(all_loss_test).mean().item()
                     t.set_postfix(Loss=f"{current_mae:.4f}")
@@ -727,7 +750,7 @@ class Trainer:
         self.save_network()
 
         fig, ax = plt.subplots(1, 1, figsize=(14, 7), constrained_layout=True)
-        ax.plot(all_loss_train, "forestgreen", linewidth=2.0)
+        ax.plot(all_loss_train, "#DC267F", linewidth=2.0)
 
         fig.suptitle("Loss evolutions of " + self.network.label)
         ax.set_xlabel("epochs")
@@ -873,7 +896,10 @@ class Trainer:
         with pyro.plate("batch_factors", batch_size):
             pyro.factor("log_ratio_factor", log_ratio)
 
+        pyro.deterministic("log_ratio_samples", log_ratio)
+
     def test_nls_MCMC(self, loader_test, num_samples=1000, step_size=0.05, burn_in=200):
+        """https://pyro.ai/examples/predictive_deterministic.html"""
         all_samples = []
         all_true_theta = []
         all_theta_final = []
@@ -889,8 +915,8 @@ class Trainer:
         lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
 
-        num_samples = 5000
-        warmup_steps = 1000
+        num_samples = 200
+        warmup_steps = 50
 
         kernel = NUTS(self._pyro_model, max_tree_depth=7, jit_compile=True)
         # kernel = HMC(self._pyro_model, num_steps=3, jit_compile=True)
@@ -905,44 +931,44 @@ class Trainer:
             data_batch = data_batch.to(self.device).float()
 
             # mcmc.run(data_batch, lower_bound, upper_bound)
-
             # samples = mcmc.get_samples()["theta"]
 
             batch_chains = []
+            batch_log_ratios = []
+
             for chain_idx in range(3):
                 mcmc.run(data_batch, lower_bound, upper_bound)
-                chain_samples = mcmc.get_samples()["theta"].cpu()
+                samples = mcmc.get_samples()
+                chain_samples = samples["theta"].cpu()
+
+                determinist = Predictive(self._pyro_model, samples)(data_batch, lower_bound, upper_bound)
+                chain_log_ratio = determinist["log_ratio_samples"].cpu()
+
                 batch_chains.append(chain_samples)
+                batch_log_ratios.append(chain_log_ratio)
+
             samples = torch.stack(batch_chains, dim=0)
             samples = samples.reshape(-1, samples.shape[2], samples.shape[3])
 
+            log_ratios = torch.stack(batch_log_ratios, dim=0)
+            print(log_ratios.shape)
+            log_ratios = log_ratios.reshape(-1, log_ratios.shape[-1])
+            print(log_ratios.shape)
+            map_indices = torch.argmax(log_ratios, dim=0)
+            print(samples.shape, map_indices.shape, torch.arange(data_batch.size(0)).shape)
+
+            theta_MAP = samples[map_indices, torch.arange(data_batch.size(0)), :]
+
+            all_theta_final.append(theta_MAP)
+
             all_samples.append(samples)
-            all_true_theta.append(theta_batch)
-
-            # TODO : réparer MAP
-            # with torch.no_grad():
-            #     x_obs_repeated = x_obs.expand(samples.size(0), *x_obs.shape[1:])
-            #     log_ratios = -self.network(
-            #         x_obs_repeated, theta=samples
-            #     )
-            #
-            # map_index = torch.argmax(log_ratios)
-            # theta_map = samples[map_index]
-            #
-            # all_theta_final.append(theta_map.cpu())
-
-            #     plt.hist(samples)
-            #     plt.show()
-            #
+            all_true_theta.append(theta_batch.cpu())
 
         time_total = time.time() - time_start
 
-        # full_loss_tensor = torch.cat(all_loss_test, dim=0)
         all_samples = torch.cat(all_samples, dim=1)
         all_samples = all_samples.permute(1, 0, 2)
-        # all_samples = all_samples.reshape(-1, num_samples, all_samples.shape[-1])
-        print(all_samples.shape)
-        all_theta_final = torch.mean(all_samples, dim=1) # all_theta_final = torch.stack(all_theta_final, dim=0)
+        all_theta_final = torch.stack(all_theta_final, dim=0) #  all_theta_final = torch.median(all_samples, dim=1)
         all_true_theta = torch.concatenate(all_true_theta, dim=0)
         final_test_losses = torch.abs(all_theta_final - all_true_theta)
         for q in self.quantiles:

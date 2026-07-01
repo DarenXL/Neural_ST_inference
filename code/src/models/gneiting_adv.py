@@ -7,7 +7,7 @@ from scipy.stats import qmc
 
 def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5):
 
-    ns = 2000
+    ns = 5000
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
     if space_dim == 1:
@@ -17,7 +17,7 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
             dx=[1. / space_size, 1. / time_size]
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, deepset_size, np.random.randint(10000), ns)
+        gl.simuSpectral(None, dbgrid, model, None, deepset_size, np.random.randint(100000), ns)
 
         batch = np.stack([dbgrid[i].reshape((space_size, time_size), order='F') for i in range(3, 3+deepset_size)]).transpose(0, 2, 1)
 
@@ -28,7 +28,7 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, deepset_size, np.random.randint(10000), ns
+            None, dbgrid, model, None, deepset_size, np.random.randint(100000), ns
         )
 
         batch = np.stack(
@@ -50,7 +50,7 @@ def get_gst_model(space_dim, adv, range_time, range_space):
 
     alpha = 2.0
     beta = 1.0
-    nu = 1.0
+    nu = 1.5 # 1.0
     rr = 1
     range_space = [range_space] * space_dim
     angles = [0] * space_dim
@@ -86,7 +86,7 @@ def get_gst_model(space_dim, adv, range_time, range_space):
 
     return model
 
-def matern_adv_cov(coords_in, coords_out, y, space_dim, adv, range_time, range_space):
+def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_space):
 
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
@@ -186,14 +186,29 @@ class GneitingAdvModel(SimulationModel):
                 deepset_size=d_size
             )
 
+    def eval_cov(self, coords, y, space_dim, theta_values):
+        model = get_gst_model(self.space_dim, *theta_values)
+
+        dbgrid = gl.Db.create()
+        names = []
+        for i in range(len(coords[0])):
+            dbgrid.addColumns(coords[:, i], radix="x" + str(i + 1))
+            names.append("x" + str(i + 1))
+        dbgrid.setLocators(names, gl.ELoc.X)
+
+        dbgrid.addColumns(y, radix="z1")
+        dbgrid.setLocator("z1", gl.ELoc.Z)
+
+        return model.evalCovMat(dbgrid, dbgrid)
+
     def kriging(self, coords_in, coords_out, y, space_dim, theta_values):
         if self.space_dim == 1 :
-            return matern_adv_cov(
+            return matern_krig(
                 coords_in, coords_out, y, space_dim,
                 theta_values[0], theta_values[1], theta_values[2]
             )
         elif self.space_dim == 2 :
-            return matern_adv_cov(
+            return matern_krig(
                 coords_in, coords_out, y, space_dim,
                 [theta_values[0], theta_values[1]], theta_values[2], theta_values[3]
             )

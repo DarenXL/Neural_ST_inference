@@ -5,10 +5,23 @@ import os
 import time
 from torch.utils.data import Dataset
 from tqdm import tqdm
+import concurrent.futures
 from models.base import SimulationModel
 from utils import add_missing_mask
 import gstlearn as gl
 import matplotlib.pyplot as plt
+
+
+def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim, space_size, max_deepset_size, samples_dir):
+    batch = model_instance.simulate(
+        theta_i,
+        time_size,
+        space_dim,
+        space_size,
+        max_deepset_size,
+    )
+    np.save(f"{samples_dir}/sample_{idx}.npy", batch)
+    return idx
 
 class GenericSimulationDataset(Dataset):
     def __init__(
@@ -86,28 +99,138 @@ class GenericSimulationDataset(Dataset):
 
         return instance
 
-    def generate(self, path: Path):
-        """Generate gaussian fields on a complete grid"""
-        os.makedirs(f"{path}/samples", exist_ok=True)
+    # def generate(self, path: Path):
+    #     samples_dir = Path(path) / "samples"
+    #     os.makedirs(samples_dir, exist_ok=True)
+    #
+    #     start_time = time.time()
+    #     TIMEOUT_LIMIT = 10.0
+    #
+    #     pending_tasks = {}
+    #
+    #     pbar = tqdm(total=self.theta_size, desc="Simulations (avec Timeout 10s)")
+    #
+    #     with concurrent.futures.ProcessPoolExecutor() as executor:
+    #
+    #         for idx in range(self.theta_size):
+    #             theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+    #             seed = np.random.randint(0, 100000)
+    #
+    #             future = executor.submit(
+    #                 _worker_simulate_and_save,
+    #                 idx,
+    #                 theta_i,
+    #                 self.model,
+    #                 self.time_size,
+    #                 self.space_dim,
+    #                 self.space_size,
+    #                 self.max_deepset_size,
+    #                 samples_dir,
+    #                 seed,
+    #             )
+    #             pending_tasks[future] = (idx, theta_i)
+    #
+    #         while pending_tasks:
+    #             done, _ = concurrent.futures.wait(
+    #                 pending_tasks.keys(), return_when=concurrent.futures.FIRST_COMPLETED
+    #             )
+    #
+    #             for future in done:
+    #                 idx, theta_i = pending_tasks.pop(future)
+    #
+    #                 try:
+    #                     print(future.result(timeout=TIMEOUT_LIMIT))
+    #                     _ = future.result(timeout=TIMEOUT_LIMIT)
+    #                     pbar.update(1)
+    #
+    #                 except (concurrent.futures.TimeoutError, Exception) as e:
+    #                     print(
+    #                         f"\n[Timeout] Problem gstlearn. Trying new seed..."
+    #                     )
+    #
+    #                     new_seed = np.random.randint(0, 100000)
+    #
+    #                     new_future = executor.submit(
+    #                         _worker_simulate_and_save,
+    #                         idx,
+    #                         theta_i,
+    #                         self.model,
+    #                         self.time_size,
+    #                         self.space_dim,
+    #                         self.space_size,
+    #                         self.max_deepset_size,
+    #                         samples_dir,
+    #                         new_seed,
+    #                     )
+    #                     pending_tasks[new_future] = (idx, theta_i)
+    #
+    #     pbar.close()
+    #     self.time_generation = time.time() - start_time
+    #     self.save(path)
 
-        t_iter = tqdm(range(self.theta_size), total=self.theta_size)
+    def generate(self, path: Path):
+        samples_dir = Path(path) / "samples"
+        os.makedirs(samples_dir, exist_ok=True)
+
         start_time = time.time()
 
-        for idx in t_iter:
-            theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+        max_workers = None
 
-            batch = self.model.simulate(
-                theta_i,
-                self.time_size,
-                self.space_dim,
-                self.space_size,
-                self.max_deepset_size,
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            futures = []
+            for idx in range(self.theta_size):
+                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+
+                f = executor.submit(
+                    _worker_simulate_and_save,
+                    idx,
+                    theta_i,
+                    self.model,
+                    self.time_size,
+                    self.space_dim,
+                    self.space_size,
+                    self.max_deepset_size,
+                    samples_dir,
+                )
+                futures.append(f)
+
+            t_iter = tqdm(
+                concurrent.futures.as_completed(futures),
+                total=self.theta_size,
+                desc="Simulations",
             )
 
-            np.save(f"{path}/samples/sample_{idx}.npy", batch)
-
+            for future in t_iter:
+                _ = (
+                    future.result()
+                )
         self.time_generation = time.time() - start_time
         self.save(path)
+
+    # def generate(self, path: Path):
+    #     """Generate gaussian fields on a complete grid"""
+    #     os.makedirs(f"{path}/samples", exist_ok=True)
+    #
+    #     t_iter = tqdm(range(self.theta_size), total=self.theta_size)
+    #     start_time = time.time()
+    #
+    #     for idx in t_iter:
+    #         theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+    #
+    #         batch = self.model.simulate(
+    #             theta_i,
+    #             self.time_size,
+    #             self.space_dim,
+    #             self.space_size,
+    #             self.max_deepset_size,
+    #         )
+    #
+    #         np.save(f"{path}/samples/sample_{idx}.npy", batch)
+    #
+    #     self.time_generation = time.time() - start_time
+    #     self.save(path)
 
     def generate_one(self, idx: int) -> np.ndarray:
         """Generate one gaussian field on a complete grid and return it"""
@@ -226,9 +349,9 @@ class GenericSimulationDataset(Dataset):
         y_full[mask_obs] = krig
 
         if self.space_dim == 1:
-            return y_full.reshape(self.time_size, self.space_size)  # , order="F"
+            return y_full.reshape(self.space_size, self.time_size, order="F")  # , order="F"
         else:
-            return y_full.reshape(self.time_size, self.space_size, self.space_size)
+            return y_full.reshape(self.space_size, self.space_size, self.time_size, order="F")
 
     def get_likelihood_from_sample(self, sample: np.ndarray, theta: np.ndarray):
 

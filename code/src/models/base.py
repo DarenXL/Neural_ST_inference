@@ -29,6 +29,10 @@ class SimulationModel(ABC):
         pass
 
     @abstractmethod
+    def eval_cov(self, coords, y, space_dim, theta_values):
+        pass
+
+    @abstractmethod
     def kriging(self, coords_in, coords_out, y, space_dim, theta_values):
         pass
 

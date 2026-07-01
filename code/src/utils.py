@@ -9,35 +9,45 @@ import gstlearn as gl
 
 THETA_COLORS = [
     {
-        "train": "#7AA7F1",  # "orangered",
-        "test": "#7AA7F1",  # "lightsalmon",
+        "train": "#7AA7F1",
+        "test": "#7AA7F1",
         "baseline": "dimgrey",
     },
     {
-        "train": "#648FFF",  # "deepskyblue",
-        "test": "#648FFF",  # "lightskyblue",
+        "train": "#648FFF",
+        "test": "#648FFF",
         "baseline": "dimgrey",
     },
     {
-        "train": "#785EF0",  # "forestgreen",
-        "test": "#785EF0",  # "limegreen",
+        "train": "#785EF0",
+        "test": "#785EF0",
         "baseline": "dimgrey",
     },
     {
-        "train": "#DC267F",  # "darkorchid",
-        "test": "#DC267F",  # "orchid",
+        "train": "#c82072",
+        "test": "#c82072",
         "baseline": "dimgrey",
     },
     {
-        "train": "#FE6100",
-        "test": "#FE6100",
+        "train": "#DC267F",
+        "test": "#DC267F",
         "baseline": "dimgrey",
     },
     {
-        "train": "#FFB000",
-        "test": "#FFB000",
+        "train": "#e768a6",
+        "test": "#e768a6",
         "baseline": "dimgrey",
     },
+    # {
+    #     "train": "#FE6100",
+    #     "test": "#FE6100",
+    #     "baseline": "dimgrey",
+    # },
+    # {
+    #     "train": "#FFB000",
+    #     "test": "#FFB000",
+    #     "baseline": "dimgrey",
+    # },
 ]
 
 cols = [c["train"] for c in THETA_COLORS]

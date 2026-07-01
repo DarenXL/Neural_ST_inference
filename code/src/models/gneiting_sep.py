@@ -50,15 +50,15 @@ def get_gst_model(space_dim, sep, range_time, range_space):
 
     alpha = 2.0
     beta = 1.0
-    nu = 1.0
+    nu = 1.5
     rr = 1
     range_space = [range_space] * space_dim
     angles = [0] * space_dim
 
     ctxt = gl.CovContext(1, gl.SpaceRN.create(space_dim))
 
-    proj_mat = np.eye(space_dim + 1)
-    proj_mat[0:space_dim, space_dim] = 0
+    # proj_mat = np.eye(space_dim + 1)
+    # proj_mat[0:space_dim, space_dim] = 0
 
     fac = gl.CorGneiting.create(
         ctxt=ctxt,
@@ -76,7 +76,7 @@ def get_gst_model(space_dim, sep, range_time, range_space):
 
     ctxtFac = gl.CovContext(1, gl.SpaceRN.create(space_dim + 1))
     cov = gl.CorFactorized.create(ctxt=ctxtFac)
-    err = cov.addFactor(cov=fac, proj=proj_mat)
+    # err = cov.addFactor(cov=fac, proj=proj_mat)
 
     model = gl.ModelGeneric()
     model.setCov(fac)
@@ -164,6 +164,19 @@ class GneitingSepModel(SimulationModel):
             p["range_space"],
             deepset_size=d_size,
         )
+
+    def eval_cov(self, coords, y, space_dim, theta_values):
+        model = get_gst_model(self.space_dim, *theta_values)
+
+        dbgrid = gl.Db.create()
+        names = []
+        for i in range(len(coords[0])):
+            dbgrid.addColumns(coords[:, i], radix="x" + str(i + 1))
+            names.append("x" + str(i + 1))
+        dbgrid.setLocators(names, gl.ELoc.X)
+
+        dbgrid.addColumns(y, radix="z1")
+        dbgrid.setLocator("z1", gl.ELoc.Z)
 
     def kriging(self, coords1, coords2, y, space_dim, theta_values):
         return matern_sep_cov(coords1, coords2, y, space_dim, *theta_values)

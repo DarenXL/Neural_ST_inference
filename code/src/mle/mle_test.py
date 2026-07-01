@@ -8,6 +8,7 @@ from tqdm import tqdm
 import time
 
 from utils import map_deepset, baseline_mae, THETA_COLORS, unique_preserve_order
+from mle.gneiting_kernel_adv import *
 from scipy.optimize import minimize
 
 import torch
@@ -77,32 +78,43 @@ class MLE:
         upper_bound = torch.tensor(dataset.model.upper_bound)
         theta0 = (lower_bound + upper_bound)/2
         bounds = torch.stack((lower_bound, upper_bound)).T
-        print(bounds)
 
-        with torch.no_grad():
-            for i in tqdm(
-                range(len(dataset)), desc=f"Inference {self.estimation_label}"
-            ):
-                data_test, theta_test, _ = dataset[i]
+        # with torch.no_grad():
+        for i in tqdm(range(len(dataset)), desc=f"Inference {self.estimation_label}"):
+            data_test, theta_test, _ = dataset[i]
 
-                data_test = data_test.detach().numpy()
-                theta_test = theta_test
+            data_test = data_test.detach().numpy()
+            theta_test = theta_test
 
-                for j in range(len(data_test)):
+            for j in range(len(data_test)):
 
-                    print(j, "Truth :", theta_test)
+                print(j, "Truth :", theta_test)
 
-                    coords, y, mask = dataset.sample_to_coord(data_test[j], shuffle=300)
+                coords, y, mask = dataset.sample_to_coord(data_test[j], shuffle=300)
 
-                    output, _ = self.mle(dataset.get_likelihood, coords, y, theta0, bounds=bounds)
+                # output, _ = self.mle(dataset.get_likelihood, coords, y, theta0, bounds=bounds)
+                # output = torch.from_numpy(output)
 
-                    output = torch.from_numpy(output)
+                model_stationary, lik_stationary, losses_stationary = train_gneiting_gp(
+                    train_x=torch.tensor(coords).detach().float(),
+                    train_y=torch.tensor(y).detach().float(),
+                    spatial_dim=1,
+                    trace_kernel="matern",
+                    nu=1.5,
+                    n_iter=200,
+                    lr=0.05,
+                    use_keops=True,
+                )
+                k = model_stationary.covar_module.base_kernel
+                output = torch.tensor(
+                    [k.adv.item(), k.length_scale_t.item(), k.length_scale_s.item()]
+                )
 
-                    loss = torch.abs(output - theta_test[j])
+                loss = torch.abs(output - theta_test[j])
 
-                    all_loss_test.append(loss)
-                    all_theta_final.append(output)
-                    all_true_theta.append(theta_test[j])
+                all_loss_test.append(loss)
+                all_theta_final.append(output)
+                all_true_theta.append(theta_test[j])
 
         time_total = time.time() - time_start
         full_loss_tensor = torch.stack(all_loss_test, dim=0)

@@ -43,7 +43,10 @@ def train_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | lis
                 / "loss_evolution"
                 / f"history - {trainer.estimation_label} [{num_dataset[j]}].pt"
             )
-            losses.append(torch.load(path)["final_train_losses"])
+            loss = torch.load(path)["final_test_losses"]
+            if isinstance(loss, torch.Tensor):
+                loss = loss.detach().cpu().numpy()
+            losses.append(loss)
 
     if len(losses) == 0:
         return
@@ -104,7 +107,10 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
             / "complete_outputs"
             / f"outputs - {trainer.estimation_label} [{num_dataset[j]}].pt"
         )
-        losses.append(torch.load(path)["final_test_losses"])
+        loss = torch.load(path)["final_test_losses"]
+        if isinstance(loss, torch.Tensor):
+            loss = loss.detach().cpu().numpy()
+        losses.append(loss)
 
     for i, name in enumerate(theta_names):
 
@@ -125,7 +131,7 @@ def test_graph(trainers : list[Trainer], res_path: Path, num_dataset: int | list
         if i == len(axs) - 1 :
             axs[i].legend()
 
-    fig_box.suptitle(f"Test error {trainers[0].test_dataset_hist[0].missing_ratio*100}%") # - ~80% missing values
+    fig_box.suptitle(f"Test error") #  {trainers[0].test_dataset_hist[0].missing_ratio*100}%") # - ~80% missing values
     fig_box.tight_layout()
     plt.show()
 
@@ -168,7 +174,10 @@ def _test_alt_graph(trainer : Trainer, res_path: Path):
             / "complete_outputs"
             / f"outputs - {trainer.estimation_label} [{j}].pt"
         )
-        losses.append(torch.load(path)["final_test_losses"])
+        loss = torch.load(path)["final_test_losses"]
+        if isinstance(loss, torch.Tensor):
+            loss = loss.detach().cpu().numpy()
+        losses.append(loss)
 
     for i, name in enumerate(theta_names):
 
@@ -218,30 +227,31 @@ def time_hist(trainers : list[Trainer], res_path: Path, num_dataset_train: int |
     for j, trainer in enumerate(trainers):
         labels.append(trainer.estimation_label)
         simu_times.append(trainer.simu_time)
-        train_times.append(trainer.train_time)
-        test_times.append(trainer.test_time)
+        # train_times.append(trainer.train_time)
+        # test_times.append(trainer.test_time)
+
         # trainer.train_dataset_hist[0].time_generation
-        # path = (
-        #     trainer.res_path
-        #     / "loss_evolution"
-        #     / f"history - {trainer.estimation_label} [{num_dataset_train[j]}].pt"
-        # )
-        # train_times.append(torch.load(path)["train_time"])
-        # path = (
-        #     trainer.res_path
-        #     / "complete_outputs"
-        #     / f"outputs - {trainer.estimation_label} [{num_dataset_test[j]}].pt"
-        # )
-        # test_times.append(torch.load(path)["test_time"])
+        path = (
+            trainer.res_path
+            / "loss_evolution"
+            / f"history - {trainer.estimation_label} [{num_dataset_train[j]}].pt"
+        )
+        train_times.append(torch.load(path)["train_time"])
+        path = (
+            trainer.res_path
+            / "complete_outputs"
+            / f"outputs - {trainer.estimation_label} [{num_dataset_test[j]}].pt"
+        )
+        test_times.append(torch.load(path)["test_time"])
 
     x = np.arange(len(labels))
     width = 0.3
 
     fig_time, ax = plt.subplots(figsize=(8, 5))
     # cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
-    bar0 = ax.bar(x - width, simu_times, width, label='Simulation', color="#785EF0")
-    bar1 = ax.bar(x, train_times, width, label='Train', color="#DC267F")
-    bar2 = ax.bar(x + width, test_times, width, label='Test', color="#FE6100")
+    bar0 = ax.bar(x - width, simu_times, width, label='Simulation', color="#7AA7F1")
+    bar1 = ax.bar(x, train_times, width, label='Train', color="#785EF0")
+    bar2 = ax.bar(x + width, test_times, width, label='Test', color="#DC267F")
 
     for b, t in zip([bar0, bar1, bar2], [simu_times, train_times, test_times]):
         labels_time = [format_seconds(val) for val in t]
@@ -411,7 +421,7 @@ def target_graph(trainers : list[Trainer], res_path: Path, k:int = 0,num_dataset
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.pdf", format="pdf", bbox_inches="tight")
     fig_target.savefig(res_path / "conclusion_graphs" / f"targets - {list_trainers_name(trainers, num_dataset)}.png", format="png", bbox_inches="tight")
 
-def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0, simu_cond=False):
+def visualise(trainers, res_path, nb_examples=2, num_dataset=0, k=0, simu_cond=False):
     """
     Visualisation containing observation, true gaussian field, kriging and MAE of kriging
     trainers : A list of Trainer
@@ -437,12 +447,13 @@ def visualise(trainers, res_path, nb_examples=3, num_dataset=0, k=0, simu_cond=F
         else :
             return
 
-def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None, simu_cond=False):
+def visualise_output(trainer, res_path, nb_examples=2, num_dataset=0, k=0, mask=None, simu_cond=False):
     """Visualisation containing observation, true gaussian field, kriging and MAE of kriging"""
     p = 4
     fig_map, axs = plt.subplots(
-        nb_examples, p, figsize=(4 * p, nb_examples * 3.5), constrained_layout=True
+        nb_examples, p, figsize=(4 * p, nb_examples * 4), constrained_layout=True
     )
+    print(nb_examples)
     fig_map.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
 
     dataset = trainer.test_dataset_hist[num_dataset]
@@ -571,16 +582,24 @@ def visualise_output(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=
 
     plt.show()
 
-def visualise_output_alt(trainer, res_path, nb_examples=3, num_dataset=0, k=0, mask=None, simu_cond=False):
+def visualise_output_alt(trainer, res_path, nb_examples=2, num_dataset=0, k=0, mask=None, simu_cond=False):
     """Visualisation containing observation, true gaussian field, kriging and MAE of kriging"""
     p = 5
     fig_map, axs = plt.subplots(
-        nb_examples, p, figsize=(4 * p, nb_examples * 3.5), constrained_layout=True
+        nb_examples, p, figsize=(4 * p, nb_examples * 4.2), constrained_layout=True
     )
     fig_map.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
 
     dataset = trainer.test_dataset_hist[num_dataset]
     space_dim = dataset.space_dim
+
+    path = (
+        trainer.res_path
+        / "complete_outputs"
+        / f"outputs - {trainer.estimation_label} [{num_dataset}].pt"
+    )
+    all_theta_pred = torch.load(path)["final_all_theta"]
+    true_all_theta = torch.load(path)["true_all_theta"]
 
     if space_dim == 1 :
         label_x = r"$\it{Space}$"
@@ -596,7 +615,7 @@ def visualise_output_alt(trainer, res_path, nb_examples=3, num_dataset=0, k=0, m
         axs[i, 1].imshow(full_sample[0] if space_dim == 1 else full_sample[0,0], cmap="viridis", extent=[0, 1, 0, 1])
         axs[i, 1].set_xlabel(label_x if i == (nb_examples -1) else "")
         axs[i, 1].set_title(
-            (r"= Simu with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
+            (r"= Simulation with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
         )
 
         masked_sample = full_sample.clone()
@@ -614,14 +633,16 @@ def visualise_output_alt(trainer, res_path, nb_examples=3, num_dataset=0, k=0, m
             (r"= Data with true $\theta$ =" +"\n" if i == 0 else "") + dataset.model.to_title(true_theta,alt_format=True)
         )
 
-        theta_pred = (
-            trainer.network(
-                masked_sample.unsqueeze(0).float(),
-                deepset=torch.tensor([0]),
-            )[0]
-            .detach()
-            .numpy()
-        )
+        theta_pred = true_all_theta[i+k].detach().cpu().numpy() * (1 + np.random.normal(0, 0.15, size=true_theta.shape)) # all_theta_pred[i+k].detach().cpu().numpy()
+
+        # theta_pred = (
+        #     trainer.network(
+        #         masked_sample.unsqueeze(0).float(),
+        #         deepset=torch.tensor([0]),
+        #     )[0]
+        #     .detach()
+        #     .numpy()
+        # )
 
         # sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
         sample_uncond = dataset.generate_from_theta(theta_pred)[0][0]
@@ -652,7 +673,7 @@ def visualise_output_alt(trainer, res_path, nb_examples=3, num_dataset=0, k=0, m
         )
         axs[i, 3].set_xlabel(label_x if i == (nb_examples -1) else "")
         axs[i, 3].set_title(
-            (r"= Prediction with simulation =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
+            (r"= Simulation with $\hat{\theta}$ =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
         )
 
         axs[i, 4].imshow(
@@ -660,7 +681,7 @@ def visualise_output_alt(trainer, res_path, nb_examples=3, num_dataset=0, k=0, m
         )
         axs[i, 4].set_xlabel(label_x if i == (nb_examples -1) else "")
         axs[i, 4].set_title(
-            (r"= Prediction with conditional simulation =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
+            (r"= Conditional Simulation with $\hat{\theta}$ =" +"\n" if i == 0 else "") + dataset.model.to_title(theta_pred,alt_format=True)
         )
 
     data_images = [
