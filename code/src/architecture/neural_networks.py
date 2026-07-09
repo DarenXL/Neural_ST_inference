@@ -20,16 +20,28 @@ class CNN_ST_network(nn.Module):
 
         if spatial_dim == 1:
             self.conv = nn.Sequential(
-                nn.Conv2d(in_channels, hidden, kernel_size=(8,8), padding=2),
+                nn.Conv2d(in_channels, hidden//2, kernel_size=(5,8), padding=(2,3)),
                 nn.ReLU(),
-                nn.Conv2d(hidden, hidden, kernel_size=(5,5), padding=1),
+                nn.Conv2d(hidden//2, hidden//2, kernel_size=(5,5), padding=(2,2)),
                 nn.ReLU(),
                 nn.MaxPool2d(kernel_size=2, stride=2),
-                nn.Conv2d(hidden, hidden, kernel_size=(5,5), padding=1),
+                nn.Conv2d(hidden//2, hidden, kernel_size=(3,5), padding=(1,2)),
                 nn.ReLU(),
                 nn.Conv2d(hidden, hidden, kernel_size=3, padding=1),
                 nn.ReLU(),
             )
+            # self.conv = nn.Sequential(
+            #     nn.Conv2d(in_channels, hidden, kernel_size=(8, 8), padding=2),
+            #     nn.ReLU(),
+            #     nn.Conv2d(hidden, hidden, kernel_size=(5, 5), padding=1),
+            #     nn.ReLU(),
+            #     nn.MaxPool2d(kernel_size=2, stride=2),
+            #     nn.Conv2d(hidden, hidden, kernel_size=(5, 5), padding=1),
+            #     nn.ReLU(),
+            #     nn.Conv2d(hidden, hidden, kernel_size=3, padding=1),
+            #     nn.ReLU(),
+            # )
+
             if pool_option == "avg":
                 self.pool = nn.AdaptiveAvgPool2d(1)
             else:

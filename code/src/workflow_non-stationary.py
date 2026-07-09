@@ -45,8 +45,8 @@ missing_ratios = [0.70, .85, .92]
 
 # Amount of data
 
-train_size = 10000
-test_size = 4000
+train_size = 1
+test_size = 5
 
 ######################################
 ######################################
@@ -79,18 +79,18 @@ dataset_train = GenericSimulationDataset(
 print(f"\nData train generation : {model.__class__.__name__}")
 dataset_train.generate(data_path / "train")
 
-theta_droite = np.array([0.0000, 0.15, 0.15, 0.6781])
-theta_gauche = np.array([0.0000, 0.06, 0.15, 0.6781])
+theta_droite = np.array([0.0000, 0.15, 0.06])
+theta_gauche = np.array([0.0000, 0.10, 0.15])
 img = dataset_train.generate_from_theta(theta_droite)[0,0]
-mask = np.concatenate([np.ones((30,15)), np.zeros((30,15))], axis=1)
+mask = np.concatenate([np.ones((15,30)), np.zeros((15,30))], axis=0)
 img = np.stack((img, mask))
 krig = dataset_train.kriging_from_sample(img, theta_gauche)
 simu = img.copy()
 simu[0] = dataset_train.generate_from_theta(theta_gauche)
 krig_simu = dataset_train.kriging_from_sample(simu, theta_gauche)
 plt.imshow(simu[0] - krig_simu + krig, cmap=CMAP)
-plt.ylabel(r"$\it{Time}$")
-plt.xlabel(r"$\it{Space}$")
+plt.ylabel(r"Time")
+plt.xlabel(r"Space")
 plt.title("Non-stationary example")
-plt.savefig(data_path / "train" / "examples" / f"non-stationary.pdf", format="pdf", bbox_inches="tight")
 plt.show()
+# plt.savefig(data_path / "train" / "examples" / f"non-stationary.pdf", format="pdf", bbox_inches="tight")

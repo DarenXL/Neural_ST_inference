@@ -5,7 +5,7 @@ from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
 
-def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5):
+def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5, seed=0):
 
     ns = 5000
     model = get_gst_model(space_dim, adv, range_time, range_space)
@@ -17,7 +17,7 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
             dx=[1. / space_size, 1. / time_size]
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, deepset_size, np.random.randint(100000), ns)
+        gl.simuSpectral(None, dbgrid, model, None, deepset_size, seed, ns) # np.random.randint(1000000)
 
         batch = np.stack([dbgrid[i].reshape((space_size, time_size), order='F') for i in range(3, 3+deepset_size)]).transpose(0, 2, 1)
 
@@ -28,7 +28,7 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, deepset_size, np.random.randint(100000), ns
+            None, dbgrid, model, None, deepset_size, seed, ns
         )
 
         batch = np.stack(
@@ -115,13 +115,13 @@ class GneitingAdvModel(SimulationModel):
 
         if self.space_dim == 1 :
             self._names = ['adv', 'range_time', 'range_space']
-            self._names_alt = ["adv", r"$\rho_t$", r"$\rho_s$"]
+            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"]
             self.lower_bound = (-1, 0.05, 0.05)
             self.upper_bound = (1, 0.15, 0.5)
 
         elif self.space_dim == 2 :
             self._names = ['adv1', 'adv2', 'range_time', 'range_space']
-            self._names_alt = ["adv1", "adv2", r"$\rho_t$", r"$\rho_s$"]
+            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]
             self.lower_bound = (-1, -1, .05, 0.05)
             self.upper_bound = (1, 1, .15, 0.5)
 
@@ -141,14 +141,14 @@ class GneitingAdvModel(SimulationModel):
     def to_title(self, vals, alt_format=False):
         if self.space_dim == 1 :
             if not alt_format:
-                return fr"adv: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}" + "\n" + fr"$\rho_s: {vals[2]:.2f}"
+                return fr"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}" + "\n" + fr"$\rho_s: {vals[2]:.2f}"
             else :
-                return fr"adv: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
+                return fr"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
         elif self.space_dim == 2 :
             if not alt_format:
-                return fr"adv1: {vals[0]:.2f} | adv2: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f}" + "\n" + fr"$\rho_s$: {vals[3]:.2f}"
+                return fr"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f}" + "\n" + fr"$\rho_s$: {vals[3]:.2f}"
             else :
-                return fr"adv1: {vals[0]:.2f} | adv2: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}"
+                return fr"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}"
 
     def sample_thetas(self, n):
         if self.space_dim == 1 :
@@ -171,19 +171,21 @@ class GneitingAdvModel(SimulationModel):
                 'range_space': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
             }
 
-    def simulate(self, p, t_size, s_dim, s_size, d_size):
+    def simulate(self, p, t_size, s_dim, s_size, d_size, seed=0):
         assert s_dim == self.space_dim
         if self.space_dim == 1 :
             return _simulate_gneiting_matern_grid_func(
                 t_size, s_dim, s_size,
                 p['adv'], p['range_time'], p['range_space'],
-                deepset_size=d_size
+                deepset_size=d_size,
+                seed=seed
             )
         elif self.space_dim == 2 :
             return _simulate_gneiting_matern_grid_func(
                 t_size, s_dim, s_size,
                 [p['adv1'], p['adv2']], p['range_time'], p['range_space'],
-                deepset_size=d_size
+                deepset_size=d_size,
+                seed=seed,
             )
 
     def eval_cov(self, coords, y, space_dim, theta_values):

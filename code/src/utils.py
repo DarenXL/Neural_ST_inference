@@ -311,7 +311,7 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
     """Plot examples of gaussian fields"""
 
     fig, axs = plt.subplots(
-        nrows=1, ncols=4, figsize=(14, 4), layout="constrained", squeeze=False
+        nrows=1, ncols=4, figsize=(10, 3.5), layout="constrained", squeeze=False
     )
 
     if dataset.space_dim == 1:
@@ -324,8 +324,8 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
 
             # axs[1, i].set_xlabel(r"$\it{Space}$")
             # axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
-            axs[0, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
-            axs[0, i].set_xlabel(r"$\it{Space}$")
+            axs[0, i].set_ylabel(r"Time" if (i == 0) else None)
+            axs[0, i].set_xlabel(r"Space")
 
     else:
         fig.suptitle(r"Example over time")
@@ -338,8 +338,8 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
 
             # axs[1, i].set_xlabel(r"$\it{Space 1}$")
             # axs[1, i].set_ylabel(r"$\it{Space 2}$")
-            axs[0, i].set_ylabel(r"$\it{Space 2}$" if i == 0 else None)
-            axs[0, i].set_xlabel(r"$\it{Space 1}$")
+            axs[0, i].set_ylabel(r"Space 2" if i == 0 else None)
+            axs[0, i].set_xlabel(r"Space 1")
 
     all_images = [im for ax in axs.flat for im in ax.get_images()]
 
@@ -355,7 +355,7 @@ def show_example(dataset, data_path: Path, k=0, label="example"):
             im.set_cmap(CMAP)
 
         cbar = fig.colorbar(
-            all_images[-1], ax=axs, location="right", shrink=1.2, pad=0.025
+            all_images[-1], ax=axs, location="right", shrink=1.1, pad=0.025
         )
         cbar.set_label("")  # 'Value'
 
@@ -374,7 +374,7 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
     """Plot examples of gaussian fields and their masked apearance"""
 
     fig, axs = plt.subplots(
-        nrows=2, ncols=4, figsize=(14, 8), layout="constrained", squeeze=False
+        nrows=2, ncols=4, figsize=(10, 5), layout="constrained", squeeze=False
     )
 
     if dataset.space_dim == 1:
@@ -388,12 +388,44 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
                 missing_ratio=dataset.missing_ratio,
             )
 
+            # mask = np.zeros((30,), dtype=bool)
+            # mask[1] = 1
+            # mask[4] = 1
+            # mask[8] = 1
+            # mask[11] = 1
+            # mask[27] = 1
+            # print(mask)
+            #
+            # donnees_a_tracer = data[0][mask].T
+            # nb_lignes = donnees_a_tracer.shape[1]
+            #
+            # nb_points = donnees_a_tracer.shape[0]
+            # axe_x = np.linspace(0, 1, nb_points)
+            #
+            # plt.figure(figsize=(8, 5))
+            #
+            # for i in range(nb_lignes):
+            #     couleur_ligne = cols[i]
+            #     plt.plot(
+            #         axe_x,
+            #         donnees_a_tracer[:, i],
+            #         color=couleur_ligne,
+            #         label=rf"$v_{i+1}$",
+            #     )
+            #
+            # plt.xlim(0, 1)
+            # plt.xlabel("Time")
+            # plt.ylabel(r"$NO_2$")
+            # plt.title(r"$NO_2$ over time")
+            #
+            # plt.show()
+
             dataset.show(axs[0, i], k + i)
             dataset.show(axs[1, i], k + i, mask=mask)
 
-            axs[1, i].set_xlabel(r"$\it{Space}$")
-            axs[1, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
-            axs[0, i].set_ylabel(r"$\it{Time}$" if (i == 0) else None)
+            axs[1, i].set_xlabel(r"Space")
+            axs[1, i].set_ylabel(r"Time" if (i == 0) else None)
+            axs[0, i].set_ylabel(r"Time" if (i == 0) else None)
 
     else:
         fig.suptitle(r"Example over time")
@@ -424,7 +456,7 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
             im.set_cmap(CMAP)
 
         cbar = fig.colorbar(
-            all_images[-1], ax=axs, location="right", shrink=1.1, pad=0.025
+            all_images[-1], ax=axs, location="right", shrink=1.05, pad=0.025
         )
         cbar.set_label("")  # 'Value'
 

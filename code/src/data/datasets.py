@@ -7,18 +7,19 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import concurrent.futures
 from models.base import SimulationModel
-from utils import add_missing_mask
+from utils import add_missing_mask, CMAP
 import gstlearn as gl
 import matplotlib.pyplot as plt
 
 
-def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim, space_size, max_deepset_size, samples_dir):
+def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim, space_size, max_deepset_size, samples_dir, seed):
     batch = model_instance.simulate(
         theta_i,
         time_size,
         space_dim,
         space_size,
         max_deepset_size,
+        seed,
     )
     np.save(f"{samples_dir}/sample_{idx}.npy", batch)
     return idx
@@ -99,75 +100,6 @@ class GenericSimulationDataset(Dataset):
 
         return instance
 
-    # def generate(self, path: Path):
-    #     samples_dir = Path(path) / "samples"
-    #     os.makedirs(samples_dir, exist_ok=True)
-    #
-    #     start_time = time.time()
-    #     TIMEOUT_LIMIT = 10.0
-    #
-    #     pending_tasks = {}
-    #
-    #     pbar = tqdm(total=self.theta_size, desc="Simulations (avec Timeout 10s)")
-    #
-    #     with concurrent.futures.ProcessPoolExecutor() as executor:
-    #
-    #         for idx in range(self.theta_size):
-    #             theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
-    #             seed = np.random.randint(0, 100000)
-    #
-    #             future = executor.submit(
-    #                 _worker_simulate_and_save,
-    #                 idx,
-    #                 theta_i,
-    #                 self.model,
-    #                 self.time_size,
-    #                 self.space_dim,
-    #                 self.space_size,
-    #                 self.max_deepset_size,
-    #                 samples_dir,
-    #                 seed,
-    #             )
-    #             pending_tasks[future] = (idx, theta_i)
-    #
-    #         while pending_tasks:
-    #             done, _ = concurrent.futures.wait(
-    #                 pending_tasks.keys(), return_when=concurrent.futures.FIRST_COMPLETED
-    #             )
-    #
-    #             for future in done:
-    #                 idx, theta_i = pending_tasks.pop(future)
-    #
-    #                 try:
-    #                     print(future.result(timeout=TIMEOUT_LIMIT))
-    #                     _ = future.result(timeout=TIMEOUT_LIMIT)
-    #                     pbar.update(1)
-    #
-    #                 except (concurrent.futures.TimeoutError, Exception) as e:
-    #                     print(
-    #                         f"\n[Timeout] Problem gstlearn. Trying new seed..."
-    #                     )
-    #
-    #                     new_seed = np.random.randint(0, 100000)
-    #
-    #                     new_future = executor.submit(
-    #                         _worker_simulate_and_save,
-    #                         idx,
-    #                         theta_i,
-    #                         self.model,
-    #                         self.time_size,
-    #                         self.space_dim,
-    #                         self.space_size,
-    #                         self.max_deepset_size,
-    #                         samples_dir,
-    #                         new_seed,
-    #                     )
-    #                     pending_tasks[new_future] = (idx, theta_i)
-    #
-    #     pbar.close()
-    #     self.time_generation = time.time() - start_time
-    #     self.save(path)
-
     def generate(self, path: Path):
         samples_dir = Path(path) / "samples"
         os.makedirs(samples_dir, exist_ok=True)
@@ -183,6 +115,8 @@ class GenericSimulationDataset(Dataset):
             for idx in range(self.theta_size):
                 theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
+                worker_seed = 42 + idx
+
                 f = executor.submit(
                     _worker_simulate_and_save,
                     idx,
@@ -193,6 +127,7 @@ class GenericSimulationDataset(Dataset):
                     self.space_size,
                     self.max_deepset_size,
                     samples_dir,
+                    worker_seed,
                 )
                 futures.append(f)
 
@@ -278,7 +213,7 @@ class GenericSimulationDataset(Dataset):
                 img = img.copy()
                 img[:,~mask] = np.nan
 
-            ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
+            ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1], cmap=CMAP)
             ax.set_title(title_text  if (mask is None) else "", fontsize=10)
 
         elif self.space_dim == 2:

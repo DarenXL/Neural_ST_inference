@@ -164,7 +164,7 @@ def _test_alt_graph(trainer : Trainer, res_path: Path):
 
 
     losses = []
-    labels = []#["~79%\nmissing\nratio", "~47%\nmissing\nratio", "~16%\nmissing\nratio"]
+    labels = []#["~73%\nmissing\nratio", "~86%\nmissing\nratio", "~96%\nmissing\nratio"]
     missing_ratios = []
     for j, dataset in enumerate(trainer.test_dataset_hist):
         labels.append(f"missing\nratio\n{dataset.missing_ratio}")
@@ -602,11 +602,11 @@ def visualise_output_alt(trainer, res_path, nb_examples=2, num_dataset=0, k=0, m
     true_all_theta = torch.load(path)["true_all_theta"]
 
     if space_dim == 1 :
-        label_x = r"$\it{Space}$"
-        label_y = r"$\it{Time}$"
+        label_x = r"Space"
+        label_y = r"Time"
     else:
-        label_x = r"$\it{Space 1}$"
-        label_y = r"$\it{Space 2}$"
+        label_x = r"Space 1"
+        label_y = r"Space 2"
 
     for i in range(nb_examples):
         full_sample, true_theta, _ = dataset[i+k]

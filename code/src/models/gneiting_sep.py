@@ -5,8 +5,8 @@ from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
 
-def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, range_time, range_space, deepset_size=5):
-    ns = 2000
+def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, range_time, range_space, deepset_size=5, seed=0):
+    ns = 5000
 
     model = get_gst_model(space_dim, sep, range_time, range_space)
 
@@ -17,7 +17,7 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, r
             dx=[1. / space_size, 1. / time_size]
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, deepset_size, np.random.randint(10000), ns)
+        gl.simuSpectral(None, dbgrid, model, None, deepset_size, seed, ns)
 
         batch = np.stack([dbgrid[i].reshape((space_size, time_size), order='F') for i in range(3, 3+deepset_size)]).transpose(0, 2, 1)
 
@@ -28,7 +28,7 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, r
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, deepset_size, np.random.randint(10000), ns
+            None, dbgrid, model, None, deepset_size, seed, ns
         )
 
         batch = np.stack(
@@ -114,9 +114,9 @@ class GneitingSepModel(SimulationModel):
         self.space_dim = space_dim
 
         self._names = ["sep", "range_time", "range_space"]
-        self._names_alt = ["sep", r"$\rho_t$", r"$\rho_s$"]
-        self.lower_bound = (0.05, 0.05, 0.05)
-        self.upper_bound = (1.0, 0.15, 0.5)
+        self._names_alt = [r"$\gamma$", r"$\rho_t$", r"$\rho_s$"]
+        self.lower_bound = (.0, 0.05, 0.05)
+        self.upper_bound = (0.1, 0.15, 0.5)
 
     @property
     def param_names(self):
@@ -135,12 +135,12 @@ class GneitingSepModel(SimulationModel):
 
         if not alt_format:
             return (
-                rf"sep: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}"
+                rf"$\gamma$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}"
                 + "\n"
                 + rf"$\rho_s: {vals[2]:.2f}"
             )
         else:
-            return rf"sep: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
+            return rf"$\gamma$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
 
     def sample_thetas(self, n):
         return {
@@ -153,7 +153,7 @@ class GneitingSepModel(SimulationModel):
             ),
         }
 
-    def simulate(self, p, t_size, s_dim, s_size, d_size):
+    def simulate(self, p, t_size, s_dim, s_size, d_size, seed=0):
         assert s_dim == self.space_dim
         return _simulate_gneiting_matern_grid_func(
             t_size,
@@ -163,6 +163,7 @@ class GneitingSepModel(SimulationModel):
             p["range_time"],
             p["range_space"],
             deepset_size=d_size,
+            seed=seed
         )
 
     def eval_cov(self, coords, y, space_dim, theta_values):

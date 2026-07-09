@@ -42,7 +42,6 @@ except ImportError:
     import warnings
     warnings.warn("pykeops not found. Using dense fallback.")
 
-
 # ---------------------------------------------------------------------------
 # Dense spatial trace kernels
 # ---------------------------------------------------------------------------
