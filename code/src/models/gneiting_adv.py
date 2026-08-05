@@ -117,13 +117,13 @@ class GneitingAdvModel(SimulationModel):
             self._names = ['adv', 'range_time', 'range_space']
             self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"]
             self.lower_bound = (-1, 0.05, 0.05)
-            self.upper_bound = (1, 0.15, 0.5)
+            self.upper_bound = (1, 0.15, 0.3)
 
         elif self.space_dim == 2 :
             self._names = ['adv1', 'adv2', 'range_time', 'range_space']
             self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]
             self.lower_bound = (-1, -1, .05, 0.05)
-            self.upper_bound = (1, 1, .15, 0.5)
+            self.upper_bound = (1, 1, .15, 0.3)
 
     @property
     def param_names(self):

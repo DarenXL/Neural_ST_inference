@@ -50,14 +50,14 @@ class CNN_ST_network(nn.Module):
         elif spatial_dim == 2:
             self.conv = nn.Sequential(
                 nn.Conv3d(
-                    in_channels, hidden//2, kernel_size=(5, 8, 8), padding=(1, 2, 2)
+                    in_channels, hidden//2, kernel_size=(5, 8, 8), padding=(2, 3, 3)
                 ),
                 nn.ReLU(),
-                nn.Conv3d(hidden//2, hidden//2, kernel_size=(5, 5, 5), padding=(1, 1, 1)),
+                nn.Conv3d(hidden//2, hidden//2, kernel_size=(5, 5, 5), padding=(2, 2, 2)),
                 nn.ReLU(),
                 nn.MaxPool3d(kernel_size=2, stride=2),
                 nn.Conv3d(
-                    hidden//2, hidden, kernel_size=(3, 5, 5), padding=(1, 1, 1)
+                    hidden//2, hidden, kernel_size=(3, 5, 5), padding=(1, 2, 2)
                 ),
                 nn.ReLU(),
                 nn.Conv3d(hidden, hidden, kernel_size=(3, 3, 3), padding=(1, 1, 1)),

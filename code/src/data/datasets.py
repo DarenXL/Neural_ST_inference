@@ -100,7 +100,7 @@ class GenericSimulationDataset(Dataset):
 
         return instance
 
-    def generate(self, path: Path):
+    def generate(self, path: Path, base_seed: int = 42):
         samples_dir = Path(path) / "samples"
         os.makedirs(samples_dir, exist_ok=True)
 
@@ -115,7 +115,7 @@ class GenericSimulationDataset(Dataset):
             for idx in range(self.theta_size):
                 theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
-                worker_seed = 42 + idx
+                worker_seed = base_seed + idx
 
                 f = executor.submit(
                     _worker_simulate_and_save,
@@ -264,6 +264,34 @@ class GenericSimulationDataset(Dataset):
             y = y[v]
             mask_obs = mask_obs[v]
             # print(coords, y, mask_obs)
+
+        return coords, y, mask_obs
+
+    def sample_to_coord_torch(self, sample, shuffle: int = None, device="cuda"):
+        y_raw = torch.as_tensor(sample[0], dtype=torch.float32, device=device).reshape(
+            -1
+        )
+        mask_obs = torch.as_tensor(sample[1], dtype=torch.bool, device=device).reshape(
+            -1
+        )
+
+        t = torch.linspace(0, 1, self.time_size + 1, device=device)[:-1]
+        s = torch.linspace(0, 1, self.space_size + 1, device=device)[:-1]
+
+        axes = [s, t] if self.space_dim == 1 else [s, s, t]
+
+        grid = torch.meshgrid(*axes, indexing="ij")
+        coords = torch.stack(grid, dim=-1).reshape(-1, len(axes))
+
+        if shuffle is not None:
+            valid_indices = torch.nonzero(~mask_obs, as_tuple=False).squeeze(-1)
+
+            perm = torch.randperm(valid_indices.size(0), device=device)[:shuffle]
+            selected_idx = valid_indices[perm]
+
+            coords = coords[selected_idx]
+            y = y_raw[selected_idx]
+            mask_obs = mask_obs[selected_idx]
 
         return coords, y, mask_obs
 

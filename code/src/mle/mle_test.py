@@ -101,13 +101,13 @@ class MLE:
                     spatial_dim=1,
                     trace_kernel="matern",
                     nu=1.5,
-                    n_iter=200,
+                    n_iter=300,
                     lr=0.05,
                     use_keops=True,
                 )
                 k = model_stationary.covar_module.base_kernel
                 output = torch.tensor(
-                    [k.adv.item(), k.length_scale_t.item(), k.length_scale_s.item()]
+                    [k.adv.item(), k.length_scale_t.item(), k.length_scale_s.item()/torch.sqrt(torch.tensor(8))]
                 )
 
                 loss = torch.abs(output - theta_test[j])
@@ -116,16 +116,17 @@ class MLE:
                 all_theta_final.append(output)
                 all_true_theta.append(theta_test[j])
 
+
         time_total = time.time() - time_start
         full_loss_tensor = torch.stack(all_loss_test, dim=0)
         all_theta_final = torch.stack(all_theta_final, dim=0)
         all_true_theta = torch.stack(all_true_theta, dim=0)
 
         results = {
-            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
+            "final_test_losses": full_loss_tensor,
             "test_time": time_total,
             "train_time": None,
-            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
+            "final_all_theta": all_theta_final,
             "true_all_theta": all_true_theta,
         }
         self.test_time += time_total

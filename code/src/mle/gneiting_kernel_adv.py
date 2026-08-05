@@ -544,16 +544,19 @@ def train_gneiting_gp(train_x, train_y, spatial_dim=2, trace_kernel="matern",
     Returns:
         (model, likelihood) in eval mode.
     """
+    device = train_x.device
+
     likelihood = gpytorch.likelihoods.GaussianLikelihood()
     model = GneitingGP(train_x, train_y, likelihood, spatial_dim=spatial_dim,
                        trace_kernel=trace_kernel, nu=nu, learn_nu=learn_nu,
-                       use_keops=use_keops)
+                       use_keops=use_keops).to(device)
     model.train(); likelihood.train()
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
     losses = []
     for i in range(n_iter):
         optimizer.zero_grad()
+
         loss = -mll(model(train_x), train_y)
         loss.backward()
         optimizer.step()
@@ -562,7 +565,7 @@ def train_gneiting_gp(train_x, train_y, spatial_dim=2, trace_kernel="matern",
             k = model.covar_module.base_kernel
             print(f"Iter {i+1:4d}/{n_iter} | Loss {loss.item():.4f} | "
                   f"adv={k.adv.item():.3f} "
-                  f"a_s={k.length_scale_s.item():.3f}  a_t={k.length_scale_t.item():.3f}")
+                  f"a_t={k.length_scale_t.item():.3f}  a_s={k.length_scale_s.item()/torch.sqrt(torch.tensor(8)):.3f}")
 
     model.eval(); likelihood.eval()
     return model, likelihood, losses
@@ -578,9 +581,10 @@ if __name__ == "__main__":
     X = torch.randn(n, d + 1)
     y = torch.sin(X[:, 0]) * torch.cos(X[:, 1]) + 0.1 * torch.randn(n)
     print("=== GneitingGP self-test  (dense, Matern 3/2, d=2) ===")
-    model, lik = train_gneiting_gp(X, y, spatial_dim=d, trace_kernel="matern",
+    model, lik, loss = train_gneiting_gp(X, y, spatial_dim=d, trace_kernel="matern",
                                    nu=1.5, n_iter=60, lr=0.05, use_keops=False)
     with torch.no_grad(), gpytorch.settings.fast_pred_var():
         pred = lik(model(torch.randn(5, d + 1)))
+
     print("Predictive means:", pred.mean.numpy().round(3))
     print("Self-test passed.")

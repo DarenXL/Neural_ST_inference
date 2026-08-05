@@ -34,20 +34,20 @@ plt.rcParams.update({
 
 # Path to data saving file
 
-data_path = create_data_path("output/data/spatiotemporal_adv")
-# data_path = Path("./output/data/spatiotemporal_adv").resolve() / "2026-07-03_12-33-02" # "2026-07-02_16-27-09"
+# data_path = create_data_path("output/data/spatiotemporal_adv")
+data_path = Path("./output/data/spatiotemporal_adv").resolve() / "2026-08-03_15-23-11" # "2026-07-02_16-27-09"
 
 # Path to results saving file
 
-res_path = create_res_path("output/results/spatiotemporal")
-# res_path = Path("./output/results/spatiotemporal").resolve() / "2026-07-03_12-33-02"
+# res_path = create_res_path("output/results/spatiotemporal")
+res_path = Path("./output/results/spatiotemporal").resolve() / "2026-08-03_15-23-11"
 
 print("res_path", res_path)
 
 # Neural Network train options
 
-batch_size = 100
-nb_epochs = 10
+batch_size = 150
+nb_epochs = 500
 freq_epochs_test = 10
 
 # Data options
@@ -56,12 +56,12 @@ time_size = 100
 space_dim = 1
 space_size = 100
 max_deepset_size = 1
-missing_ratios = [0.97]
+missing_ratios = [0.96]
 
 # Amount of data
 
-train_size = 1
-test_size = 10
+train_size = 5000
+test_size = 1500
 
 if __name__ == '__main__':
 
@@ -75,106 +75,109 @@ if __name__ == '__main__':
     ####### Load #######
     ####################
 
-    # model = GneitingSepModel(space_dim=space_dim)
-    #
-    # dataset_train = GenericSimulationDataset.load(data_path / "train", model)
-    # loader_train = DataLoader(
-    #     dataset_train, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
-    # )
-    #
-    # datasets_test = []
-    # loaders_test = []
-    #
-    # for ratio in missing_ratios:
-    #     specific_test_path = data_path / "test"
-    #
-    #     dataset = GenericSimulationDataset.load(specific_test_path, model)
-    #     dataset.missing_ratio = ratio
-    #     print(dataset.missing_ratio)
-    #
-    #     datasets_test.append(dataset)
-    #     loaders_test.append(
-    #         DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=deepset_collate,num_workers=4,pin_memory=True)
-    #     )
-    #
-    #     # sum = 0
-    #     # for _ in range(100):
-    #     #     for i in range(len(dataset)):
-    #     #         sum += torch.mean(dataset[i][0][0,1])
-    #     # print("missing ratio", sum, len(dataset), sum/len(dataset))
+    model = GneitingAdvModel(space_dim=space_dim)
 
-    ########################
-    ####### Generate #######
-    ########################
-
-    # Model choice
-
-    # model = GneitingAdvModel(space_dim=space_dim)
-    model = GneitingSepModel(space_dim=space_dim)
-
-    # Creation of the class dataset and its θ
-
-    dataset_train = GenericSimulationDataset(
-        model=model,
-        theta_size=train_size,
-        time_size=time_size,
-        space_dim=space_dim,
-        space_size=space_size,
-        max_deepset_size=max_deepset_size,
-        missing_ratio=None,
-    )
-
-    # Generation of data on a complete grid
-
-    print(f"\nData train generation : {model.__class__.__name__}")
-    dataset_train.generate(data_path / "train")
-
-    # Creation of the loader used during training (or test)
-
+    dataset_train = GenericSimulationDataset.load(data_path / "train", model)
     loader_train = DataLoader(
-        dataset_train,
-        batch_size=batch_size,
-        shuffle=True,
-        collate_fn=deepset_collate,
-        num_workers=4,
-        pin_memory=True,
+        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
     )
-
-    # Creation of the several datasets used to test
-
-    dataset_test = GenericSimulationDataset(
-        model=model,
-        theta_size=test_size,
-        time_size=time_size,
-        space_dim=space_dim,
-        space_size=space_size,
-        max_deepset_size=max_deepset_size,
-        missing_ratio=None,
-    )
-    dataset_test.generate(data_path / "test")
 
     datasets_test = []
     loaders_test = []
 
     for ratio in missing_ratios:
+        specific_test_path = data_path / "test"
 
-        dataset = copy.deepcopy(dataset_test)
+        dataset = GenericSimulationDataset.load(specific_test_path, model)
         dataset.missing_ratio = ratio
+        print(dataset.missing_ratio)
 
         datasets_test.append(dataset)
         loaders_test.append(
-            DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=deepset_collate,    num_workers=4,
-            pin_memory=True)
+            DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=deepset_collate,num_workers=4,pin_memory=True)
         )
 
-    # Show data example
+        # sum = 0
+        # for _ in range(100):
+        #     for i in range(len(dataset)):
+        #         sum += torch.mean(dataset[i][0][0,1])
+        # print("missing ratio", sum, len(dataset), sum/len(dataset))
 
-    show_example(
-        datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    )
-    # show_example_gif(
-    #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
+    ########################
+    ####### Generate #######
+    ########################
+
+    # # Model choice
+    #
+    # model = GneitingAdvModel(space_dim=space_dim)
+    # # model = GneitingSepModel(space_dim=space_dim)
+    #
+    # # Creation of the class dataset and its θ
+    #
+    # dataset_train = GenericSimulationDataset(
+    #     model=model,
+    #     theta_size=train_size,
+    #     time_size=time_size,
+    #     space_dim=space_dim,
+    #     space_size=space_size,
+    #     max_deepset_size=max_deepset_size,
+    #     missing_ratio=None,
     # )
+    #
+    # # Generation of data on a complete grid
+    #
+    # print(f"\nData train generation : {model.__class__.__name__}")
+    # dataset_train.generate(data_path / "train", 42)
+    #
+    # # Creation of the loader used during training (or test)
+    #
+    # loader_train = DataLoader(
+    #     dataset_train,
+    #     batch_size=batch_size,
+    #     shuffle=True,
+    #     collate_fn=deepset_collate,
+    #     num_workers=4,
+    #     pin_memory=True,
+    # )
+    #
+    # # Creation of the several datasets used to test
+    #
+    # dataset_test = GenericSimulationDataset(
+    #     model=model,
+    #     theta_size=test_size,
+    #     time_size=time_size,
+    #     space_dim=space_dim,
+    #     space_size=space_size,
+    #     max_deepset_size=max_deepset_size,
+    #     missing_ratio=None,
+    # )
+    # dataset_test.generate(data_path / "test", 42+train_size*10)
+    #
+    # datasets_test = []
+    # loaders_test = []
+    #
+    # for ratio in missing_ratios:
+    #
+    #     dataset = copy.deepcopy(dataset_test)
+    #     dataset.missing_ratio = ratio
+    #
+    #     datasets_test.append(dataset)
+    #     loaders_test.append(
+    #         DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=deepset_collate,    num_workers=4,
+    #         pin_memory=True)
+    #     )
+    #
+    # # Show data example
+    #
+    # # show_example(
+    # #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    # # )
+    # # show_example(
+    # #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    # # )
+    # # show_example_gif(
+    # #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
+    # # )
 
     # #############################
     # #############################
@@ -185,10 +188,10 @@ if __name__ == '__main__':
     # ############################
     # ####### Architecture #######
     # ############################
-    #
-    # # mle_trainer = MLE(device, res_path)
-    # # mle_trainer.test_mle(datasets_test[0])
-    #
+
+    mle_trainer = MLE(device, res_path)
+    mle_trainer.test_mle(datasets_test[0])
+
     # # Creation of the Neural Network
     #
     # CNN = CNN_ST_network(
@@ -245,65 +248,66 @@ if __name__ == '__main__':
     #     )
     # except:
     #     print("No quantiles")
+
+
+    #############################
+    #############################
+    ############ NRE ############
+    #############################
+    #############################
+
+    # #####################
+    # ####### Model #######
+    # #####################
     #
-    # #############################
-    # #############################
-    # ############ NRE ############
-    # #############################
-    # #############################
+    # dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=False)
+    # loader_train_nls = DataLoader(
+    #     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate,
+    #     num_workers=4,
+    #     pin_memory=True
+    # )
     #
-    # # #####################
-    # # ####### Model #######
-    # # #####################
-    # #
-    # # dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=False)
-    # # loader_train_nls = DataLoader(
-    # #     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate,
-    # #     num_workers=4,
-    # #     pin_memory=True
-    # # )
-    # #
-    # # ############################
-    # # ####### Architecture #######
-    # # ############################
-    # #
-    # # CNN = CNN_ST_network(
-    # #     in_channels=2,
-    # #     hidden=72,
-    # #     theta_dim=dataset_train.model.nb_params,
-    # #     spatial_dim=space_dim,
-    # #     nls=True,
-    # #     nls_sim=False,
-    # #     label="NRE"
-    # # ).to(device)
-    # #
-    # # print_parameters_per_layer(CNN)
-    # #
-    # # trainer_nls = Trainer(
-    # #     CNN,
-    # #     device,
-    # #     res_path,
-    # #     quantiles=[.05, .5, .95]
-    # # )
-    # # trainer_nls.train(
-    # #     train_loader=loader_train_nls,
-    # #     nb_epochs=nb_epochs,
-    # #     print_result=True
-    # # )
-    # # for loader in loaders_test:
-    # #     res = trainer_nls.test(loader, dataset_train)
-    # #
-    # # try :
-    # #     print(
-    # #         "quantiles precision :",
-    # #         torch.mean(
-    # #             (res["true_all_theta"] > res["all_quantiles"][0.05])
-    # #             * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
-    # #             dim=0,
-    # #         ),
-    # #     )
-    # # except:
-    # #     print("No quantiles")
+    # ############################
+    # ####### Architecture #######
+    # ############################
+    #
+    # CNN = CNN_ST_network(
+    #     in_channels=2,
+    #     hidden=72,
+    #     theta_dim=dataset_train.model.nb_params,
+    #     spatial_dim=space_dim,
+    #     nls=True,
+    #     nls_sim=False,
+    #     label="NRE"
+    # ).to(device)
+    #
+    # print_parameters_per_layer(CNN)
+    #
+    # trainer_nls = Trainer(
+    #     CNN,
+    #     device,
+    #     res_path,
+    #     quantiles=[.05, .5, .95]
+    # )
+    # trainer_nls.train(
+    #     train_loader=loader_train_nls,
+    #     nb_epochs=nb_epochs,
+    #     print_result=True
+    # )
+    # for loader in loaders_test:
+    #     res = trainer_nls.test(loader, dataset_train)
+    #
+    # try :
+    #     print(
+    #         "quantiles precision :",
+    #         torch.mean(
+    #             (res["true_all_theta"] > res["all_quantiles"][0.05])
+    #             * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
+    #             dim=0,
+    #         ),
+    #     )
+    # except:
+    #     print("No quantiles")
     #
     # # ###########################################
     # # ###########################################
@@ -311,15 +315,15 @@ if __name__ == '__main__':
     # # ###########################################
     # # ###########################################
     #
-    # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
+    # # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
     #
-    # # trainers = [trainer_separately]
-    # #
-    # # # train_graph(trainers, res_path)
-    # # time_hist(trainers, res_path)
-    # # test_alt_graph(trainers, res_path)
-    # #
-    # # for i in range(len(datasets_test)):
-    # #     test_graph(trainers, res_path, num_dataset=i)
-    # #     # target_graph(trainers, res_path, k=0, num_dataset=i)
-    # #     visualise(trainers, res_path, num_dataset=i, nb_examples=2)
+    # trainers = [trainer_separately, trainer_nls]
+    #
+    # # train_graph(trainers, res_path)
+    # time_hist(trainers, res_path)
+    # test_alt_graph(trainers, res_path)
+    #
+    # for i in range(len(datasets_test)):
+    #     test_graph(trainers, res_path, num_dataset=i)
+    #     # target_graph(trainers, res_path, k=0, num_dataset=i)
+    #     # visualise(trainers, res_path, num_dataset=i, nb_examples=2)

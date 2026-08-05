@@ -22,6 +22,8 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+# from .rethinking import MAP, precis
+
 class Trainer:
     def __init__(self, network, device, res_path, optimizer=None, quantiles=tuple(), quantile_networks=tuple(), quantile_optimizer=None):
 
@@ -650,7 +652,6 @@ class Trainer:
                 #
                 #         term_trace = np.trace(np.linalg.solve(vals_est, vals_true))
                 #
-                #         # Calcul final du KL score
                 #         kl_score = 0.5 * (term_det + term_trace - len(vals_true))
                 #
                 #         print("KL score :", kl_score)
@@ -940,7 +941,7 @@ class Trainer:
             batch_log_ratios = []
 
             for chain_idx in range(3):
-                mcmc.run(data_batch, lower_bound, upper_bound)
+                map = mcmc.run(data_batch, lower_bound, upper_bound)
                 samples = mcmc.get_samples()
                 chain_samples = samples["theta"]
 
