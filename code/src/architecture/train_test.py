@@ -105,7 +105,6 @@ class Trainer:
         nb_epochs:int,
         test_loader=None,
         freq_epochs_test:int=10,
-        print_result:bool=False,
     ):
         """"
         Train the neural network.
@@ -121,13 +120,13 @@ class Trainer:
         self.simu_time += train_loader.dataset.time_generation
 
         if self.network.nls:
-            self.train_nls(train_loader, nb_epochs, print_result)
+            self.train_nls(train_loader, nb_epochs)
         else:
             self.train_quantiles(
-                train_loader, test_loader, nb_epochs, freq_epochs_test, print_result
+                train_loader, test_loader, nb_epochs, freq_epochs_test
             )
 
-    def test(self, test_loader, dataset_gridsearch=None, merge_test_deepset=False, print_result:bool=False):
+    def test(self, test_loader, dataset_gridsearch=None, merge_test_deepset=False):
         """"
         Test the neural network.
         keeps track of the datasets used.
@@ -143,181 +142,11 @@ class Trainer:
         self.test_dataset_hist.append(test_loader.dataset)
 
         if self.network.nls:
-            # return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch, print_result=print_result)
-            return self.test_nls_optim(test_loader, print_result=print_result)
-            # return self.test_nls_MCMC(test_loader)
+            # return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch)
+            # return self.test_nls_optim(test_loader)
+            return self.test_nls_MCMC(test_loader)
         else:
             return self.test_quantiles(test_loader, merge_test_deepset=merge_test_deepset)
-
-    def train_generic(
-        self, train_loader, test_loader, nb_epochs, freq_epochs_test, print_result=False
-    ):
-
-        all_loss_train = []
-        all_loss_test = []
-
-        loss_final_train = None
-        loss_final_test = None
-
-        t = tqdm(range(nb_epochs), total=nb_epochs)
-
-        time_train_start = time.time()
-        time_test_accumulated = 0
-
-        MAE = torch.nn.L1Loss(reduction="none").to(self.device)
-
-        for epoch in t:
-            self.network.train()
-
-            epoch_batch_means = []
-
-            epoch_full_errors = []
-
-            for i, (batched_data, theta, deepset) in enumerate(train_loader):
-                self.optimizer.zero_grad()
-
-                batched_data = batched_data.to(self.device, non_blocking=True).float()
-                theta = theta.to(self.device, non_blocking=True)
-                deepset = deepset.to(self.device, non_blocking=True)
-
-                deepset_mapped, theta = map_deepset(deepset, theta, self.device)
-
-                output = self.network(batched_data, deepset_mapped)
-
-                loss_vec = MAE(output, theta)
-
-                loss = loss_vec.mean()
-                loss.backward()
-                self.optimizer.step()
-
-                epoch_batch_means.append(loss_vec.mean(dim=0).detach()) ###?
-
-                if epoch == nb_epochs - 1:
-                    epoch_full_errors.append(loss_vec.detach())
-
-            mean_epoch = torch.stack(epoch_batch_means).mean(dim=0)
-            all_loss_train.append(mean_epoch.cpu())
-
-            if epoch == nb_epochs - 1:
-                loss_final_train = torch.cat(epoch_full_errors, dim=0)
-
-            loss_str = ", ".join([f"{l:.4f}" for l in mean_epoch])
-            t.set_description(f"Epoch {epoch + 1}/{nb_epochs}")
-            t.set_postfix_str(f"Loss: [{loss_str}]")
-
-            if (epoch + 1) % freq_epochs_test == 0:
-                start_test = time.time()
-                self.network.eval()
-
-                test_errors_list = []
-
-                with torch.no_grad():
-                    for data_test, theta_test, deepset_test in test_loader:
-                        data_test = data_test.to(self.device, non_blocking=True).float()
-                        theta_test = theta_test.to(self.device, non_blocking=True)
-
-                        # deepset_test = deepset_test.to(self.device)
-                        # deepset_mapped_test, theta_test = map_deepset(
-                        #     deepset_test, theta_test, self.device
-                        # )
-                        # output = self.network(data_test, deepset_mapped_test)
-
-                        output = self.network(
-                            data_test, torch.arange(len(deepset_test)).to(self.device)
-                        )
-
-                        errors = torch.abs(output - theta_test)
-                        test_errors_list.append(errors.detach()) ###?
-
-                full_test_errors = torch.cat(test_errors_list, dim=0)
-
-                all_loss_test.append(full_test_errors.mean(dim=0).cpu())
-
-                loss_final_test = full_test_errors
-
-                time_test_accumulated += time.time() - start_test
-
-        total_time_train = (time.time() - time_train_start) - time_test_accumulated
-
-        if print_result:
-            print(f"\nTime to train : {total_time_train:.2f}s")
-
-            last_train = all_loss_train[-1]  # .tolist()
-            print(
-                "Train loss per param : "
-                + train_loader.dataset.model.to_title(last_train, alt_format=True)
-            )
-
-            if all_loss_test:
-                last_test = all_loss_test[-1]  # .tolist()
-                print(
-                    "Test loss per param : "
-                    + test_loader.dataset.model.to_title(last_test, alt_format=True)
-                )
-
-        results = {
-            "train_loss_history": torch.stack(all_loss_train),
-            "test_loss_history": (
-                torch.stack(all_loss_test) if all_loss_test else None
-            ),
-            "train_time": total_time_train,
-            "time_test_accumulated": time_test_accumulated,
-            "final_train_losses": loss_final_train,
-            "final_test_losses": loss_final_test,
-        }
-
-        self._save_history(results)
-        self.save_network()
-
-        theta_names = test_loader.dataset.model.param_names
-
-        fig, ax = plt.subplots(
-            1, len(theta_names), figsize=(20, 7), constrained_layout=True
-        )
-        based, _ = baseline_mae(test_loader.dataset)
-
-        for i, name in enumerate(theta_names):
-            ax[i].plot(
-                [l[i] for l in all_loss_train],
-                THETA_COLORS[i]["train"],
-                label="train " + name,
-            )
-            ax[i].plot(
-                range(freq_epochs_test, nb_epochs + 1, freq_epochs_test),
-                [l[i] for l in all_loss_test],
-                THETA_COLORS[i]["test"],
-                label="test " + name,
-                linestyle=(5, (10, 2)),
-            )
-
-            ax[i].axhline(
-                based[i],
-                color=THETA_COLORS[i]["baseline"],
-                ls="--",
-                label="baseline " + name,
-            )
-
-            ax[i].set_title("Evolution of " + name)
-            ax[i].set_xlabel("epochs")
-            ax[i].set_ylabel("MAE")
-            ax[i].legend()
-
-        fig.suptitle("Loss evolutions of " + self.network.label)
-
-        fig.savefig(
-            self.res_path
-            / "loss_evolution"
-            / f"train_evolution - {self.network.label}.png",
-            format="png",
-            bbox_inches="tight",
-        )
-        fig.savefig(
-            self.res_path
-            / "loss_evolution"
-            / f"train_evolution - {self.network.label}.pdf",
-            format="pdf",
-            bbox_inches="tight",
-        )
 
     def train_quantiles(
         self, train_loader, test_loader, nb_epochs, freq_epochs_test, print_result=False
@@ -515,75 +344,12 @@ class Trainer:
             bbox_inches="tight",
         )
 
-    def test_generic(self, loader_test, merge_test_deepset=False, print_result=False):
-        all_loss_test = []
-        all_theta_final = []
-        all_true_theta = []
-
-        time_start = time.time()
-        self.network.eval()
-
-        model_ref = loader_test.dataset.model
-        t = tqdm(
-            loader_test,
-            total=len(loader_test),
-            desc=f"Inference {self.network.label}",
-        )
-
-        with torch.no_grad():
-            for i, (data_test, theta_test, deepset_test) in enumerate(t):
-                data_test = data_test.to(self.device, non_blocking=True).float()
-                theta_test = theta_test.to(self.device, non_blocking=True)
-
-                if merge_test_deepset:
-                    deepset_test = deepset_test.to(self.device, non_blocking=True)
-
-                    deepset_mapped, theta_test = map_deepset(
-                        deepset_test, theta_test, self.device
-                    )
-                    output = self.network(data_test, deepset_mapped)
-                else :
-                    output = self.network(data_test, torch.arange(len(deepset_test)).to(self.device))
-
-                loss = torch.abs(output - theta_test).detach().cpu()
-                theta_final = output.detach().cpu()
-
-                all_loss_test.append(loss)
-                all_theta_final.append(theta_final)
-                all_true_theta.append(theta_test.detach().cpu())
-
-                if i % 5 == 0:
-                    current_mae = torch.cat(all_loss_test).mean().item()
-                    t.set_postfix(Loss=f"{current_mae:.4f}")
-
-        time_total = time.time() - time_start
-        full_loss_tensor = torch.cat(all_loss_test, dim=0)
-        all_theta_final = torch.cat(all_theta_final, dim=0)
-        all_true_theta = torch.cat(all_true_theta, dim=0)
-
-        if print_result:
-            mean_loss = full_loss_tensor.mean(dim=0)
-            print(f"Time to test : {time_total:.2f}s")
-            print(
-                f"Test Loss (MAE) per param: "
-                + model_ref.to_title(mean_loss, alt_format=True)
-            )
-
-        results = {
-            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-            "test_time": time_total,
-            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
-            "true_all_theta": all_true_theta,
-        }
-        self._save_results(results)
-
-        # return full_loss_tensor, all_theta_final, time_total
-
-    def test_quantiles(self, loader_test, merge_test_deepset=False, print_result=False):
+    def test_quantiles(self, loader_test, merge_test_deepset=False):
         all_loss_test = []
         all_theta_final = []
         all_true_theta = []
         all_quantiles = {}
+        all_kl_score = None
         for q in self.quantiles :
             all_quantiles[q] = []
 
@@ -634,6 +400,8 @@ class Trainer:
                 all_true_theta.append(theta_test.detach())
 
                 # with torch.no_grad() :
+                #
+                #
                 #     for k in range(len(data_test)):
                 #         coords, y, mask_obs = loader_test.dataset.sample_to_coord(data_test[k].detach().cpu().numpy())
                 #
@@ -654,6 +422,8 @@ class Trainer:
                 #
                 #         kl_score = 0.5 * (term_det + term_trace - len(vals_true))
                 #
+                #         all_kl_score.append(torch.tensor(kl_score))
+                #
                 #         print("KL score :", kl_score)
                 #         print("MAE loss :", loss[k])
 
@@ -667,28 +437,23 @@ class Trainer:
         all_true_theta = torch.cat(all_true_theta, dim=0)
         for q in self.quantiles :
             all_quantiles[q] = torch.cat(all_quantiles[q], dim=0)
-
-        if print_result:
-            mean_loss = full_loss_tensor.mean(dim=0)
-            print(f"Time to test : {time_total:.2f}s")
-            print(
-                f"Test Loss (MAE) per param: "
-                + model_ref.to_title(mean_loss, alt_format=True)
-            )
+        if all_kl_score is not None :
+            all_kl_score = torch.tensor(all_kl_score)
 
         results = {
             "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
             "test_time": time_total,
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
-            "all_quantiles":all_quantiles
+            "all_quantiles":all_quantiles,
+            "kl_score":all_kl_score
         }
         self.test_time += time_total
         self._save_results(results)
 
         return results
 
-    def train_nls(self, train_loader, nb_epochs, print_result=False):
+    def train_nls(self, train_loader, nb_epochs):
 
         all_loss_train = []
 
@@ -736,12 +501,6 @@ class Trainer:
             t.set_postfix_str(f"Loss: {mean_epoch.item():.3f}")
 
         total_time_train = time.time() - time_train_start
-
-        if print_result:
-            print(f"\nTime to train : {total_time_train:.2f}s")
-
-            last_train = all_loss_train[-1].tolist()
-            print("Train loss : " + str(last_train))
 
         results = {
             "train_loss_history": torch.stack(all_loss_train),  # (Nb_epochs, Nb_params)
@@ -795,7 +554,7 @@ class Trainer:
         )
         return activation(res.x), activation(res.allvecs[-2])
 
-    def test_nls_optim(self, loader_test, theta0=None, print_result=False):
+    def test_nls_optim(self, loader_test, theta0=None):
         all_loss_test = []
         all_theta_final = []
         all_true_theta = []
@@ -867,14 +626,6 @@ class Trainer:
 
         mean_loss = full_loss_tensor.mean(dim=0)
         std_loss = full_loss_tensor.std(dim=0)
-
-        if print_result:
-            print(f"Time to test : {time_total:.2f}s")
-
-            print(
-                f"Test Loss (MAE) per param: "
-                + model_ref.to_title(mean_loss, alt_format=True)
-            )
 
         results = {
             "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
@@ -1010,7 +761,7 @@ class Trainer:
 
         return results
 
-    def test_nls_grid(self, loader_test, dataset_gridsearch, print_result=False):
+    def test_nls_grid(self, loader_test, dataset_gridsearch):
 
         with torch.no_grad():
 
@@ -1080,14 +831,6 @@ class Trainer:
             mean_loss = full_loss_tensor.mean(dim=0)
             std_loss = full_loss_tensor.std(dim=0)
 
-            if print_result:
-                print(f"Time to test : {time_total:.2f}s")
-
-                print(
-                    f"Test Loss (MAE) per param: "
-                    + model_ref.to_title(mean_loss, alt_format=True)
-                )
-
             results = {
                 "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
                 "test_time": time_total,
@@ -1098,7 +841,7 @@ class Trainer:
 
             return results
 
-    def test_nls_grid_quantiles(self, loader_test, dataset_gridsearch, print_result=False):
+    def test_nls_grid_quantiles(self, loader_test, dataset_gridsearch):
 
         plt.show()
 
@@ -1233,14 +976,6 @@ class Trainer:
 
             mean_loss = full_loss_tensor.mean(dim=0)
             std_loss = full_loss_tensor.std(dim=0)
-
-            if print_result:
-                print(f"Time to test : {time_total:.2f}s")
-
-                print(
-                    f"Test Loss (MAE) per param: "
-                    + model_ref.to_title(mean_loss, alt_format=True)
-                )
 
             results = {
                 "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)

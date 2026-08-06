@@ -47,19 +47,19 @@ missing_ratios = [0.96] # 0.94,0.96, 0.98
 train_size = 5
 test_size = 1500
 
-model = "sep"
-inf = "optim"
+model = "adv"
+inf = "mcmc"
 if model == "sep":
-    baseline = [0.2359, 0.0255, 0.105]
+    baseline = [0.2359, 0.0255, 0.065]
     res_path = (
         Path("./output/results/spatiotemporal").resolve()
-        / f"2026-07-03_12-33-02_{model}-{inf}"
+        / f"2026-08-03_15-23-11_{model}-{inf}"
     )
 else :
-    baseline = [0.5083, 0.0253, 0.105]
+    baseline = [0.5083, 0.0253, 0.065]
     res_path = (
         Path("./output/results/spatiotemporal").resolve()
-        / f"2026-07-02_16-27-09_{model}-{inf}"
+        / f"2026-08-03_15-23-11_{model}-{inf}"
     )
 
 char = {"sep": r"$\gamma$", "adv": r"$v$"}
@@ -106,6 +106,16 @@ if __name__ == '__main__':
     #     loss = loss.detach().cpu().numpy()
     # losses.append(loss)
     #
+    # # path = res_path / "complete_outputs" / f"outputs - MLE [0].pt"
+    # # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] - torch.load(path, map_location=torch.device('cpu'))["final_all_theta"])
+    # # print(loss.shape)
+    # # if isinstance(loss, torch.Tensor):
+    # #     loss = loss.detach().cpu().numpy()
+    # #     loss[np.argmax(loss[:,1]),1] = baseline[1]
+    # #     loss[np.argmax(loss[:, 1]), 1] = baseline[1]
+    # # losses.append(loss)
+    # # print(loss.shape)
+    #
     # for i, name in enumerate(theta_names):
     #
     #     axs[i].boxplot(
@@ -120,7 +130,7 @@ if __name__ == '__main__':
     #     axs[i].set_ylabel("MAE" if i == 0 else "")
     #
     #     axs[i].axhline(
-    #         baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline " + name
+    #         baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline" # + name
     #     )
     #     if i == len(axs) - 1 :
     #         axs[i].legend()
@@ -143,7 +153,7 @@ if __name__ == '__main__':
     #
     # fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
     #
-    # method = "NRE"
+    # method = "NBE"
     # losses = []
     # labels = ["~73%\nmissing\nratio", "~86%\nmissing\nratio", "~96%\nmissing\nratio"]
     # for j in range(len(labels)):
@@ -187,15 +197,11 @@ if __name__ == '__main__':
     ####### Time ######
     ###################
 
-    # res_path = (
-    #     Path("./output/results/spatiotemporal").resolve()
-    #     / f"2026-07-03_12-33-02_{model}-mcmc" # "2026-07-02_16-27-09_adv-optim"
-    # )
-    #
     # simu_times, train_times, test_times = [], [], []
-    # labels = ["NBE", "NRE"]
+    # labels = ["NBE", "NRE", "MLE"]
     #
-    # simu_times = [1602, 1602] # ["26m42s", "26m42s"]
+    # simu_times = [16*60+45, 16*60+45, 0] # ["26m42s", "26m42s"]
+    #
     # path = (
     #     res_path
     #     / "loss_evolution"
@@ -208,6 +214,7 @@ if __name__ == '__main__':
     #     / f"outputs - NBE [0].pt"
     # )
     # test_times.append(torch.load(path, map_location=torch.device('cpu'))["test_time"])
+    #
     # path = (
     #     res_path
     #     / "loss_evolution"
@@ -221,6 +228,9 @@ if __name__ == '__main__':
     # )
     # test_times.append(torch.load(path, map_location=torch.device('cpu'))["test_time"])
     #
+    # train_times.append(0)
+    # path = res_path / "complete_outputs" / f"outputs - MLE [0].pt"
+    # test_times.append(torch.load(path, map_location=torch.device("cpu"))["test_time"])
     #
     # x = np.arange(len(labels))
     # width = 0.3
@@ -232,7 +242,7 @@ if __name__ == '__main__':
     # bar2 = ax.bar(x + width, test_times, width, label='Test', color="#DC267F")
     #
     # for b, t in zip([bar0, bar1, bar2], [simu_times, train_times, test_times]):
-    #     labels_time = [format_seconds(val) for val in t]
+    #     labels_time = [format_seconds(val) if val!=0 else "" for val in t]
     #     ax.bar_label(b, labels=labels_time, padding=3)
     #
     # ax.set_xticks(x)
@@ -248,64 +258,98 @@ if __name__ == '__main__':
     # plt.tight_layout()
     # plt.show()
     #
-    # fig_time.savefig(output_path / f"times - NBE-NRE.pdf", format="pdf", bbox_inches="tight")
-    # fig_time.savefig(output_path / f"times - NBE-NRE.png", format="png", bbox_inches="tight")
+    # fig_time.savefig(output_path / f"{model}-times_NBE-NRE-MLE.pdf", format="pdf", bbox_inches="tight")
+    # fig_time.savefig(output_path / f"{model}-times_NBE-NRE-MLE.png", format="png", bbox_inches="tight")
 
     ###################
     ####### Loss ######
     ###################
 
-    path = (
-            res_path
-            / "loss_evolution"
-            / f"history - NBE [0].pt"
-        )
-    all_loss_train = torch.load(path, map_location=torch.device('cpu'))["train_loss_history"]
-    all_loss_test = torch.load(path, map_location=torch.device('cpu'))["test_loss_history"]
+    # path = (
+    #         res_path
+    #         / "loss_evolution"
+    #         / f"history - NBE [0].pt"
+    #     )
+    # all_loss_train = torch.load(path, map_location=torch.device('cpu'))["train_loss_history"]
+    # all_loss_test = torch.load(path, map_location=torch.device('cpu'))["test_loss_history"]
+    #
+    # fig, ax = plt.subplots(
+    #         1, len(theta_names), figsize=(12, 4), constrained_layout=True
+    #     )
+    #
+    # for i, name in enumerate(theta_names):
+    #     ax[i].plot(
+    #         [l[i] for l in all_loss_train],
+    #         THETA_COLORS[i]["train"],
+    #         label="train " + name,
+    #     )
+    #     ax[i].plot(
+    #         range(freq_epochs_test, nb_epochs + 1, freq_epochs_test),
+    #         [l[i] for l in all_loss_test],
+    #         THETA_COLORS[i]["test"],
+    #         label="test " + name,
+    #         linestyle=(5, (10, 2)),
+    #     )
+    #
+    #     ax[i].axhline(
+    #         baseline[i],
+    #         color=THETA_COLORS[i]["baseline"],
+    #         ls="--",
+    #         label="baseline " + name,
+    #     )
+    #
+    #     ax[i].set_title("Evolution of " + name)
+    #     ax[i].set_xlabel("epochs")
+    #     ax[i].set_ylabel("MAE")
+    #     ax[i].legend()
+    #
+    # fig.suptitle(f"Loss evolutions of NBE")
+    #
+    # fig.savefig(
+    #     output_path
+    #     / f"{model}-train_loss_NBE.png",
+    #     format="png",
+    #     bbox_inches="tight",
+    # )
+    # fig.savefig(
+    #     output_path
+    #     / f"{model}-train_loss_NBE.pdf",
+    #     format="pdf",
+    #     bbox_inches="tight",
+    # )
+    #
+    # plt.show()
 
-    fig, ax = plt.subplots(
-            1, len(theta_names), figsize=(12, 4), constrained_layout=True
-        )
+    #######################
+    ####### KL score ######
+    #######################
 
-    for i, name in enumerate(theta_names):
-        ax[i].plot(
-            [l[i] for l in all_loss_train],
-            THETA_COLORS[i]["train"],
-            label="train " + name,
-        )
-        ax[i].plot(
-            range(freq_epochs_test, nb_epochs + 1, freq_epochs_test),
-            [l[i] for l in all_loss_test],
-            THETA_COLORS[i]["test"],
-            label="test " + name,
-            linestyle=(5, (10, 2)),
-        )
+    path = res_path / "complete_outputs" / f"outputs - NBE [0] (3).pt"
+    loss = torch.load(path, map_location=torch.device("cpu"))["final_test_losses"]
+    kl_score = torch.load(path, map_location=torch.device("cpu"))["kl_score"]
 
-        ax[i].axhline(
-            baseline[i],
-            color=THETA_COLORS[i]["baseline"],
-            ls="--",
-            label="baseline " + name,
-        )
+    loss = torch.concatenate([loss, kl_score.unsqueeze(0).T], dim=1)
+    cor = torch.corrcoef(loss.T).numpy().round(3)
+    names = theta_names + ["KL score"]
 
-        ax[i].set_title("Evolution of " + name)
-        ax[i].set_xlabel("epochs")
-        ax[i].set_ylabel("MAE")
-        ax[i].legend()
+    cols = [c["train"] for c in THETA_COLORS[:4]]
+    CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
 
-    fig.suptitle(f"Loss evolutions of NBE")
+    fig, ax = plt.subplots()
+    im = ax.imshow(cor, cmap=CMAP)
 
-    fig.savefig(
-        output_path
-        / f"{model}-train_loss_NBE.png",
-        format="png",
-        bbox_inches="tight",
+    ax.set_xticks(
+        range(len(names)), labels=names
     )
-    fig.savefig(
-        output_path
-        / f"{model}-train_loss_NBE.pdf",
-        format="pdf",
-        bbox_inches="tight",
-    )
+    ax.set_yticks(range(len(names)), labels=names)
 
+    for i in range(len(names)):
+        for j in range(len(names)):
+            text = ax.text(j, i, cor[i, j], ha="center", va="center", color="w")
+
+    ax.set_title("Loss/score matrix correlation")
+    fig.tight_layout()
     plt.show()
+
+    fig.savefig(output_path / f"{model}-KL-score.pdf", format="pdf", bbox_inches="tight")
+    fig.savefig(output_path / f"{model}-KL-score.png", format="png", bbox_inches="tight")
