@@ -329,8 +329,8 @@ if __name__ == '__main__':
     kl_score = torch.load(path, map_location=torch.device("cpu"))["kl_score"]
 
     loss = torch.concatenate([loss, kl_score.unsqueeze(0).T], dim=1)
-    cor = torch.corrcoef(loss.T).numpy().round(3)
-    names = theta_names + ["KL score"]
+    cor = torch.corrcoef(torch.log(loss).T).numpy().round(3)
+    names = theta_names + ["KL score (log)"]
 
     cols = [c["train"] for c in THETA_COLORS[:4]]
     CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
@@ -351,5 +351,5 @@ if __name__ == '__main__':
     fig.tight_layout()
     plt.show()
 
-    fig.savefig(output_path / f"{model}-KL-score.pdf", format="pdf", bbox_inches="tight")
-    fig.savefig(output_path / f"{model}-KL-score.png", format="png", bbox_inches="tight")
+    fig.savefig(output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight")
+    fig.savefig(output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight")

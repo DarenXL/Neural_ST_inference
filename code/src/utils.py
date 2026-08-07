@@ -201,8 +201,9 @@ def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) ->
     """Create a mask based on Poisson Sampling"""
 
     if missing_ratio is None:
-        # missing_ratio = np.random.random() * 0.35 + 0.6
-        missing_ratio = np.random.random() * 0.08 + 0.9
+        # missing_ratio = np.random.random() * 0.35 + 0.6   # space 30
+        # missing_ratio = np.random.random() * 0.08 + 0.9   # space 100
+        missing_ratio = np.random.random() * 0.25 + 0.7  # space 75x75
 
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing

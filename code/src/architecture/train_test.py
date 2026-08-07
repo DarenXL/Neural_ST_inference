@@ -349,7 +349,11 @@ class Trainer:
         all_theta_final = []
         all_true_theta = []
         all_quantiles = {}
-        all_kl_score = None
+
+        all_kl_score = []
+        all_krig_score = []
+        all_missing_ratios = []
+
         for q in self.quantiles :
             all_quantiles[q] = []
 
@@ -401,7 +405,6 @@ class Trainer:
 
                 # with torch.no_grad() :
                 #
-                #
                 #     for k in range(len(data_test)):
                 #         coords, y, mask_obs = loader_test.dataset.sample_to_coord(data_test[k].detach().cpu().numpy())
                 #
@@ -427,6 +430,31 @@ class Trainer:
                 #         print("KL score :", kl_score)
                 #         print("MAE loss :", loss[k])
 
+                # with torch.no_grad() :
+                #
+                #     for k in range(len(data_test)):
+                #
+                #         data_complete, _, _ = loader_test.dataset[i*loader_test.batch_size + k]
+                #         data_complete = data_complete[0].detach().cpu().numpy()
+                #
+                #         data_partial = data_test[k].detach().cpu().numpy()
+                #
+                #         sample_krig = loader_test.dataset.kriging_from_sample(
+                #             data_partial, theta_final[k]
+                #         )
+                #
+                #         # plt.imshow(data_partial[0])
+                #         # plt.show()
+                #         #
+                #         # plt.imshow(data_complete[0])
+                #         # plt.show()
+                #         #
+                #         # plt.imshow((sample_krig - data_complete[0])**2)
+                #         # plt.show()
+                #
+                #         all_missing_ratios.append(data_partial[1][0])
+                #         all_krig_score.append(np.mean((sample_krig - data_complete[0])**2))
+
                 if i % 5 == 0:
                     current_mae = torch.cat(all_loss_test).mean().item()
                     t.set_postfix(Loss=f"{current_mae:.4f}")
@@ -437,16 +465,29 @@ class Trainer:
         all_true_theta = torch.cat(all_true_theta, dim=0)
         for q in self.quantiles :
             all_quantiles[q] = torch.cat(all_quantiles[q], dim=0)
-        if all_kl_score is not None :
+
+        if len(all_kl_score) > 0  :
             all_kl_score = torch.tensor(all_kl_score)
+        else:
+            all_kl_score = None
+        if len(all_krig_score) > 0  :
+            all_krig_score = torch.tensor(all_krig_score)
+            all_missing_ratios = torch.from_numpy(np.array(all_missing_ratios, dtype=bool))
+        else:
+            all_krig_score = None
+            all_missing_ratios = None
+
+        print(all_krig_score, all_missing_ratios)
 
         results = {
-            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
+            "final_test_losses": full_loss_tensor,
             "test_time": time_total,
-            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
+            "final_all_theta": all_theta_final,
             "true_all_theta": all_true_theta,
             "all_quantiles":all_quantiles,
-            "kl_score":all_kl_score
+            "kl_score":all_kl_score,
+            "krig_score":all_krig_score,
+            "missing_ratios":all_missing_ratios,
         }
         self.test_time += time_total
         self._save_results(results)

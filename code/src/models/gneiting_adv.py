@@ -7,7 +7,7 @@ from scipy.stats import qmc
 
 def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5, seed=0):
 
-    ns = 5000
+    ns = 4000 # 5000
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
     if space_dim == 1:
@@ -152,23 +152,50 @@ class GneitingAdvModel(SimulationModel):
 
     def sample_thetas(self, n):
         if self.space_dim == 1 :
+            # return {
+            #     "adv": np.random.uniform(
+            #         self.lower_bound[0], self.upper_bound[0], (n,)
+            #     ),
+            #     "range_time": np.random.uniform(
+            #         self.lower_bound[1], self.upper_bound[1], (n,)
+            #     ),
+            #     "range_space": np.random.uniform(
+            #         self.lower_bound[2], self.upper_bound[2], (n,)
+            #     ),
+            # }
+
+            sampler = qmc.LatinHypercube(d=3)
+            sample = sampler.random(n)
+
+            l_bounds = self.lower_bound[:3]
+            u_bounds = self.upper_bound[:3]
+            sample_scaled = qmc.scale(sample, l_bounds, u_bounds)
+
             return {
-                "adv": np.random.uniform(
-                    self.lower_bound[0], self.upper_bound[0], (n,)
-                ),
-                "range_time": np.random.uniform(
-                    self.lower_bound[1], self.upper_bound[1], (n,)
-                ),
-                "range_space": np.random.uniform(
-                    self.lower_bound[2], self.upper_bound[2], (n,)
-                ),
+                "adv": sample_scaled[:, 0],
+                "range_time": sample_scaled[:, 1],
+                "range_space": sample_scaled[:, 2],
             }
         elif self.space_dim == 2 :
+            # return {
+            #     'adv1': np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,)),
+            #     'adv2': np.random.uniform(self.lower_bound[1], self.upper_bound[1], (n,)),
+            #     'range_time': np.random.uniform(self.lower_bound[2], self.upper_bound[2], (n,)),
+            #     'range_space': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
+            # }
+
+            sampler = qmc.LatinHypercube(d=4)
+            sample = sampler.random(n)
+
+            l_bounds = self.lower_bound[:4]
+            u_bounds = self.upper_bound[:4]
+            sample_scaled = qmc.scale(sample, l_bounds, u_bounds)
+
             return {
-                'adv1': np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,)),
-                'adv2': np.random.uniform(self.lower_bound[1], self.upper_bound[1], (n,)),
-                'range_time': np.random.uniform(self.lower_bound[2], self.upper_bound[2], (n,)),
-                'range_space': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
+                "adv1": sample_scaled[:, 0],
+                "adv2": sample_scaled[:, 1],
+                "range_time": sample_scaled[:, 2],
+                "range_space": sample_scaled[:, 3],
             }
 
     def simulate(self, p, t_size, s_dim, s_size, d_size, seed=0):
