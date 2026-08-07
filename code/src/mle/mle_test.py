@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
 
-from utils import map_deepset, baseline_mae, THETA_COLORS, unique_preserve_order
+from utils import baseline_mae, THETA_COLORS
 from mle.gneiting_kernel_adv import *
 from scipy.optimize import minimize
 

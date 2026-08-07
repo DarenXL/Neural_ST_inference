@@ -335,7 +335,7 @@ class GenericSimulationDataset(Dataset):
 
         theta_vec = self.get_theta_tensor()[idx]
 
-        return (torch.from_numpy(batch), theta_vec)
+        return (torch.from_numpy(batch), theta_vec.unsqueeze(0))
 
 
 class NlsSimulationDataset(GenericSimulationDataset):
@@ -349,7 +349,8 @@ class NlsSimulationDataset(GenericSimulationDataset):
     def __len__(self):
         return 2 * self.theta_size
 
-    def get_data_theta_classi(self, idx):
+    def __getitem__(self, idx):
+
         is_perm = idx // self.theta_size
         sample_idx = idx % self.theta_size
 
@@ -360,86 +361,8 @@ class NlsSimulationDataset(GenericSimulationDataset):
         if is_perm == 0:
             theta = self.all_thetas[sample_idx]
         else:
-            fake_indices = self.pi[:, sample_idx]
-            theta = self.all_thetas[fake_indices]
+            theta = self.all_thetas[self.pi[sample_idx]]
 
-        classi = is_perm
+        classi = torch.tensor([is_perm])
 
-        return torch.from_numpy(batch), theta, classi
-
-    def __getitem__(self, idx):
-
-        # print(batch.shape)
-
-        if not self.simu_nls :
-            return self.get_data_theta_classi(idx)
-        else :
-
-            is_perm = idx // self.theta_size
-            sample_idx = idx % self.theta_size
-
-            full_batch = np.load(f"{self.path}/samples/sample_{sample_idx}.npy")
-            deepset_size = torch.randint(
-                low=self.min_deepset_size, high=self.max_deepset_size, size=(1,) # pb quand self.min_deepset_size == high=self.max_deepset_size
-            ).item()
-            deepset_idx = torch.randperm(self.max_deepset_size)
-            batch = full_batch[deepset_idx[:deepset_size]]
-
-            if deepset_size == 1:
-                batch = np.expand_dims(batch, axis=0)
-
-            # print(batch.shape, deepset_size, deepset_idx)
-
-            batch = add_missing_mask(batch, self.missing_ratio)
-
-            if is_perm == 0:
-
-                # theta = full_batch[deepset_idx[deepset_size:]]
-                # if deepset_size == self.max_deepset_size-1:
-                #     theta = np.expand_dims(theta, axis=0)
-                # print(is_perm, theta.shape)
-                # theta = np.expand_dims(theta, axis=0)
-                # theta = torch.from_numpy(np.tile(theta, (deepset_size,1,1,1,1)))
-
-                theta = np.concatenate(
-                        [
-                            np.load(
-                                f"{self.path}/samples/sample_{sample_idx}.npy"
-                            )[deepset_idx[deepset_size:]]
-                            for i in range(deepset_size)
-                        ]
-                    )
-
-                # print(is_perm, theta.shape)
-            else:
-
-                theta = np.concatenate(
-                        [
-                            np.load(
-                                f"{self.path}/samples/sample_{self.pi[0,sample_idx]}.npy"
-                            )[deepset_idx[deepset_size:]]
-                            for i in range(deepset_size)
-                        ]
-                    )
-                # print(is_perm, theta.shape)
-
-            theta = torch.from_numpy(theta)
-            if len(theta.shape) == 3 :
-                theta = theta.unsqueeze(dim=1)
-            theta = torch.cat((theta, torch.ones_like(theta)),dim=1)
-            # print(theta.shape)
-
-            # print(torch.ones(deepset_size * (self.max_deepset_size - deepset_size), dtype=int) * sample_idx,
-            #     torch.arange(deepset_size).repeat_interleave(self.max_deepset_size - deepset_size))
-
-            deepset = torch.stack(
-                (torch.ones(deepset_size * (self.max_deepset_size - deepset_size), dtype=int) * idx, # sample_idx,
-                torch.arange(deepset_size).repeat_interleave(self.max_deepset_size - deepset_size)),
-            ).T
-            # print(deepset)
-
-            classi = torch.full((deepset_size,), is_perm, dtype=torch.int64)
-
-            # print()
-
-            return torch.from_numpy(batch), theta, deepset, classi
+        return torch.from_numpy(batch), theta.unsqueeze(0), classi

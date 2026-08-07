@@ -5,7 +5,7 @@ from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
 
-def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, deepset_size=5, seed=0):
+def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, range_time, range_space, seed=0):
 
     ns = 4000 # 5000
     model = get_gst_model(space_dim, adv, range_time, range_space)
@@ -17,9 +17,9 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
             dx=[1. / space_size, 1. / time_size]
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, deepset_size, seed, ns) # np.random.randint(1000000)
+        gl.simuSpectral(None, dbgrid, model, None, 1, seed, ns) # np.random.randint(1000000)
 
-        batch = np.stack([dbgrid[i].reshape((space_size, time_size), order='F') for i in range(3, 3+deepset_size)]).transpose(0, 2, 1)
+        batch = np.stack([dbgrid[i].reshape((space_size, time_size), order='F') for i in range(3, 4)]).transpose(0, 2, 1)
 
     elif space_dim == 2 :
 
@@ -28,13 +28,13 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, adv, r
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, deepset_size, seed, ns
+            None, dbgrid, model, None, 1, seed, ns
         )
 
         batch = np.stack(
             [
                 dbgrid[i].reshape((space_size, space_size, time_size), order="F")
-                for i in range(4, 4+deepset_size)
+                for i in range(4, 5)
             ]
         ).transpose(0, 3, 2, 1)
 
@@ -204,14 +204,12 @@ class GneitingAdvModel(SimulationModel):
             return _simulate_gneiting_matern_grid_func(
                 t_size, s_dim, s_size,
                 p['adv'], p['range_time'], p['range_space'],
-                deepset_size=d_size,
                 seed=seed
             )
         elif self.space_dim == 2 :
             return _simulate_gneiting_matern_grid_func(
                 t_size, s_dim, s_size,
                 [p['adv1'], p['adv2']], p['range_time'], p['range_space'],
-                deepset_size=d_size,
                 seed=seed,
             )
 

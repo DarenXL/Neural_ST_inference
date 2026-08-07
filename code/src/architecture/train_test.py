@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
 
-from utils import map_deepset, baseline_mae, THETA_COLORS, unique_preserve_order
+from utils import baseline_mae, THETA_COLORS
 from scipy.optimize import minimize
 from scipy.stats import chi2
 
@@ -126,7 +126,7 @@ class Trainer:
                 train_loader, test_loader, nb_epochs, freq_epochs_test
             )
 
-    def test(self, test_loader, dataset_gridsearch=None, merge_test_deepset=False):
+    def test(self, test_loader, dataset_gridsearch=None):
         """"
         Test the neural network.
         keeps track of the datasets used.
@@ -146,7 +146,7 @@ class Trainer:
             # return self.test_nls_optim(test_loader)
             return self.test_nls_MCMC(test_loader)
         else:
-            return self.test_quantiles(test_loader, merge_test_deepset=merge_test_deepset)
+            return self.test_quantiles(test_loader)
 
     def train_quantiles(
         self, train_loader, test_loader, nb_epochs, freq_epochs_test, print_result=False
@@ -172,18 +172,15 @@ class Trainer:
 
             epoch_full_errors = []
 
-            for i, (batched_data, theta, deepset) in enumerate(train_loader):
+            for i, (batched_data, theta) in enumerate(train_loader):
                 self.optimizer.zero_grad()
                 for opt in self.quantile_optimizer:
                     opt.zero_grad()
 
                 batched_data = batched_data.to(self.device, non_blocking=True).float()
                 theta = theta.to(self.device, non_blocking=True)
-                deepset = deepset.to(self.device, non_blocking=True)
 
-                deepset_mapped, theta = map_deepset(deepset, theta, self.device)
-
-                base_output = self.network(batched_data, deepset_mapped)
+                base_output = self.network(batched_data)
 
                 loss_median = MAE(base_output, theta)
 
@@ -192,14 +189,14 @@ class Trainer:
                 current_out = base_output
                 for idx in self.lower_indices:
                     q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(batched_data, deepset_mapped))
+                    delta = torch.exp(q_net(batched_data))
                     current_out = current_out - delta
                     all_outputs[self.quantiles[idx]] = current_out
 
                 current_out = base_output
                 for idx in self.upper_indices:
                     q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(batched_data, deepset_mapped))
+                    delta = torch.exp(q_net(batched_data))
                     current_out = current_out + delta
                     all_outputs[self.quantiles[idx]] = current_out
 
@@ -235,19 +232,11 @@ class Trainer:
                 test_errors_list = []
 
                 with torch.no_grad():
-                    for data_test, theta_test, deepset_test in test_loader:
+                    for data_test, theta_test in test_loader:
                         data_test = data_test.to(self.device, non_blocking=True).float()
                         theta_test = theta_test.to(self.device, non_blocking=True)
 
-                        # deepset_test = deepset_test.to(self.device)
-                        # deepset_mapped_test, theta_test = map_deepset(
-                        #     deepset_test, theta_test, self.device
-                        # )
-                        # output = self.network(data_test, deepset_mapped_test)
-
-                        output = self.network(
-                            data_test, torch.arange(len(deepset_test)).to(self.device)
-                        )
+                        output = self.network(data_test)
 
                         errors = torch.abs(output - theta_test)
                         test_errors_list.append(errors.detach())
@@ -344,7 +333,7 @@ class Trainer:
             bbox_inches="tight",
         )
 
-    def test_quantiles(self, loader_test, merge_test_deepset=False):
+    def test_quantiles(self, loader_test):
         all_loss_test = []
         all_theta_final = []
         all_true_theta = []
@@ -368,19 +357,11 @@ class Trainer:
         )
 
         with torch.no_grad():
-            for i, (data_test, theta_test, deepset_test) in enumerate(t):
+            for i, (data_test, theta_test) in enumerate(t):
                 data_test = data_test.to(self.device, non_blocking=True).float()
                 theta_test = theta_test.to(self.device, non_blocking=True)
 
-                if merge_test_deepset:
-                    deepset_test = deepset_test.to(self.device, non_blocking=True)
-
-                    deepset_mapped, theta_test = map_deepset(
-                        deepset_test, theta_test, self.device
-                    )
-                    base_output = self.network(data_test, deepset_mapped)
-                else :
-                    base_output = self.network(data_test, torch.arange(len(deepset_test)).to(self.device))
+                base_output = self.network(data_test)
 
                 loss = torch.abs(base_output - theta_test).detach()
                 theta_final = base_output.detach()
@@ -388,14 +369,14 @@ class Trainer:
                 current_out = base_output
                 for idx in self.lower_indices:
                     q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(data_test, torch.arange(len(deepset_test)).to(self.device)))
+                    delta = torch.exp(q_net(data_test))
                     current_out = current_out - delta
                     all_quantiles[self.quantiles[idx]].append(current_out)
 
                 current_out = base_output
                 for idx in self.upper_indices:
                     q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(data_test, torch.arange(len(deepset_test)).to(self.device)))
+                    delta = torch.exp(q_net(data_test))
                     current_out = current_out + delta
                     all_quantiles[self.quantiles[idx]].append(current_out)
 
@@ -512,21 +493,13 @@ class Trainer:
             for i, batch in enumerate(train_loader):
                 self.optimizer.zero_grad()
 
-                if self.network.nls_sim :
-                    batched_data, theta, deepset, classi = batch
-                    deepset = deepset.to(self.device, non_blocking=True)
-                    _, deepset_mapped = torch.unique_consecutive(
-                        deepset, return_inverse=True, dim=0
-                    )
-                else :
-                    batched_data, theta, classi = batch
-                    deepset_mapped=None
+                batched_data, theta, classi = batch
 
                 batched_data = batched_data.to(self.device, non_blocking=True).float()
                 theta = theta.to(self.device, non_blocking=True)
                 classi = classi.float().to(self.device, non_blocking=True)
 
-                output = self.network(batched_data, deepset=deepset_mapped, theta=theta).squeeze()
+                output = self.network(batched_data, theta=theta).squeeze()
 
                 loss = CE(output, classi).mean()
 
@@ -574,12 +547,12 @@ class Trainer:
             bbox_inches="tight",
         )
 
-    def _nls_optim(self, data, theta0, activation=lambda x: x, deepset=None):
+    def _nls_optim(self, data, theta0, activation=lambda x: x):
 
         def obj(theta):
             theta_t = activation(theta.unsqueeze(0).to(self.device))
             # theta_t = theta.unsqueeze(0).to(self.device)
-            h = self.network(data, deepset, theta=theta_t)
+            h = self.network(data, theta=theta_t)
             logL = h # h[:, 1] - h[:, 0]
             return logL
 
@@ -618,12 +591,7 @@ class Trainer:
         t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
 
         for i, batch in enumerate(t):
-            if self.network.nls_sim :
-                data_batch, theta_batch, deepset_batch, classi_batch = batch
-                deepset_batch = unique_preserve_order(deepset_batch)
-            else :
-                data_batch, theta_batch, classi_batch = batch
-                deepset_batch = None
+            data_batch, theta_batch, classi_batch = batch
 
             data_batch = data_batch.to(self.device, non_blocking=True).float()
             true_theta_batch = theta_batch.to(self.device, non_blocking=True)
@@ -634,14 +602,10 @@ class Trainer:
                     continue
 
                 data_single = data_batch[j].unsqueeze(0)
-                if not(deepset_batch is None):
-                    deepset_single = deepset_batch[j].unsqueeze(0)
-                else :
-                    deepset_single = None
                 true_theta_single = true_theta_batch[j]
 
                 output, output_not_nan = self._nls_optim(
-                    data_single, theta0_latent, activation, deepset=deepset_single
+                    data_single, theta0_latent, activation
                 )
 
                 loss = torch.abs(output - true_theta_single).detach()
@@ -723,7 +687,7 @@ class Trainer:
         t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
 
         for i, batch in enumerate(t):
-            data_batch, theta_batch, _ = batch
+            data_batch, theta_batch = batch
             data_batch = data_batch.to(self.device).float()
 
             # mcmc.run(data_batch, lower_bound, upper_bound)
@@ -801,231 +765,3 @@ class Trainer:
         self._save_results(results)
 
         return results
-
-    def test_nls_grid(self, loader_test, dataset_gridsearch):
-
-        with torch.no_grad():
-
-            all_loss_test = []
-            all_theta_final = []
-            all_true_theta = []
-
-            model_ref = loader_test.dataset.model
-            simu_nls = self.network.nls_sim # self.train_dataset_hist[-1].simu_nls
-
-            time_start = time.time()
-
-            t = tqdm(loader_test, total=len(loader_test)//2, desc="Inference NLS")
-
-            for i, batch in enumerate(t):
-                data_batch, theta_batch, _ = batch
-                deepset_batch = torch.arange(len(data_batch),dtype=int).to(self.device, non_blocking=True)
-
-                data_batch = data_batch.to(self.device, non_blocking=True).float()
-                theta_batch = theta_batch.to(self.device, non_blocking=True)
-
-                batch_size = data_batch.shape[0]
-                max_logl = torch.full((batch_size,), float("-inf"), device=self.device)
-                max_theta = torch.zeros((batch_size, dataset_gridsearch.get_theta_tensor().shape[1]), dtype=torch.float64, device=self.device)
-
-                for k in range(len(dataset_gridsearch)):  # //2 if N
-
-                    current_theta = dataset_gridsearch.get_theta_tensor()[k].to(self.device, non_blocking=True)
-
-                    if simu_nls:
-                        simu, _ = dataset_gridsearch.get_grid(
-                            k, deepset_size=dataset_gridsearch.max_deepset_size
-                        )
-                        simu = torch.from_numpy(simu).to(self.device, non_blocking=True)
-                        simu = torch.concatenate((simu, torch.ones_like(simu)), dim=1)
-                        # simu = simu.repeat(batch_size, *([1] * (simu.ndim -1)))
-                        simu = simu.unsqueeze(0).expand(batch_size, *([-1] * (simu.ndim))).reshape(-1, *simu.shape[1:])
-                        h = self.network(
-                            data_batch,
-                            deepset=deepset_batch.repeat_interleave(dataset_gridsearch.max_deepset_size),
-                            theta=simu,
-                        )
-                    else:
-                        h = self.network(
-                            data_batch,
-                            theta=current_theta.unsqueeze(0).repeat((batch_size,1)),
-                        )
-
-                    logl = (h[:, 0] - h[:, 1]).detach()
-                    mask = logl > max_logl
-                    max_logl[mask] = logl[mask]
-                    max_theta[mask] = current_theta.detach()
-
-                loss = torch.abs(max_theta - theta_batch).detach()
-                theta_final = max_theta.detach()
-
-                all_loss_test.append(loss)
-                all_theta_final.append(theta_final)
-                all_true_theta.append(theta_batch.detach())
-
-            time_total = time.time() - time_start
-
-            full_loss_tensor = torch.cat(all_loss_test, dim=0)
-            all_theta_final = torch.cat(all_theta_final, dim=0)
-            all_true_theta = torch.cat(all_true_theta, dim=0)
-
-            mean_loss = full_loss_tensor.mean(dim=0)
-            std_loss = full_loss_tensor.std(dim=0)
-
-            results = {
-                "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-                "test_time": time_total,
-                "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
-                "true_all_theta": all_true_theta,
-            }
-            self._save_results(results)
-
-            return results
-
-    def test_nls_grid_quantiles(self, loader_test, dataset_gridsearch):
-
-        plt.show()
-
-        with torch.no_grad():
-
-            all_loss_test = []
-            all_theta_final = []
-            all_true_theta = []
-            all_max_logl = []
-
-            all_mask_quantile = {}
-            count_true_quantile = {}
-            for q in self.quantiles:
-                all_mask_quantile[q] = []
-                count_true_quantile[q] = 0
-
-            model_ref = loader_test.dataset.model
-            simu_nls = self.network.nls_sim  # self.train_dataset_hist[-1].simu_nls
-            print("simu_nls", simu_nls)
-
-            time_start = time.time()
-
-            t = tqdm(loader_test, total=len(loader_test) // 2, desc="Inference NLS")
-
-            for i, batch in enumerate(t):
-                data_batch, theta_batch, _ = batch
-                deepset_batch = torch.arange(len(data_batch), dtype=int).to(self.device, non_blocking=True)
-
-                data_batch = data_batch.to(self.device, non_blocking=True).float()
-                theta_batch = theta_batch.to(self.device, non_blocking=True)
-
-                batch_size = data_batch.shape[0]
-                max_logl = torch.full((batch_size,), float("-inf"), device=self.device)
-                max_theta = torch.zeros(
-                    (batch_size, dataset_gridsearch.get_theta_tensor().shape[1]),
-                    dtype=torch.float64,
-                    device=self.device,
-                )
-
-                surface = []
-
-                for k in range(len(dataset_gridsearch)):  # //2 if N
-
-                    current_theta = dataset_gridsearch.get_theta_tensor()[k].to(
-                        self.device
-                    )
-
-                    if simu_nls:
-                        simu, _ = dataset_gridsearch.get_grid(
-                            k, deepset_size=dataset_gridsearch.max_deepset_size
-                        )
-                        simu = torch.from_numpy(simu).to(self.device)
-                        simu = torch.concatenate((simu, torch.ones_like(simu)), dim=1)
-                        # simu = simu.repeat(batch_size, *([1] * (simu.ndim -1)))
-                        simu = (
-                            simu.unsqueeze(0)
-                            .expand(batch_size, *([-1] * (simu.ndim)))
-                            .reshape(-1, *simu.shape[1:])
-                        )
-                        h = self.network(
-                            data_batch,
-                            deepset=deepset_batch.repeat_interleave(
-                                dataset_gridsearch.max_deepset_size
-                            ),
-                            theta=simu,
-                        )
-                    else:
-                        h = self.network(
-                            data_batch,
-                            theta=current_theta.unsqueeze(0).repeat((batch_size, 1)),
-                        )
-
-                    logl = -h.squeeze(0).detach() # (h[:, 0] - h[:, 1]).detach()
-                    surface.append(logl)
-
-                    mask = logl > max_logl
-                    max_logl[mask] = logl[mask]
-                    max_theta[mask] = current_theta.detach()
-
-                loss = torch.abs(max_theta - theta_batch).detach()
-                theta_final = max_theta.detach()
-
-                all_max_logl.append(max_logl.detach())
-                all_loss_test.append(loss)
-                all_theta_final.append(theta_final)
-                all_true_theta.append(theta_batch.detach())
-
-                surface = torch.cat(surface, dim=0)
-                # for q in self.quantiles:
-                #     mask_quantile = 2 * (
-                #         max_logl.detach().cpu() - surface.detach().cpu()
-                #     ) <= chi2.isf(1 - q, len(theta_batch[0]))
-                #
-                #     all_mask_quantile[q].append(mask_quantile)
-                #
-                # h_true_theta = self.network(
-                #             data_batch,
-                #             theta=theta_batch,
-                #         )
-                # logl_true_theta = -h_true_theta.detach()
-                #
-                # for q in self.quantiles:
-                #     count_true_quantile[q] += (2 * (
-                #         max_logl.detach().cpu() - logl_true_theta.detach().cpu()
-                #     )) <= chi2.isf(1 - q, len(theta_batch[0]))
-
-                # plt.scatter(dataset_gridsearch.get_theta_tensor()[:,0],dataset_gridsearch.get_theta_tensor()[:,1], c=surface)
-                # # plt.scatter(
-                # #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 0],
-                # #     dataset_gridsearch.get_theta_tensor()[mask_quantile, 1],
-                # #     edgecolors="black",
-                # #     linewidths=1,
-                # #     facecolors="none",
-                # #     s=50,
-                # #     label="Quantile",
-                # # )
-                # plt.scatter(theta_batch[0,0],theta_batch[0,1],c='black',marker='x')
-                # plt.scatter(theta_final[0,0], theta_final[0,1], c="red", marker="x")
-                # plt.show()
-
-            time_total = time.time() - time_start
-
-            full_loss_tensor = torch.cat(all_loss_test, dim=0)
-            all_theta_final = torch.cat(all_theta_final, dim=0)
-            all_true_theta = torch.cat(all_true_theta, dim=0)
-            all_max_logl = torch.cat(all_max_logl, dim=0)
-
-            # for q in self.quantiles:
-            #     all_mask_quantile[q] = torch.cat(all_mask_quantile[q], dim=0)
-            #     print(q,count_true_quantile[q], count_true_quantile[q]/len(all_true_theta))
-            #     print(all_mask_quantile[q].sum())
-
-            mean_loss = full_loss_tensor.mean(dim=0)
-            std_loss = full_loss_tensor.std(dim=0)
-
-            results = {
-                "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-                "test_time": time_total,
-                "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
-                "true_all_theta": all_true_theta,
-                "all_max_logl":all_max_logl,
-            }
-            self.test_time += time_total
-            self._save_results(results)
-
-            return results

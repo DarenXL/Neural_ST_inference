@@ -493,8 +493,7 @@ def visualise_output(trainer, res_path, nb_examples=2, num_dataset=0, k=0, mask=
 
         theta_pred = (
             trainer.network(
-                masked_sample.unsqueeze(0).float(),
-                deepset=torch.tensor([0]),
+                masked_sample.unsqueeze(0).float()
             )[0]
             .detach()
             .numpy()
@@ -634,15 +633,6 @@ def visualise_output_alt(trainer, res_path, nb_examples=2, num_dataset=0, k=0, m
         )
 
         theta_pred = true_all_theta[i+k].detach().cpu().numpy() * (1 + np.random.normal(0, 0.15, size=true_theta.shape)) # all_theta_pred[i+k].detach().cpu().numpy()
-
-        # theta_pred = (
-        #     trainer.network(
-        #         masked_sample.unsqueeze(0).float(),
-        #         deepset=torch.tensor([0]),
-        #     )[0]
-        #     .detach()
-        #     .numpy()
-        # )
 
         # sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
         sample_uncond = dataset.generate_from_theta(theta_pred)[0][0]

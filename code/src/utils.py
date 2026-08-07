@@ -270,8 +270,8 @@ def collate(batch: np.ndarray):
 
     data[:, 0][data[:, 1] == 1] = 0
 
-    if len(zipped) == 4:
-        classi = torch.cat(zipped[3], dim=0)
+    if len(zipped) == 3:
+        classi = torch.cat(zipped[2], dim=0)
         return data, theta, classi
 
     return data, theta
