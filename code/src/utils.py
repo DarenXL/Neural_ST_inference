@@ -252,60 +252,29 @@ def show_mask(outshape, dim=1, lambda_p = (3, 3, 12, 12), lambda_d = (3, 12, 3, 
 
 def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
     """Concatenate each element of a batch with a mask based on Poisson Sampling"""
-    deepset_size = batch.shape[0]
     space_size = batch.shape[-1]
 
     mask = np.ones_like(batch)
 
-    for i in range(deepset_size):
-
-        mask[i, :, :, create_mask(space_size, 1 if len(batch.shape) == 4 else 2, missing_ratio)] = 0
+    mask[:, :, :, create_mask(space_size, 1 if len(batch.shape) == 4 else 2, missing_ratio)] = 0
 
     return np.concatenate([batch, mask], axis=1)
 
 
-def deepset_collate(batch: np.ndarray):
-    """used in the loader to merge batch and deepset dimensions"""
+def collate(batch: np.ndarray):
+    """used in the loader to merge batch"""
     zipped = list(zip(*batch))
 
     data = torch.cat(zipped[0], dim=0)
     theta = torch.cat(zipped[1], dim=0)
-    deepset = torch.cat(zipped[2], dim=0)
 
     data[:, 0][data[:, 1] == 1] = 0
 
     if len(zipped) == 4:
         classi = torch.cat(zipped[3], dim=0)
-        return data, theta, deepset, classi
+        return data, theta, classi
 
-    return data, theta, deepset
-
-# def deepset_collate_noise(batch: np.ndarray):
-#     """used in the loader to merge batch and deepset dimensions"""
-#     data_list, theta_list, deepset_list = zip(*batch)
-#
-#     data = torch.cat(data_list, dim=0).repeat([5,1,1,1])
-#     theta = torch.cat(theta_list, dim=0).repeat([5,1])
-#     deepset = torch.cat(deepset_list, dim=0).repeat(5)
-#
-#     noise = torch.rand(data.shape, dtype=data.dtype, device=data.device) - 0.5
-#     data[:, 0][data[:, 1] == 1] = noise[:, 0][data[:, 1] == 1]
-#     data = data[:,0].unsqueeze(1)
-#
-#     return data, theta, deepset
-#
-# def deepset_collate_noise_mask(batch: np.ndarray):
-#     """used in the loader to merge batch and deepset dimensions"""
-#     data_list, theta_list, deepset_list = zip(*batch)
-#
-#     data = torch.cat(data_list, dim=0).repeat([5,1,1,1])
-#     theta = torch.cat(theta_list, dim=0).repeat([5, 1])
-#     deepset = torch.cat(deepset_list, dim=0).repeat(5)
-#
-#     noise = torch.rand(data.shape, dtype=data.dtype, device=data.device) - 0.5
-#     data[:, 0][data[:, 1] == 1] = noise[:, 0][data[:, 1] == 1]
-#
-#     return data, theta, deepset
+    return data, theta
 
 
 def show_example(dataset, data_path: Path, k=0, label="example"):
@@ -558,34 +527,6 @@ def unique_preserve_order(x: torch.Tensor) -> torch.Tensor:
     return x[sorted_indices]
 
 
-def map_deepset(
-    deepset: torch.Tensor, theta: torch.Tensor, device
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Adjusts the shape of theta to be equal to the output of the neural network after deepset"""
-
-    # unique_ds = unique_preserve_order(deepset)
-    #
-    # deepset_mapped = torch.tensor(
-    #     [unique_ds.tolist().index(int(ds)) for ds in deepset], device=device
-    # )
-    #
-    # theta = torch.stack([theta[deepset == v][0] for v in unique_ds])
-    #
-    # return deepset_mapped, theta
-
-    unique_ds, deepset_mapped = torch.unique_consecutive(
-        deepset, return_inverse=True, dim=0
-    )
-
-    mask = torch.cat(
-        [torch.tensor([True], device=deepset.device), deepset[1:] != deepset[:-1]]
-    )
-
-    theta_reduced = theta[mask]
-
-    return deepset_mapped, theta_reduced
-
-
 def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
     """Create a baseline based on the generated theta"""
     all_thetas = dataset.get_theta_tensor()
@@ -597,22 +538,6 @@ def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
     mae = torch.mean(torch.abs(preds - all_thetas), dim=0)
 
     return mae, theta_mean
-
-
-def global_mean_pool(x: torch.Tensor, deepset: torch.Tensor) -> torch.Tensor:
-    """Apply deepset on summary statistics"""
-    num_groups = deepset.max().item() + 1
-    out = torch.zeros(num_groups, x.size(1), device=x.device)
-    out.index_add_(0, deepset, x)
-    counts = torch.bincount(deepset).to(x.device).float().unsqueeze(1)
-    return out / counts
-
-    # unique_keys, inverse_indices = torch.unique(deepset, dim=0, return_inverse=True)
-    # num_groups = unique_keys.size(0)
-    # out = torch.zeros(num_groups, x.size(1), device=x.device, dtype=x.dtype)
-    # out.index_add_(0, inverse_indices, x)
-    # counts = torch.bincount(inverse_indices, minlength=num_groups).to(x.dtype)
-    # return out / counts.unsqueeze(1)
 
 def format_seconds(s: float) -> str:
     """Times in second to h-m-s format"""

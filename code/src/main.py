@@ -55,7 +55,6 @@ freq_epochs_test = 10
 time_size = 30
 space_dim = 1
 space_size = 30
-max_deepset_size = 1
 missing_ratios = [0.8] # 0.94,0.96, 0.98
 
 # Amount of data
@@ -79,7 +78,7 @@ if __name__ == '__main__':
 
     dataset_train = GenericSimulationDataset.load(data_path / "train", model)
     loader_train = DataLoader(
-        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate
+        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate
     )
 
     datasets_test = []
@@ -94,7 +93,7 @@ if __name__ == '__main__':
 
         datasets_test.append(dataset)
         loaders_test.append(
-            DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=deepset_collate,num_workers=4,pin_memory=True)
+            DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=collate, num_workers=4, pin_memory=True)
         )
 
         # sum = 0
@@ -120,7 +119,6 @@ if __name__ == '__main__':
     #     time_size=time_size,
     #     space_dim=space_dim,
     #     space_size=space_size,
-    #     max_deepset_size=max_deepset_size,
     #     missing_ratio=None,
     # )
     #
@@ -135,7 +133,7 @@ if __name__ == '__main__':
     #     dataset_train,
     #     batch_size=batch_size,
     #     shuffle=True,
-    #     collate_fn=deepset_collate,
+    #     collate_fn=collate,
     #     num_workers=4,
     #     pin_memory=True,
     # )
@@ -148,7 +146,6 @@ if __name__ == '__main__':
     #     time_size=time_size,
     #     space_dim=space_dim,
     #     space_size=space_size,
-    #     max_deepset_size=max_deepset_size,
     #     missing_ratio=None,
     # )
     # dataset_test.generate(data_path / "test", 42+train_size*10)
@@ -163,7 +160,7 @@ if __name__ == '__main__':
     #
     #     datasets_test.append(dataset)
     #     loaders_test.append(
-    #         DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=deepset_collate,    num_workers=4,
+    #         DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=collate,    num_workers=4,
     #         pin_memory=True)
     #     )
     #
@@ -261,7 +258,7 @@ if __name__ == '__main__':
     #
     # dataset_train_nls = NlsSimulationDataset(dataset_train, simu_nls=False)
     # loader_train_nls = DataLoader(
-    #     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=deepset_collate,
+    #     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=collate,
     #     num_workers=4,
     #     pin_memory=True
     # )

@@ -12,13 +12,12 @@ import gstlearn as gl
 import matplotlib.pyplot as plt
 
 
-def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim, space_size, max_deepset_size, samples_dir, seed):
+def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim, space_size, samples_dir, seed):
     batch = model_instance.simulate(
         theta_i,
         time_size,
         space_dim,
         space_size,
-        max_deepset_size,
         seed,
     )
     np.save(f"{samples_dir}/sample_{idx}.npy", batch)
@@ -32,8 +31,6 @@ class GenericSimulationDataset(Dataset):
         time_size=40,
         space_dim=1,
         space_size=40,
-        min_deepset_size=1,
-        max_deepset_size=5,
         missing_ratio=0,
     ):
         self.model = model
@@ -41,8 +38,6 @@ class GenericSimulationDataset(Dataset):
         self.time_size = time_size
         self.space_dim = space_dim
         self.space_size = space_size
-        self.min_deepset_size = max(min_deepset_size, 1)
-        self.max_deepset_size = max_deepset_size
         self.missing_ratio = missing_ratio
 
         self.path = None
@@ -66,8 +61,6 @@ class GenericSimulationDataset(Dataset):
                 "space_dim": self.space_dim,
                 "space_size": self.space_size,
                 "theta_size": self.theta_size,
-                "min_deepset_size": self.min_deepset_size,
-                "max_deepset_size": self.max_deepset_size,
                 "missing_ratio": self.missing_ratio,
                 "time_generation": self.time_generation,
                 "model_class": self.model.__class__.__name__,
@@ -89,8 +82,6 @@ class GenericSimulationDataset(Dataset):
             time_size=config["time_size"],
             space_dim=config["space_dim"],
             space_size=config["space_size"],
-            min_deepset_size=config["min_deepset_size"],
-            max_deepset_size=config["max_deepset_size"],
             missing_ratio=config["missing_ratio"],
         )
 
@@ -125,7 +116,6 @@ class GenericSimulationDataset(Dataset):
                     self.time_size,
                     self.space_dim,
                     self.space_size,
-                    self.max_deepset_size,
                     samples_dir,
                     worker_seed,
                 )
@@ -159,7 +149,6 @@ class GenericSimulationDataset(Dataset):
     #             self.time_size,
     #             self.space_dim,
     #             self.space_size,
-    #             self.max_deepset_size,
     #         )
     #
     #         np.save(f"{path}/samples/sample_{idx}.npy", batch)
@@ -188,7 +177,7 @@ class GenericSimulationDataset(Dataset):
     def get_min_max(self, k:list[int]):
         all_values = []
         for ki in k:
-            batch, _ = self.get_grid(ki, deepset_size=self.max_deepset_size)
+            batch = self.get_grid(ki)
             all_values.append(batch[:, 0])
 
         combined_data = np.stack(all_values)
@@ -200,7 +189,7 @@ class GenericSimulationDataset(Dataset):
 
     def show(self, ax, idx: int, mask: np.ndarray = None, sample_idx: int = 0, time_idx: int = 0):
         """Show a gaussian field"""
-        batch, _ = self.get_grid(idx, deepset_size=1, shuffle=False)
+        batch = self.get_grid(idx, shuffle=False)
         theta = self.get_theta_tensor()[idx]
 
         title_text = self.model.to_title(theta, alt_format=True)
@@ -332,54 +321,30 @@ class GenericSimulationDataset(Dataset):
 
         return self.model.get_likelihood(coords_obs, y_obs, theta)
 
-    def get_grid(self, idx, deepset_size=None, shuffle=True):
+    def get_grid(self, idx, shuffle=True):
         """Load the sample idx"""
         batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
 
-        if deepset_size is None :
-            deepset_size = torch.randint(
-                low=self.min_deepset_size, high=self.max_deepset_size + 1, size=(1,)
-            ).item()
-        deepset_idx = torch.randperm(self.max_deepset_size)[:deepset_size]
-
-        if shuffle :
-            batch = batch[deepset_idx]
-            if deepset_size == 1:
-                batch = np.expand_dims(batch, axis=0)
-        else :
-            batch = batch[np.arange(deepset_size)]
-
-        return batch, deepset_idx
+        return batch
 
     def __getitem__(self, idx):
 
-        batch, deepset_idx = self.get_grid(idx)
-        deepset_size = len(deepset_idx)
+        batch = self.get_grid(idx)
 
         batch = add_missing_mask(batch, self.missing_ratio)
 
         theta_vec = self.get_theta_tensor()[idx]
 
-        theta_tiled = theta_vec.tile(deepset_size, 1)
-
-        deepset = torch.ones(deepset_size, dtype=int) * idx
-
-        return (torch.from_numpy(batch), theta_tiled, deepset)
+        return (torch.from_numpy(batch), theta_vec)
 
 
 class NlsSimulationDataset(GenericSimulationDataset):
-    def __init__(self, dataset: GenericSimulationDataset, simu_nls=False):
+    def __init__(self, dataset: GenericSimulationDataset):
         self.__dict__ = dataset.__dict__.copy()
 
         self.all_thetas = self.get_theta_tensor()
-        self.simu_nls = simu_nls
 
-        self.pi = torch.stack(
-            [
-                torch.randint(0, self.theta_size, (self.theta_size,))
-                for _ in range(self.max_deepset_size)
-            ]
-        )
+        self.pi = torch.randint(0, self.theta_size, (self.theta_size,))
 
     def __len__(self):
         return 2 * self.theta_size
@@ -388,19 +353,17 @@ class NlsSimulationDataset(GenericSimulationDataset):
         is_perm = idx // self.theta_size
         sample_idx = idx % self.theta_size
 
-        batch, deepset_idx = self.get_grid(sample_idx, self.max_deepset_size)
-        deepset_size = len(deepset_idx)
+        batch = self.get_grid(sample_idx)
 
         batch = add_missing_mask(batch, self.missing_ratio)
 
         if is_perm == 0:
-            true_theta = self.all_thetas[sample_idx]
-            theta = true_theta.repeat(deepset_size, 1)
+            theta = self.all_thetas[sample_idx]
         else:
             fake_indices = self.pi[:, sample_idx]
-            theta = self.all_thetas[fake_indices][:deepset_size]
+            theta = self.all_thetas[fake_indices]
 
-        classi = torch.full((deepset_size,), is_perm, dtype=torch.int64)
+        classi = is_perm
 
         return torch.from_numpy(batch), theta, classi
 
