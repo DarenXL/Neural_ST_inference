@@ -155,6 +155,7 @@ class GneitingSepModel(SimulationModel):
 
     def simulate(self, p, t_size, s_dim, s_size, d_size, seed=0):
         assert s_dim == self.space_dim
+
         return _simulate_gneiting_matern_grid_func(
             t_size,
             s_dim,

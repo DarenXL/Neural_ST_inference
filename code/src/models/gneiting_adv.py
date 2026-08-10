@@ -198,7 +198,7 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": sample_scaled[:, 3],
             }
 
-    def simulate(self, p, t_size, s_dim, s_size, d_size, seed=0):
+    def simulate(self, p, t_size, s_dim, s_size, seed=0):
         assert s_dim == self.space_dim
         if self.space_dim == 1 :
             return _simulate_gneiting_matern_grid_func(
