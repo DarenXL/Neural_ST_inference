@@ -214,7 +214,10 @@ class GneitingAdvModel(SimulationModel):
             )
 
     def eval_cov(self, coords, y, space_dim, theta_values):
-        model = get_gst_model(self.space_dim, *theta_values)
+        if len(theta_values) == 4 :
+            model = get_gst_model(self.space_dim, theta_values[0:2], theta_values[2], theta_values[3])
+        else :
+            model = get_gst_model(self.space_dim, *theta_values)
 
         dbgrid = gl.Db.create()
         names = []
