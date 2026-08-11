@@ -7,23 +7,9 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import concurrent.futures
 from models.base import SimulationModel
-from utils import add_missing_mask, CMAP
+from utils import add_missing_mask, CMAP, create_mask
 import gstlearn as gl
 import matplotlib.pyplot as plt
-
-
-def _worker_simulate_and_save(
-    idx, theta_i, model_instance, time_size, space_dim, space_size, samples_dir, seed
-):
-    batch = model_instance.simulate(
-        theta_i,
-        time_size,
-        space_dim,
-        space_size,
-        seed,
-    )
-    np.save(f"{samples_dir}/sample_{idx}.npy", batch)
-    return idx
 
 
 class GenericSimulationDataset(Dataset):
@@ -70,13 +56,13 @@ class GenericSimulationDataset(Dataset):
             },
             "thetas": self.thetas,
         }
-        np.save(f"{path}/metadata.npy", meta)
+        torch.save(meta, f"{path}/metadata.pt")
         self.path = path
 
     @classmethod
     def load(cls, path: Path, model_instance: SimulationModel):
         """Load all attributes and the thetas"""
-        data = np.load(f"{path}/metadata.npy", allow_pickle=True).item()
+        data = torch.load(f"{path}/metadata.pt")
         config = data["config"]
 
         instance = cls(
@@ -93,6 +79,28 @@ class GenericSimulationDataset(Dataset):
         instance.path = path
 
         return instance
+
+    @staticmethod
+    def _worker_simulate_and_save(
+        idx,
+        theta_i,
+        model_instance,
+        time_size,
+        space_dim,
+        space_size,
+        samples_dir,
+        seed,
+    ):
+        batch = model_instance.simulate(
+            theta_i,
+            time_size,
+            space_dim,
+            space_size,
+            seed,
+        )
+        batch = torch.from_numpy(batch)
+        torch.save(batch, f"{samples_dir}/sample_{idx}.pt")
+        return idx
 
     def generate(self, path: Path, base_seed: int = 42):
         samples_dir = Path(path) / "samples"
@@ -112,7 +120,7 @@ class GenericSimulationDataset(Dataset):
                 worker_seed = base_seed + idx
 
                 f = executor.submit(
-                    _worker_simulate_and_save,
+                    GenericSimulationDataset._worker_simulate_and_save,
                     idx,
                     theta_i,
                     self.model,
@@ -134,6 +142,10 @@ class GenericSimulationDataset(Dataset):
                 _ = future.result()
         self.time_generation = time.time() - start_time
         self.save(path)
+
+        for idx in range(self.theta_size):
+            mask = create_mask(self.space_size, self.space_dim, self.missing_ratio)
+            torch.save(mask, f"{Path(path) / "masks"}/mask_{idx}.pt")
 
     # def generate(self, path: Path):
     #     """Generate gaussian fields on a complete grid"""
@@ -157,7 +169,7 @@ class GenericSimulationDataset(Dataset):
     #     self.time_generation = time.time() - start_time
     #     self.save(path)
 
-    def generate_one(self, idx: int) -> np.ndarray:
+    def generate_one(self, idx: int):
         """Generate one gaussian field on a complete grid and return it"""
         theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
@@ -167,7 +179,7 @@ class GenericSimulationDataset(Dataset):
 
         return batch
 
-    def generate_from_theta(self, theta_values: np.ndarray) -> np.ndarray:
+    def generate_from_theta(self, theta_values):
         theta_dict = dict(zip(self.model.param_names, theta_values))
 
         batch = self.model.simulate(
@@ -181,10 +193,10 @@ class GenericSimulationDataset(Dataset):
             batch = self.get_grid(ki)
             all_values.append(batch[:, 0])
 
-        combined_data = np.stack(all_values)
+        combined_data = torch.stack(all_values)
 
-        v_min = float(np.min(combined_data))
-        v_max = float(np.max(combined_data))
+        v_min = float(torch.min(combined_data))
+        v_max = float(torch.max(combined_data))
 
         return v_min, v_max
 
@@ -192,12 +204,12 @@ class GenericSimulationDataset(Dataset):
         self,
         ax,
         idx: int,
-        mask: np.ndarray = None,
+        mask = None,
         sample_idx: int = 0,
         time_idx: int = 0,
     ):
         """Show a gaussian field"""
-        batch = self.get_grid(idx, shuffle=False)
+        batch = self.get_grid(idx)
         theta = self.get_theta_tensor()[idx]
 
         title_text = self.model.to_title(theta, alt_format=True)
@@ -207,8 +219,8 @@ class GenericSimulationDataset(Dataset):
             img = batch[sample_idx, 0]
 
             if not (mask is None):
-                img = img.copy()
-                img[:, ~mask] = np.nan
+                img = img.clone()
+                img[:, ~mask] = torch.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1], cmap=CMAP)
             ax.set_title(title_text if (mask is None) else "", fontsize=10)
@@ -219,7 +231,7 @@ class GenericSimulationDataset(Dataset):
 
             if not (mask is None):
                 img = img.copy()
-                img[~mask] = np.nan
+                img[~mask] = torch.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
             ax.set_title(
@@ -227,72 +239,20 @@ class GenericSimulationDataset(Dataset):
                 fontsize=10,
             )
 
-    def sample_to_coord(self, sample, shuffle: int = None):
-        y, mask_obs = sample[0].reshape(-1, order="C"), np.array(
-            sample[1], dtype=bool
-        ).reshape(
-            -1, order="F"
-        )  # .T.reshape(-1,order="F")
-        # print(sample[1], mask_obs)
+    def sample_to_coord(self, sample):
+        y = sample[0].reshape(-1, order="C")
+        mask_obs = torch.tensor(sample[1], dtype=torch.bool).T.reshape(-1)
 
-        t = np.linspace(0, 1, self.time_size + 1)[:-1]
-        s = np.linspace(0, 1, self.space_size + 1)[:-1]
-        # print("S et T", s, t)
-
-        # axes = [t, s] if self.space_dim == 1 else [t, s, s]
-        axes = [s, t] if self.space_dim == 1 else [s, s, t]
-        grid = np.meshgrid(*axes, indexing="ij")
-        coords = np.stack(grid, axis=-1).reshape(-1, len(axes))
-        # print("coords", coords)
-        # print("y", y)
-
-        # print(np.sum(mask_obs))
-
-        if not (shuffle is None):
-            # idx = np.random.permutation(coords.shape[0])[~mask_obs]
-            v = np.arange(coords.shape[0])[~mask_obs]
-            v = v[np.random.permutation(len(v))]
-            v = v[0:shuffle]
-            # print(
-            #     mask_obs,
-            #     v.shape
-            # )
-            coords = coords[v, :]
-            y = y[v]
-            mask_obs = mask_obs[v]
-            # print(coords, y, mask_obs)
-
-        return coords, y, mask_obs
-
-    def sample_to_coord_torch(self, sample, shuffle: int = None, device="cuda"):
-        y_raw = torch.as_tensor(sample[0], dtype=torch.float32, device=device).reshape(
-            -1
-        )
-        mask_obs = torch.as_tensor(sample[1], dtype=torch.bool, device=device).reshape(
-            -1
-        )
-
-        t = torch.linspace(0, 1, self.time_size + 1, device=device)[:-1]
-        s = torch.linspace(0, 1, self.space_size + 1, device=device)[:-1]
+        t = torch.linspace(0, 1, self.time_size + 1)[:-1]
+        s = torch.linspace(0, 1, self.space_size + 1)[:-1]
 
         axes = [s, t] if self.space_dim == 1 else [s, s, t]
-
         grid = torch.meshgrid(*axes, indexing="ij")
         coords = torch.stack(grid, dim=-1).reshape(-1, len(axes))
 
-        if shuffle is not None:
-            valid_indices = torch.nonzero(~mask_obs, as_tuple=False).squeeze(-1)
-
-            perm = torch.randperm(valid_indices.size(0), device=device)[:shuffle]
-            selected_idx = valid_indices[perm]
-
-            coords = coords[selected_idx]
-            y = y_raw[selected_idx]
-            mask_obs = mask_obs[selected_idx]
-
         return coords, y, mask_obs
 
-    def kriging_from_sample(self, sample: np.ndarray, theta: np.ndarray) -> np.ndarray:
+    def kriging_from_sample(self, sample, theta):
         """Kriging"""
 
         coords, y, mask_obs = self.sample_to_coord(sample)
@@ -315,29 +275,28 @@ class GenericSimulationDataset(Dataset):
                 self.space_size, self.space_size, self.time_size, order="F"
             )
 
-    def get_likelihood_from_sample(self, sample: np.ndarray, theta: np.ndarray):
-
-        coords, y, mask_obs = self.sample_to_coord(sample)
-
-        y_obs = y[~mask_obs]
-        coords_obs = coords[~mask_obs]
-        # coords_miss = coords[mask_obs]
-
-        # print("get_likelihood_from_sample", coords_obs.shape)
-
-        return self.model.get_likelihood(coords_obs, y_obs, theta)
-
-    def get_likelihood(
-        self, coords_obs: np.ndarray, y_obs: np.ndarray, theta: np.ndarray
-    ):
-
-        return self.model.get_likelihood(coords_obs, y_obs, theta)
-
-    def get_grid(self, idx, shuffle=True):
+    def get_grid(self, idx):
         """Load the sample idx"""
-        batch = np.load(f"{self.path}/samples/sample_{idx}.npy")
+        return torch.load(f"{self.path}/samples/sample_{idx}.pt")
 
-        return batch
+    def get_mask(self, idx):
+        return torch.load(f"{self.path}/masks/mask_{idx}.pt")
+
+    def add_missing_mask(self, batch, idx=None):
+
+        if idx is None :
+            idx = torch.randint(0, self.theta_size, (1,))
+
+        mask = torch.ones_like(batch)
+
+        mask[
+            :,
+            :,
+            :,
+            self.get_mask(idx),
+        ] = 0
+
+        return torch.concatenate([batch, mask], dim=1)
 
     def __getitem__(self, idx):
 
@@ -347,7 +306,7 @@ class GenericSimulationDataset(Dataset):
 
         theta_vec = self.get_theta_tensor()[idx]
 
-        return (torch.from_numpy(batch), theta_vec.unsqueeze(0))
+        return (batch, theta_vec.unsqueeze(0))
 
 
 class NlsSimulationDataset(GenericSimulationDataset):
@@ -377,4 +336,4 @@ class NlsSimulationDataset(GenericSimulationDataset):
 
         classi = torch.tensor([is_perm])
 
-        return torch.from_numpy(batch), theta.unsqueeze(0), classi
+        return batch, theta.unsqueeze(0), classi

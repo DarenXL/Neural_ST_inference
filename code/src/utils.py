@@ -62,7 +62,7 @@ def create_data_path(base_path: str) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path = path / timestamp
 
-    sub_dirs = [path / "train" / "samples", path / "test"]  # / "samples"
+    sub_dirs = [path / "train" / "samples", path / "test", path / "train" / "masks", path / "test" / "masks"]  # / "samples"
 
     for sd in sub_dirs:
         sd.mkdir(parents=True, exist_ok=True)
@@ -88,7 +88,7 @@ def create_res_path(base_path: str) -> Path:
 
 def sampling_poisson_2D(
     out_shape: int, lambda_parent: float, lambda_daughter: float, radius_cluster: float
-) -> np.ndarray:
+):
     """
     Poisson Sampling
     - Chooses a number of parents according to Poisson distribution (lambdaParent)
@@ -97,10 +97,10 @@ def sampling_poisson_2D(
     - Places the daughters around their parent (radiusCluster)
     """
 
-    x_min = 0
-    x_max = 1
-    y_min = 0
-    y_max = 1
+    x_min = 0.0
+    x_max = 1.0
+    y_min = 0.0
+    y_max = 1.0
 
     r_ext = radius_cluster
     x_min_ext = x_min - r_ext
@@ -112,25 +112,26 @@ def sampling_poisson_2D(
     y_delta_ext = y_max_ext - y_min_ext
     area_total_ext = x_delta_ext * y_delta_ext
 
-    numb_points_parent = np.maximum(
-        np.random.poisson(area_total_ext * lambda_parent), 1
+    numb_points_parent = torch.clamp(
+        torch.poisson(torch.tensor([area_total_ext * lambda_parent])).int(), min=1
+    ).item()
+
+    xx_parent = x_min_ext + x_delta_ext * torch.rand(numb_points_parent)
+    yy_parent = y_min_ext + y_delta_ext * torch.rand(numb_points_parent)
+
+    numb_points_daughter = torch.clamp(
+        torch.poisson(torch.full((numb_points_parent,), float(lambda_daughter))).int(),
+        min=1,
     )
+    numb_points = torch.sum(numb_points_daughter).item()
 
-    xx_parent = x_min_ext + x_delta_ext * np.random.uniform(0, 1, numb_points_parent)
-    yy_parent = y_min_ext + y_delta_ext * np.random.uniform(0, 1, numb_points_parent)
+    theta = 2 * torch.pi * torch.rand(numb_points)
+    rho = radius_cluster * torch.sqrt(torch.rand(numb_points))
+    xx0 = rho * torch.cos(theta)
+    yy0 = rho * torch.sin(theta)
 
-    numb_points_daughter = np.maximum(
-        np.random.poisson(lambda_daughter, numb_points_parent), 1
-    )
-    numb_points = sum(numb_points_daughter)
-
-    theta = 2 * np.pi * np.random.uniform(0, 1, numb_points)
-    rho = radius_cluster * np.sqrt(np.random.uniform(0, 1, numb_points))
-    xx0 = rho * np.cos(theta)
-    yy0 = rho * np.sin(theta)
-
-    xx = np.repeat(xx_parent, numb_points_daughter)
-    yy = np.repeat(yy_parent, numb_points_daughter)
+    xx = torch.repeat_interleave(xx_parent, numb_points_daughter)
+    yy = torch.repeat_interleave(yy_parent, numb_points_daughter)
 
     xx = xx + xx0
     yy = yy + yy0
@@ -141,23 +142,26 @@ def sampling_poisson_2D(
 
     bin_size = 1.0 / out_shape
 
-    ix = np.clip((xx / bin_size).astype(np.int32), max=out_shape - 1)
-    iy = np.clip((yy / bin_size).astype(np.int32), max=out_shape - 1)
+    ix = torch.clamp((xx / bin_size).to(torch.int64), max=out_shape - 1)
+    iy = torch.clamp((yy / bin_size).to(torch.int64), max=out_shape - 1)
 
-    mask = np.zeros((out_shape, out_shape), dtype=bool)
-    mask[ix, iy] = 1
+    mask = torch.zeros((out_shape, out_shape), dtype=torch.bool)
+    mask[ix, iy] = True
 
-    if np.all(~mask):
-        mask[np.random.randint(len(mask)), np.random.randint(len(mask))] = 1
+    if torch.all(~mask):
+        mask[
+            torch.randint(0, out_shape, (1,)).item(),
+            torch.randint(0, out_shape, (1,)).item(),
+        ] = True
 
     return mask
 
 
 def sampling_poisson_1D(
     out_shape: int, lambda_parent: float, lambda_daughter: float, radius_cluster: float
-) -> np.ndarray:
-    x_min = 0
-    x_max = 1
+):
+    x_min = 0.0
+    x_max = 1.0
 
     r_ext = radius_cluster
     x_min_ext = x_min - r_ext
@@ -165,20 +169,22 @@ def sampling_poisson_1D(
 
     x_delta_ext = x_max_ext - x_min_ext
 
-    numb_points_parent = np.maximum(np.random.poisson(x_delta_ext * lambda_parent), 1)
+    numb_points_parent = torch.clamp(
+        torch.poisson(torch.tensor([x_delta_ext * lambda_parent])).int(), min=1
+    ).item()
 
-    xx_parent = x_min_ext + x_delta_ext * np.random.uniform(0, 1, numb_points_parent)
+    xx_parent = x_min_ext + x_delta_ext * torch.rand(numb_points_parent)
 
-    numb_points_daughter = np.maximum(
-        np.random.poisson(lambda_daughter, numb_points_parent), 1
+    numb_points_daughter = torch.clamp(
+        torch.poisson(torch.full((numb_points_parent,), float(lambda_daughter))).int(), min=1
     )
-    numb_points = sum(numb_points_daughter)
+    numb_points = torch.sum(numb_points_daughter).item()
 
-    theta = 2 * np.pi * np.random.uniform(0, 1, numb_points)
-    rho = radius_cluster * np.sqrt(np.random.uniform(0, 1, numb_points))
-    xx0 = rho * np.cos(theta)
+    theta = 2 * torch.pi * torch.rand(numb_points)
+    rho = radius_cluster * torch.sqrt(torch.rand(numb_points))
+    xx0 = rho * torch.cos(theta)
 
-    xx = np.repeat(xx_parent, numb_points_daughter)
+    xx = torch.repeat_interleave(xx_parent, numb_points_daughter)
 
     xx = xx + xx0
 
@@ -187,41 +193,30 @@ def sampling_poisson_1D(
 
     bin_size = 1.0 / out_shape
 
-    ix = np.clip((xx / bin_size).astype(np.int32), max=out_shape - 1)
+    ix = torch.clamp((xx / bin_size).to(torch.int64), max=out_shape - 1)
 
-    mask = np.zeros((out_shape,), dtype=bool)
-    mask[ix] = 1
+    mask = torch.zeros((out_shape,), dtype=torch.bool)
+    mask[ix] = True
 
-    if np.all(~mask):
-        mask[np.random.randint(len(mask))] = 1
+    if torch.all(~mask):
+        mask[torch.randint(0, len(mask), (1,)).item()] = True
 
     return mask
 
 
 def create_mask(
     space_size: int, space_shape: int, missing_ratio: float = None
-) -> np.ndarray:
+):
     """Create a mask based on Poisson Sampling"""
 
     if missing_ratio is None:
-        # missing_ratio = np.random.random() * 0.35 + 0.6   # space 30
-        # missing_ratio = np.random.random() * 0.08 + 0.9   # space 100
-        missing_ratio = np.random.random() * 0.25 + 0.7  # space 75x75
+        missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
 
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing
 
     if space_shape == 1:
-        # if nb_visible < (space_size + 1) // 2:
-        #     max_index = space_size - (nb_visible - 1)
-        #     base = np.random.choice(max_index, size=nb_visible, replace=False)
-        #     base = np.sort(base)
-        #     visibles = base + np.arange(nb_visible)
-        # else:
-        #     visibles = np.random.choice(space_size, size=nb_visible, replace=False)
-
         visibles = sampling_poisson_1D(space_size, nb_visible, nb_visible, 0.1)
-        # visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
     else:
         visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
 
@@ -236,15 +231,15 @@ def show_mask(outshape, dim=1, lambda_p=(3, 3, 12, 12), lambda_d=(3, 12, 3, 12))
     if dim == 2:
         for ax, lp, ld in zip(axs, lambda_p, lambda_d):
             sampling = sampling_poisson_2D(outshape, lp, ld, 0.1)
-            res = np.zeros_like(sampling, dtype=float)
-            res[~sampling] = np.nan
+            res = torch.zeros_like(sampling, dtype=torch.float)
+            res[~sampling] = torch.nan
             ax.imshow(res, cmap=CMAP, extent=[0, 1, 0, 1])
             ax.set_title(r"$\lambda_p = $" + str(lp) + r", $\lambda_d =$" + str(ld))
     else:
         for ax, lp, ld in zip(axs, lambda_p, lambda_d):
             sampling = sampling_poisson_1D(outshape, lp, ld, 0.1)
-            res = np.zeros((outshape, outshape), dtype=float)
-            res[:, ~sampling] = np.nan
+            res = torch.zeros((outshape, outshape), dtype=torch.float)
+            res[:, ~sampling] = torch.nan
             ax.imshow(res, cmap=CMAP, extent=[0, 1, 0, 1])
             ax.set_title(r"$\lambda_p = $" + str(lp) + r", $\lambda_d =$" + str(ld))
 
@@ -252,23 +247,7 @@ def show_mask(outshape, dim=1, lambda_p=(3, 3, 12, 12), lambda_d=(3, 12, 3, 12))
     plt.show()
 
 
-def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
-    """Concatenate each element of a batch with a mask based on Poisson Sampling"""
-    space_size = batch.shape[-1]
-
-    mask = np.ones_like(batch)
-
-    mask[
-        :,
-        :,
-        :,
-        create_mask(space_size, 1 if len(batch.shape) == 4 else 2, missing_ratio),
-    ] = 0
-
-    return np.concatenate([batch, mask], axis=1)
-
-
-def collate(batch: np.ndarray):
+def collate(batch):
     """used in the loader to merge batch"""
     zipped = list(zip(*batch))
 
@@ -365,38 +344,6 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
                 dataset.space_dim,
                 missing_ratio=dataset.missing_ratio,
             )
-
-            # mask = np.zeros((30,), dtype=bool)
-            # mask[1] = 1
-            # mask[4] = 1
-            # mask[8] = 1
-            # mask[11] = 1
-            # mask[27] = 1
-            # print(mask)
-            #
-            # donnees_a_tracer = data[0][mask].T
-            # nb_lignes = donnees_a_tracer.shape[1]
-            #
-            # nb_points = donnees_a_tracer.shape[0]
-            # axe_x = np.linspace(0, 1, nb_points)
-            #
-            # plt.figure(figsize=(8, 5))
-            #
-            # for i in range(nb_lignes):
-            #     couleur_ligne = cols[i]
-            #     plt.plot(
-            #         axe_x,
-            #         donnees_a_tracer[:, i],
-            #         color=couleur_ligne,
-            #         label=rf"$v_{i+1}$",
-            #     )
-            #
-            # plt.xlim(0, 1)
-            # plt.xlabel("Time")
-            # plt.ylabel(r"$NO_2$")
-            # plt.title(r"$NO_2$ over time")
-            #
-            # plt.show()
 
             dataset.show(axs[0, i], k + i)
             dataset.show(axs[1, i], k + i, mask=mask)
@@ -511,29 +458,6 @@ def show_example_gif(
     plt.close(fig)
 
     print(gif_path)
-
-
-def unique_preserve_order(x: torch.Tensor) -> torch.Tensor:
-    """remove all duplicates without changing the order"""
-    # seen = []
-    # out = []
-    # for v in x.tolist():
-    #     if v not in seen:
-    #         seen.append(v)
-    #         out.append(v)
-    # return torch.tensor(out, device=x.device)
-
-    unique, inverse = torch.unique(x, dim=0, return_inverse=True)
-    first_indices = torch.full(
-        (unique.size(0),), x.size(0), device=x.device, dtype=torch.long
-    )
-    indices = torch.arange(x.size(0), device=x.device)
-    first_indices.scatter_reduce_(
-        0, inverse, indices, reduce="amin", include_self=False
-    )
-    sorted_indices, _ = torch.sort(first_indices)
-
-    return x[sorted_indices]
 
 
 def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
