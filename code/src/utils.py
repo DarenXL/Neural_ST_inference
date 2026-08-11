@@ -148,7 +148,7 @@ def sampling_poisson_2D(
     mask[ix, iy] = 1
 
     if np.all(~mask):
-        mask[np.random.randint(len(mask)),np.random.randint(len(mask))] = 1
+        mask[np.random.randint(len(mask)), np.random.randint(len(mask))] = 1
 
     return mask
 
@@ -197,7 +197,10 @@ def sampling_poisson_1D(
 
     return mask
 
-def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) -> np.ndarray:
+
+def create_mask(
+    space_size: int, space_shape: int, missing_ratio: float = None
+) -> np.ndarray:
     """Create a mask based on Poisson Sampling"""
 
     if missing_ratio is None:
@@ -224,31 +227,30 @@ def create_mask(space_size:int, space_shape:int, missing_ratio: float = None) ->
 
     return visibles
 
-def show_mask(outshape, dim=1, lambda_p = (3, 3, 12, 12), lambda_d = (3, 12, 3, 12)):
 
-    fig, axs = plt.subplots(
-        nrows=1, ncols=4, figsize=(14, 5), layout="constrained"
-    )
+def show_mask(outshape, dim=1, lambda_p=(3, 3, 12, 12), lambda_d=(3, 12, 3, 12)):
+
+    fig, axs = plt.subplots(nrows=1, ncols=4, figsize=(14, 5), layout="constrained")
     CMAP = LinearSegmentedColormap.from_list("custom_data", [cols[3], cols[3]], N=100)
 
-
-    if dim == 2 :
-        for ax, lp, ld in zip(axs, lambda_p,lambda_d):
-            sampling = sampling_poisson_2D(outshape, lp, ld, .1)
+    if dim == 2:
+        for ax, lp, ld in zip(axs, lambda_p, lambda_d):
+            sampling = sampling_poisson_2D(outshape, lp, ld, 0.1)
             res = np.zeros_like(sampling, dtype=float)
             res[~sampling] = np.nan
             ax.imshow(res, cmap=CMAP, extent=[0, 1, 0, 1])
-            ax.set_title(r"$\lambda_p = $"+str(lp)+r", $\lambda_d =$"+str(ld))
-    else :
-        for ax, lp, ld in zip(axs, lambda_p,lambda_d):
-            sampling = sampling_poisson_1D(outshape, lp, ld, .1)
-            res = np.zeros((outshape,outshape), dtype=float)
-            res[:,~sampling] = np.nan
+            ax.set_title(r"$\lambda_p = $" + str(lp) + r", $\lambda_d =$" + str(ld))
+    else:
+        for ax, lp, ld in zip(axs, lambda_p, lambda_d):
+            sampling = sampling_poisson_1D(outshape, lp, ld, 0.1)
+            res = np.zeros((outshape, outshape), dtype=float)
+            res[:, ~sampling] = np.nan
             ax.imshow(res, cmap=CMAP, extent=[0, 1, 0, 1])
-            ax.set_title(r"$\lambda_p = $"+str(lp)+r", $\lambda_d =$"+str(ld))
+            ax.set_title(r"$\lambda_p = $" + str(lp) + r", $\lambda_d =$" + str(ld))
 
     fig.savefig("mask_poisson.pdf", format="pdf", bbox_inches="tight")
     plt.show()
+
 
 def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarray:
     """Concatenate each element of a batch with a mask based on Poisson Sampling"""
@@ -256,7 +258,12 @@ def add_missing_mask(batch: np.ndarray, missing_ratio: float = None) -> np.ndarr
 
     mask = np.ones_like(batch)
 
-    mask[:, :, :, create_mask(space_size, 1 if len(batch.shape) == 4 else 2, missing_ratio)] = 0
+    mask[
+        :,
+        :,
+        :,
+        create_mask(space_size, 1 if len(batch.shape) == 4 else 2, missing_ratio),
+    ] = 0
 
     return np.concatenate([batch, mask], axis=1)
 
@@ -354,7 +361,8 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
         for i in range(len(axs[0])):
 
             mask = create_mask(
-                dataset.space_size, dataset.space_dim,
+                dataset.space_size,
+                dataset.space_dim,
                 missing_ratio=dataset.missing_ratio,
             )
 
@@ -402,9 +410,10 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
 
         if mask is None:
             mask = create_mask(
-                    dataset.space_size, dataset.space_dim,
-                    missing_ratio=dataset.missing_ratio,
-                )
+                dataset.space_size,
+                dataset.space_dim,
+                missing_ratio=dataset.missing_ratio,
+            )
 
         for i in range(len(axs[0])):
 
@@ -461,7 +470,7 @@ def show_example_gif(
 
     cbar = None
 
-    v_min, v_max = dataset.get_min_max(np.arange(k, k+len(axs[0])))
+    v_min, v_max = dataset.get_min_max(np.arange(k, k + len(axs[0])))
 
     dataset.show(axs[0, 0], k, time_idx=0)
     sample_im = axs[0, 0].get_images()[0]
@@ -538,6 +547,7 @@ def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
     mae = torch.mean(torch.abs(preds - all_thetas), dim=0)
 
     return mae, theta_mean
+
 
 def format_seconds(s: float) -> str:
     """Times in second to h-m-s format"""

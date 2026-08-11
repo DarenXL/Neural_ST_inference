@@ -24,8 +24,18 @@ import matplotlib.pyplot as plt
 
 # from .rethinking import MAP, precis
 
+
 class Trainer:
-    def __init__(self, network, device, res_path, optimizer=None, quantiles=tuple(), quantile_networks=tuple(), quantile_optimizer=None):
+    def __init__(
+        self,
+        network,
+        device,
+        res_path,
+        optimizer=None,
+        quantiles=tuple(),
+        quantile_networks=tuple(),
+        quantile_optimizer=None,
+    ):
 
         self.network = network.to(device)
         self.device = device
@@ -102,11 +112,11 @@ class Trainer:
     def train(
         self,
         train_loader,
-        nb_epochs:int,
+        nb_epochs: int,
         test_loader=None,
-        freq_epochs_test:int=10,
+        freq_epochs_test: int = 10,
     ):
-        """"
+        """ "
         Train the neural network.
         Test the neural network every freq_epochs_test epochs if not NLS case.
         keeps track of the datasets used.
@@ -122,12 +132,10 @@ class Trainer:
         if self.network.nls:
             self.train_nls(train_loader, nb_epochs)
         else:
-            self.train_quantiles(
-                train_loader, test_loader, nb_epochs, freq_epochs_test
-            )
+            self.train_quantiles(train_loader, test_loader, nb_epochs, freq_epochs_test)
 
     def test(self, test_loader, dataset_gridsearch=None):
-        """"
+        """ "
         Test the neural network.
         keeps track of the datasets used.
         """
@@ -137,7 +145,9 @@ class Trainer:
                 == self.test_dataset_hist[0].model.param_names
             ), "loader's model do not correspond with the precedent ones"
 
-        assert isinstance(test_loader.sampler, torch.utils.data.SequentialSampler), "DataLoader must be shuffle=False"
+        assert isinstance(
+            test_loader.sampler, torch.utils.data.SequentialSampler
+        ), "DataLoader must be shuffle=False"
 
         self.test_dataset_hist.append(test_loader.dataset)
 
@@ -343,7 +353,7 @@ class Trainer:
         all_krig_score = []
         all_missing_ratios = []
 
-        for q in self.quantiles :
+        for q in self.quantiles:
             all_quantiles[q] = []
 
         time_start = time.time()
@@ -444,16 +454,18 @@ class Trainer:
         full_loss_tensor = torch.cat(all_loss_test, dim=0)
         all_theta_final = torch.cat(all_theta_final, dim=0)
         all_true_theta = torch.cat(all_true_theta, dim=0)
-        for q in self.quantiles :
+        for q in self.quantiles:
             all_quantiles[q] = torch.cat(all_quantiles[q], dim=0)
 
-        if len(all_kl_score) > 0  :
+        if len(all_kl_score) > 0:
             all_kl_score = torch.tensor(all_kl_score)
         else:
             all_kl_score = None
-        if len(all_krig_score) > 0  :
+        if len(all_krig_score) > 0:
             all_krig_score = torch.tensor(all_krig_score)
-            all_missing_ratios = torch.from_numpy(np.array(all_missing_ratios, dtype=bool))
+            all_missing_ratios = torch.from_numpy(
+                np.array(all_missing_ratios, dtype=bool)
+            )
         else:
             all_krig_score = None
             all_missing_ratios = None
@@ -465,10 +477,10 @@ class Trainer:
             "test_time": time_total,
             "final_all_theta": all_theta_final,
             "true_all_theta": all_true_theta,
-            "all_quantiles":all_quantiles,
-            "kl_score":all_kl_score,
-            "krig_score":all_krig_score,
-            "missing_ratios":all_missing_ratios,
+            "all_quantiles": all_quantiles,
+            "kl_score": all_kl_score,
+            "krig_score": all_krig_score,
+            "missing_ratios": all_missing_ratios,
         }
         self.test_time += time_total
         self._save_results(results)
@@ -483,7 +495,7 @@ class Trainer:
 
         time_train_start = time.time()
 
-        CE = nn.BCEWithLogitsLoss() # nn.CrossEntropyLoss()
+        CE = nn.BCEWithLogitsLoss()  # nn.CrossEntropyLoss()
 
         for epoch in t:
             self.network.train()
@@ -553,7 +565,7 @@ class Trainer:
             theta_t = activation(theta.unsqueeze(0).to(self.device))
             # theta_t = theta.unsqueeze(0).to(self.device)
             h = self.network(data, theta=theta_t)
-            logL = h # h[:, 1] - h[:, 0]
+            logL = h  # h[:, 1] - h[:, 0]
             return logL
 
         res = torchmin.minimize(
@@ -580,7 +592,7 @@ class Trainer:
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
 
         if theta0 is None:
-            theta0_latent = (lower_bound + upper_bound)/2
+            theta0_latent = (lower_bound + upper_bound) / 2
         else:
             theta0_latent = theta0
 
@@ -647,7 +659,9 @@ class Trainer:
         batch_size = x_obs.shape[0]
 
         with pyro.plate("batch_dimensions", batch_size):
-            theta = pyro.sample("theta", dist.Uniform(lower_bound, upper_bound).to_event(1))
+            theta = pyro.sample(
+                "theta", dist.Uniform(lower_bound, upper_bound).to_event(1)
+            )
 
         # with torch.no_grad():
         log_ratio = -self.network(x_obs, theta=theta).squeeze(-1)
@@ -663,7 +677,7 @@ class Trainer:
         all_true_theta = []
         all_theta_final = []
         all_quantiles = {}
-        for q in self.quantiles :
+        for q in self.quantiles:
             all_quantiles[q] = []
 
         self.network.eval()
@@ -679,7 +693,9 @@ class Trainer:
 
         kernel = NUTS(self._pyro_model, max_tree_depth=5, jit_compile=True)
         # kernel = HMC(self._pyro_model, num_steps=3, jit_compile=True)
-        mcmc = MCMC(kernel, num_samples=num_samples, warmup_steps=warmup_steps, num_chains=1)
+        mcmc = MCMC(
+            kernel, num_samples=num_samples, warmup_steps=warmup_steps, num_chains=1
+        )
 
         time_start = time.time()
         time_map = 0
@@ -747,7 +763,9 @@ class Trainer:
 
         all_samples = torch.cat(all_samples, dim=1)
         all_samples = all_samples.permute(1, 0, 2)
-        all_theta_final = torch.concatenate(all_theta_final, dim=0) #  all_theta_final = torch.median(all_samples, dim=1)
+        all_theta_final = torch.concatenate(
+            all_theta_final, dim=0
+        )  #  all_theta_final = torch.median(all_samples, dim=1)
         all_true_theta = torch.concatenate(all_true_theta, dim=0)
         final_test_losses = torch.abs(all_theta_final - all_true_theta)
         for q in self.quantiles:
@@ -755,8 +773,8 @@ class Trainer:
 
         results = {
             "final_test_losses": final_test_losses,  # (Nb_epochs, Nb_params)
-            "test_time": time_total-time_map,
-            "map_time":time_map,
+            "test_time": time_total - time_map,
+            "map_time": time_map,
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
             "all_quantiles": all_quantiles,

@@ -19,10 +19,12 @@ import torch
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-plt.rcParams.update({
-    "mathtext.fontset": "cm",
-    # "font.family": "sherif"
-})
+plt.rcParams.update(
+    {
+        "mathtext.fontset": "cm",
+        # "font.family": "sherif"
+    }
+)
 
 #########################
 ####### Variables #######
@@ -39,8 +41,7 @@ freq_epochs_test = 10
 time_size = 100
 space_dim = 1
 space_size = 100
-max_deepset_size = 1
-missing_ratios = [0.96] # 0.94,0.96, 0.98
+missing_ratios = [0.96]  # 0.94,0.96, 0.98
 
 # Amount of data
 
@@ -55,7 +56,7 @@ if model == "sep":
         Path("./output/results/spatiotemporal").resolve()
         / f"2026-08-03_15-23-11_{model}-{inf}"
     )
-else :
+else:
     baseline = [0.5083, 0.0253, 0.065]
     res_path = (
         Path("./output/results/spatiotemporal").resolve()
@@ -65,12 +66,9 @@ else :
 char = {"sep": r"$\gamma$", "adv": r"$v$"}
 theta_names = [char[model], r"$\rho_t$", r"$\rho_s$"]
 
-output_path = (
-        Path("./output/results/spatiotemporal").resolve()
-        / f"paper"
-    )
+output_path = Path("./output/results/spatiotemporal").resolve() / f"paper"
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     ##############################
     ##############################
@@ -338,9 +336,7 @@ if __name__ == '__main__':
     fig, ax = plt.subplots()
     im = ax.imshow(cor, cmap=CMAP)
 
-    ax.set_xticks(
-        range(len(names)), labels=names
-    )
+    ax.set_xticks(range(len(names)), labels=names)
     ax.set_yticks(range(len(names)), labels=names)
 
     for i in range(len(names)):
@@ -351,5 +347,9 @@ if __name__ == '__main__':
     fig.tight_layout()
     plt.show()
 
-    fig.savefig(output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight")
-    fig.savefig(output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight")
+    fig.savefig(
+        output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight"
+    )
+    fig.savefig(
+        output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight"
+    )

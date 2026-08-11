@@ -23,10 +23,12 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 # runfile("/home/aloret/PycharmProjects/Neural_ST_inference/code/src/main.py")
 
-plt.rcParams.update({
-    "mathtext.fontset": "cm",
-    # "font.family": "inconsolata"
-})
+plt.rcParams.update(
+    {
+        "mathtext.fontset": "cm",
+        # "font.family": "inconsolata"
+    }
+)
 
 #########################
 ####### Variables #######
@@ -34,20 +36,20 @@ plt.rcParams.update({
 
 # Path to data saving file
 
-# data_path = create_data_path("output/data/spatiotemporal_adv")
-data_path = Path("./output/data/spatiotemporal_adv").resolve() / "2026-08-10_10-36-16" # "2026-08-03_15-23-11"
+data_path = create_data_path("output/data/spatiotemporal_adv")
+# data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-08-10_10-36-16")  # "2026-08-03_15-23-11"
 
 # Path to results saving file
 
-# res_path = create_res_path("output/results/spatiotemporal")
-res_path = Path("./output/results/spatiotemporal").resolve() / "2026-08-10_10-36-16" # "2026-08-03_15-23-11"
+res_path = create_res_path("output/results/spatiotemporal")
+# res_path = (Path("./output/results/spatiotemporal").resolve() / "2026-08-10_10-36-16")  # "2026-08-03_15-23-11"
 
 print("res_path", res_path)
 
 # Neural Network train options
 
-batch_size = 200 # 150
-nb_epochs = 500
+batch_size = 200  # 150
+nb_epochs = 20
 freq_epochs_test = 10
 
 # Data options
@@ -55,14 +57,14 @@ freq_epochs_test = 10
 time_size = 30
 space_dim = 1
 space_size = 30
-missing_ratios = [0.8, 0.9] # 0.94,0.96, 0.98
+missing_ratios = [0.8, 0.9]  # 0.94,0.96, 0.98
 
 # Amount of data
 
-train_size = 1000
-test_size = 200
+train_size = 10
+test_size = 10
 
-if __name__ == '__main__':
+if __name__ == "__main__":
 
     ##############################
     ##############################
@@ -152,7 +154,7 @@ if __name__ == '__main__':
         space_size=space_size,
         missing_ratio=None,
     )
-    dataset_test.generate(data_path / "test", 42+train_size*10)
+    dataset_test.generate(data_path / "test", 42 + train_size * 10)
 
     datasets_test = []
     loaders_test = []
@@ -164,8 +166,14 @@ if __name__ == '__main__':
 
         datasets_test.append(dataset)
         loaders_test.append(
-            DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=collate,    num_workers=4,
-            pin_memory=True)
+            DataLoader(
+                dataset,
+                batch_size=test_size,
+                shuffle=False,
+                collate_fn=collate,
+                num_workers=4,
+                pin_memory=True,
+            )
         )
 
     # Show data example
@@ -200,7 +208,7 @@ if __name__ == '__main__':
         hidden=36,
         theta_dim=dataset_train.model.nb_params,
         spatial_dim=space_dim,
-        label="NBE"
+        label="NBE",
     ).to(device)
 
     print_parameters_per_layer(CNN)
@@ -235,9 +243,9 @@ if __name__ == '__main__':
     # Testing
 
     for loader in loaders_test:
-        res = trainer_separately.test(loader) # res = ...
+        res = trainer_separately.test(loader)  # res = ...
 
-    try :
+    try:
         print(
             "quantiles precision :",
             torch.mean(
@@ -248,7 +256,6 @@ if __name__ == '__main__':
         )
     except:
         print("No quantiles")
-
 
     #############################
     #############################

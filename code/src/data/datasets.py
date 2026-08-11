@@ -12,7 +12,9 @@ import gstlearn as gl
 import matplotlib.pyplot as plt
 
 
-def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim, space_size, samples_dir, seed):
+def _worker_simulate_and_save(
+    idx, theta_i, model_instance, time_size, space_dim, space_size, samples_dir, seed
+):
     batch = model_instance.simulate(
         theta_i,
         time_size,
@@ -22,6 +24,7 @@ def _worker_simulate_and_save(idx, theta_i, model_instance, time_size, space_dim
     )
     np.save(f"{samples_dir}/sample_{idx}.npy", batch)
     return idx
+
 
 class GenericSimulationDataset(Dataset):
     def __init__(
@@ -128,9 +131,7 @@ class GenericSimulationDataset(Dataset):
             )
 
             for future in t_iter:
-                _ = (
-                    future.result()
-                )
+                _ = future.result()
         self.time_generation = time.time() - start_time
         self.save(path)
 
@@ -174,7 +175,7 @@ class GenericSimulationDataset(Dataset):
         )
         return batch
 
-    def get_min_max(self, k:list[int]):
+    def get_min_max(self, k: list[int]):
         all_values = []
         for ki in k:
             batch = self.get_grid(ki)
@@ -187,7 +188,14 @@ class GenericSimulationDataset(Dataset):
 
         return v_min, v_max
 
-    def show(self, ax, idx: int, mask: np.ndarray = None, sample_idx: int = 0, time_idx: int = 0):
+    def show(
+        self,
+        ax,
+        idx: int,
+        mask: np.ndarray = None,
+        sample_idx: int = 0,
+        time_idx: int = 0,
+    ):
         """Show a gaussian field"""
         batch = self.get_grid(idx, shuffle=False)
         theta = self.get_theta_tensor()[idx]
@@ -200,10 +208,10 @@ class GenericSimulationDataset(Dataset):
 
             if not (mask is None):
                 img = img.copy()
-                img[:,~mask] = np.nan
+                img[:, ~mask] = np.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1], cmap=CMAP)
-            ax.set_title(title_text  if (mask is None) else "", fontsize=10)
+            ax.set_title(title_text if (mask is None) else "", fontsize=10)
 
         elif self.space_dim == 2:
 
@@ -215,20 +223,20 @@ class GenericSimulationDataset(Dataset):
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
             ax.set_title(
-                (
-                    title_text + f"\n\nTime {time_idx}" if (mask is None) else ""
-                ),
+                (title_text + f"\n\nTime {time_idx}" if (mask is None) else ""),
                 fontsize=10,
             )
 
-    def sample_to_coord(self, sample, shuffle :int = None):
-        y, mask_obs = sample[0].reshape(-1,order="F"), np.array(sample[1], dtype=bool).reshape(
-            -1,order="F"
+    def sample_to_coord(self, sample, shuffle: int = None):
+        y, mask_obs = sample[0].reshape(-1, order="C"), np.array(
+            sample[1], dtype=bool
+        ).reshape(
+            -1, order="F"
         )  # .T.reshape(-1,order="F")
         # print(sample[1], mask_obs)
 
-        t = np.linspace(0, 1, self.time_size+1)[:-1]
-        s = np.linspace(0, 1, self.space_size+1)[:-1]
+        t = np.linspace(0, 1, self.time_size + 1)[:-1]
+        s = np.linspace(0, 1, self.space_size + 1)[:-1]
         # print("S et T", s, t)
 
         # axes = [t, s] if self.space_dim == 1 else [t, s, s]
@@ -240,7 +248,7 @@ class GenericSimulationDataset(Dataset):
 
         # print(np.sum(mask_obs))
 
-        if not(shuffle is None):
+        if not (shuffle is None):
             # idx = np.random.permutation(coords.shape[0])[~mask_obs]
             v = np.arange(coords.shape[0])[~mask_obs]
             v = v[np.random.permutation(len(v))]
@@ -293,17 +301,19 @@ class GenericSimulationDataset(Dataset):
         coords_obs = coords[~mask_obs]
         coords_miss = coords[mask_obs]
 
-        krig = self.model.kriging(
-            coords_obs, coords_miss, y_obs, self.space_dim, theta
-        )
+        krig = self.model.kriging(coords_obs, coords_miss, y_obs, self.space_dim, theta)
 
         y_full = y.copy()
         y_full[mask_obs] = krig
 
         if self.space_dim == 1:
-            return y_full.reshape(self.space_size, self.time_size, order="F")  # , order="F"
+            return y_full.reshape(
+                self.space_size, self.time_size, order="F"
+            )  # , order="F"
         else:
-            return y_full.reshape(self.space_size, self.space_size, self.time_size, order="F")
+            return y_full.reshape(
+                self.space_size, self.space_size, self.time_size, order="F"
+            )
 
     def get_likelihood_from_sample(self, sample: np.ndarray, theta: np.ndarray):
 
@@ -317,7 +327,9 @@ class GenericSimulationDataset(Dataset):
 
         return self.model.get_likelihood(coords_obs, y_obs, theta)
 
-    def get_likelihood(self, coords_obs: np.ndarray, y_obs: np.ndarray, theta: np.ndarray):
+    def get_likelihood(
+        self, coords_obs: np.ndarray, y_obs: np.ndarray, theta: np.ndarray
+    ):
 
         return self.model.get_likelihood(coords_obs, y_obs, theta)
 
