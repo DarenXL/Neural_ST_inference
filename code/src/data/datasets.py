@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 from tqdm import tqdm
 import concurrent.futures
 from models.base import SimulationModel
-from utils import add_missing_mask, CMAP, create_mask
+from utils import CMAP, create_mask
 import gstlearn as gl
 import matplotlib.pyplot as plt
 
@@ -285,7 +285,7 @@ class GenericSimulationDataset(Dataset):
     def add_missing_mask(self, batch, idx=None):
 
         if idx is None :
-            idx = torch.randint(0, self.theta_size, (1,))
+            idx = torch.randint(0, self.theta_size, (1,)).item()
 
         mask = torch.ones_like(batch)
 
@@ -302,7 +302,7 @@ class GenericSimulationDataset(Dataset):
 
         batch = self.get_grid(idx)
 
-        batch = add_missing_mask(batch, self.missing_ratio)
+        batch = self.add_missing_mask(batch)
 
         theta_vec = self.get_theta_tensor()[idx]
 
@@ -327,7 +327,7 @@ class NlsSimulationDataset(GenericSimulationDataset):
 
         batch = self.get_grid(sample_idx)
 
-        batch = add_missing_mask(batch, self.missing_ratio)
+        batch = self.add_missing_mask(batch)
 
         if is_perm == 0:
             theta = self.all_thetas[sample_idx]
