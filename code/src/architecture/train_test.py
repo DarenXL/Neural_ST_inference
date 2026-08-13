@@ -14,6 +14,7 @@ from scipy.stats import chi2
 import pyro
 import pyro.distributions as dist
 from pyro.infer import MCMC, NUTS, HMC, Predictive
+from pyro.poutine import trace
 
 import torch
 import time
@@ -663,7 +664,6 @@ class Trainer:
                 "theta", dist.Uniform(lower_bound, upper_bound).to_event(1)
             )
 
-        # with torch.no_grad():
         log_ratio = -self.network(x_obs, theta=theta).squeeze(-1)
 
         with pyro.plate("batch_factors", batch_size):
@@ -688,8 +688,8 @@ class Trainer:
         lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
 
-        num_samples = 2000
-        warmup_steps = 500
+        num_samples = 200
+        warmup_steps = 50
 
         kernel = NUTS(self._pyro_model, max_tree_depth=5, jit_compile=True)
         # kernel = HMC(self._pyro_model, num_steps=3, jit_compile=True)
@@ -713,7 +713,7 @@ class Trainer:
             batch_log_ratios = []
 
             for chain_idx in range(3):
-                map = mcmc.run(data_batch, lower_bound, upper_bound)
+                mcmc.run(data_batch, lower_bound, upper_bound)
                 samples = mcmc.get_samples()
                 chain_samples = samples["theta"]
 
@@ -735,6 +735,34 @@ class Trainer:
 
                     chain_log_ratio = torch.stack(log_ratio_list)
                     time_map += time.time() - time_map_t
+
+                    print("time_map", time_map)
+
+                time_poutine = time.time()
+
+                log_probs = []
+
+                for i in range(num_samples):
+                    sample_i = {k: v[i] for k, v in samples.items()}
+
+                    tr = trace(pyro.condition(self._pyro_model, data=sample_i)).get_trace(data_batch, lower_bound, upper_bound)
+                    tr.compute_log_prob()
+                    log_probs.append(tr.log_prob_sum().item())
+
+                log_probs = torch.tensor(log_probs)
+
+                best_idx = torch.argmax(log_probs).item()
+                best_log_prob = log_probs[best_idx].item()
+                best_sample = {k: v[best_idx] for k, v in samples.items()}
+
+                print(f"Max Log-Joint: {best_log_prob:.4f}")
+                print("MAP Estimate:", best_sample["theta"])
+
+                time_poutine = time.time() - time_poutine
+
+                print("time_poutine", time_poutine)
+
+
 
                 batch_chains.append(chain_samples.cpu())
                 batch_log_ratios.append(chain_log_ratio)

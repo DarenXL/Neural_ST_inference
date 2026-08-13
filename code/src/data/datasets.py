@@ -62,7 +62,7 @@ class GenericSimulationDataset(Dataset):
     @classmethod
     def load(cls, path: Path, model_instance: SimulationModel):
         """Load all attributes and the thetas"""
-        data = torch.load(f"{path}/metadata.pt")
+        data = torch.load(f"{path}/metadata.pt", weights_only=False)
         config = data["config"]
 
         instance = cls(
@@ -102,72 +102,84 @@ class GenericSimulationDataset(Dataset):
         torch.save(batch, f"{samples_dir}/sample_{idx}.pt")
         return idx
 
-    def generate(self, path: Path, base_seed: int = 42):
-        samples_dir = Path(path) / "samples"
-        os.makedirs(samples_dir, exist_ok=True)
+    def generate_masks(self, path: Path):
 
-        start_time = time.time()
-
-        max_workers = None
-
-        with concurrent.futures.ProcessPoolExecutor(
-            max_workers=max_workers
-        ) as executor:
-            futures = []
-            for idx in range(self.theta_size):
-                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
-
-                worker_seed = base_seed + idx
-
-                f = executor.submit(
-                    GenericSimulationDataset._worker_simulate_and_save,
-                    idx,
-                    theta_i,
-                    self.model,
-                    self.time_size,
-                    self.space_dim,
-                    self.space_size,
-                    samples_dir,
-                    worker_seed,
-                )
-                futures.append(f)
-
-            t_iter = tqdm(
-                concurrent.futures.as_completed(futures),
-                total=self.theta_size,
-                desc="Simulations",
-            )
-
-            for future in t_iter:
-                _ = future.result()
-        self.time_generation = time.time() - start_time
-        self.save(path)
+        if self.missing_ratio is not None :
+            path = path / ("ratio_"+str(self.missing_ratio))
+        path = path / "masks"
+        path.mkdir(parents=True, exist_ok=True)
 
         for idx in range(self.theta_size):
             mask = create_mask(self.space_size, self.space_dim, self.missing_ratio)
-            torch.save(mask, f"{Path(path) / "masks"}/mask_{idx}.pt")
+            torch.save(mask, f"{Path(path)}/mask_{idx}.pt")
 
-    # def generate(self, path: Path):
-    #     """Generate gaussian fields on a complete grid"""
-    #     os.makedirs(f"{path}/samples", exist_ok=True)
+    # def generate(self, path: Path, base_seed: int = 42):
+    #     samples_dir = Path(path) / "samples"
+    #     os.makedirs(samples_dir, exist_ok=True)
     #
-    #     t_iter = tqdm(range(self.theta_size), total=self.theta_size)
     #     start_time = time.time()
     #
-    #     for idx in t_iter:
-    #         theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+    #     max_workers = None
     #
-    #         batch = self.model.simulate(
-    #             theta_i,
-    #             self.time_size,
-    #             self.space_dim,
-    #             self.space_size,
+    #     with concurrent.futures.ProcessPoolExecutor(
+    #         max_workers=max_workers
+    #     ) as executor:
+    #         futures = []
+    #         for idx in range(self.theta_size):
+    #             theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+    #
+    #             worker_seed = base_seed + idx
+    #
+    #             f = executor.submit(
+    #                 GenericSimulationDataset._worker_simulate_and_save,
+    #                 idx,
+    #                 theta_i,
+    #                 self.model,
+    #                 self.time_size,
+    #                 self.space_dim,
+    #                 self.space_size,
+    #                 samples_dir,
+    #                 worker_seed,
+    #             )
+    #             futures.append(f)
+    #
+    #         t_iter = tqdm(
+    #             concurrent.futures.as_completed(futures),
+    #             total=self.theta_size,
+    #             desc="Simulations",
     #         )
     #
-    #         np.save(f"{path}/samples/sample_{idx}.npy", batch)
-    #
+    #         for future in t_iter:
+    #             _ = future.result()
     #     self.time_generation = time.time() - start_time
     #     self.save(path)
+    #
+    #     self.generate_masks(path)
+
+    def generate(self, path: Path, base_seed: int = 42):
+        """Generate gaussian fields on a complete grid"""
+        os.makedirs(f"{path}/samples", exist_ok=True)
+
+        t_iter = tqdm(range(self.theta_size), total=self.theta_size)
+        start_time = time.time()
+
+        for idx in t_iter:
+            theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+
+            batch = self.model.simulate(
+                theta_i,
+                self.time_size,
+                self.space_dim,
+                self.space_size,
+                seed = base_seed + idx
+            )
+
+            np.save(f"{path}/samples/sample_{idx}.npy", batch)
+
+        self.time_generation = time.time() - start_time
+        self.save(path)
+
+        self.generate_masks(path)
 
     def generate_one(self, idx: int):
         """Generate one gaussian field on a complete grid and return it"""

@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
 import gstlearn as gl
+import time
 
 THETA_COLORS = [
     {
@@ -62,7 +63,7 @@ def create_data_path(base_path: str) -> Path:
     timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     path = path / timestamp
 
-    sub_dirs = [path / "train" / "samples", path / "test", path / "train" / "masks", path / "test" / "masks"]  # / "samples"
+    sub_dirs = [path / "train" / "samples", path / "test"]  # / "samples"
 
     for sd in sub_dirs:
         sd.mkdir(parents=True, exist_ok=True)
@@ -210,7 +211,9 @@ def create_mask(
     """Create a mask based on Poisson Sampling"""
 
     if missing_ratio is None:
-        missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
+        # missing_ratio = torch.rand(1) * 0.35 + 0.6   # space 30
+        missing_ratio = torch.rand(1) * 0.08 + 0.9   # space 100
+        # missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
 
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing
@@ -477,3 +480,51 @@ def format_seconds(s: float) -> str:
     """Times in second to h-m-s format"""
     h, m, s = int(s // 3600), int((s % 3600) // 60), int(s % 60)
     return f"{h}h{m}m{s}s" if h > 0 else (f"{m}m{s}s" if m > 0 else f"{s}s")
+
+def test_load_time(loader, network, device):
+    # Test sur 10 itérations
+    train_iter = iter(loader)
+
+    t_data, t_gpu_transfer, t_forward, t_backward = 0, 0, 0, 0
+    MAE = torch.nn.L1Loss(reduction="mean")
+    optimizer = torch.optim.Adam(network.parameters(), lr=1e-3)
+
+    for _ in range(10):
+        # 1.
+        t0 = time.perf_counter()
+        batch = next(train_iter)
+        torch.cuda.synchronize()
+        t1 = time.perf_counter()
+        t_data += t1 - t0
+
+        # 2.
+        data, theta = (
+            batch[0].cuda(),
+            batch[1].cuda(),
+        )
+        data = data.to(device, non_blocking=True).float()
+        theta = theta.to(device, non_blocking=True)
+        torch.cuda.synchronize()
+        t2 = time.perf_counter()
+        t_gpu_transfer += t2 - t1
+
+        # 3.
+        optimizer.zero_grad()
+        outputs = network(data)
+        loss = MAE(outputs, theta)
+        torch.cuda.synchronize()
+        t3 = time.perf_counter()
+        t_forward += t3 - t2
+
+        # 4.
+        loss.backward()
+        optimizer.step()
+        torch.cuda.synchronize()
+        t4 = time.perf_counter()
+        t_backward += t4 - t3
+
+    print(f"Mean per batch :")
+    print(f"- Lecture DataLoader : {t_data / 10:.4f}s")
+    print(f"- Transfer toward GPU : {t_gpu_transfer / 10:.4f}s")
+    print(f"- Forward : {t_forward / 10:.4f}s")
+    print(f"- Backward : {t_backward / 10:.4f}s")
