@@ -342,11 +342,7 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
 
         for i in range(len(axs[0])):
 
-            mask = create_mask(
-                dataset.space_size,
-                dataset.space_dim,
-                missing_ratio=dataset.missing_ratio,
-            )
+            mask = dataset.get_mask(k+i)
 
             dataset.show(axs[0, i], k + i)
             dataset.show(axs[1, i], k + i, mask=mask)
@@ -359,11 +355,7 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
         fig.suptitle(r"Example over time")
 
         if mask is None:
-            mask = create_mask(
-                dataset.space_size,
-                dataset.space_dim,
-                missing_ratio=dataset.missing_ratio,
-            )
+            mask = dataset.get_mask(k)
 
         for i in range(len(axs[0])):
 

@@ -30,13 +30,17 @@ plt.rcParams.update(
     }
 )
 
+np.random.seed(2)
+torch.manual_seed(2)
+
+
 #########################
 ####### Variables #######
 #########################
 
 # Path to data saving file
 
-data_path = create_data_path("output/data/spatiotemporal_sep")
+data_path = create_data_path("output/data/spatiotemporal_adv")
 # data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-08-06_16-57-59")  # "2026-08-03_15-23-11"
 
 # Path to results saving file
@@ -61,8 +65,8 @@ missing_ratios = [0.94, 0.96, 0.98]  # 0.94,0.96, 0.98
 
 # Amount of data
 
-train_size = 10000
-test_size = 1500
+train_size = 10
+test_size = 10
 
 if __name__ == "__main__":
 
@@ -114,8 +118,8 @@ if __name__ == "__main__":
 
     # Model choice
 
-    # model = GneitingAdvModel(space_dim=space_dim)
-    model = GneitingSepModel(space_dim=space_dim)
+    model = GneitingAdvModel(space_dim=space_dim)
+    # model = GneitingSepModel(space_dim=space_dim)
 
     # Creation of the class dataset and its θ
 
@@ -126,12 +130,13 @@ if __name__ == "__main__":
         space_dim=space_dim,
         space_size=space_size,
         missing_ratio=None,
+        seed=1,
     )
 
     # Generation of data on a complete grid
 
     print(f"\nData train generation : {model.__class__.__name__}")
-    dataset_train.generate(data_path / "train", 42)
+    dataset_train.generate(data_path / "train")
 
     # Creation of the loader used during training (or test)
 
@@ -153,8 +158,10 @@ if __name__ == "__main__":
         space_dim=space_dim,
         space_size=space_size,
         missing_ratio=None,
+        seed=1+train_size*10,
     )
-    dataset_test.generate(data_path / "test", 42 + train_size * 10)
+    dataset_test.generate(data_path / "test")
+    dataset_test.eval()
 
     datasets_test = []
     loaders_test = []
@@ -163,6 +170,7 @@ if __name__ == "__main__":
 
         dataset = copy.deepcopy(dataset_test)
         dataset.missing_ratio = ratio
+        dataset.generate_masks(data_path / "test")
 
         datasets_test.append(dataset)
         loaders_test.append(
@@ -178,9 +186,15 @@ if __name__ == "__main__":
 
     # Show data example
 
-    # show_example_mask(
-    #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    # )
+    show_example_mask(
+        datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    )
+    show_example_mask(
+        datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    )
+    show_example_mask(
+        datasets_test[2], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    )
     # show_example(
     #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
     # )
@@ -320,15 +334,15 @@ if __name__ == "__main__":
     # ###########################################
     # ###########################################
 
-    # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
-
-    trainers = [trainer_separately]
-
-    # train_graph(trainers, res_path)
-    time_hist(trainers, res_path)
-    test_alt_graph(trainers, res_path)
-
-    for i in range(len(datasets_test)):
-        test_graph(trainers, res_path, num_dataset=i)
-        # target_graph(trainers, res_path, k=0, num_dataset=i)
-        # visualise(trainers, res_path, num_dataset=i, nb_examples=2)
+    # # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
+    #
+    # trainers = [trainer_separately]
+    #
+    # # train_graph(trainers, res_path)
+    # time_hist(trainers, res_path)
+    # test_alt_graph(trainers, res_path)
+    #
+    # for i in range(len(datasets_test)):
+    #     test_graph(trainers, res_path, num_dataset=i)
+    #     # target_graph(trainers, res_path, k=0, num_dataset=i)
+    #     # visualise(trainers, res_path, num_dataset=i, nb_examples=2)

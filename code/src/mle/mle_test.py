@@ -44,18 +44,6 @@ class MLE:
         )
         torch.save(outputs, path)
 
-    def mle(self, likelihood, coords, y, theta0, bounds=None):
-
-        def obj(theta):
-            res = -likelihood(coords, y, theta)
-            print(" " ,res, " | ", theta)
-            return res
-
-        res = minimize(
-            obj, theta0, method="Nelder-Mead", bounds=bounds, options={"maxiter": 2000, 'disp': False} # "Powell"
-        )
-        return res.x, res
-
     def test_mle(self, dataset):
         # dataset = test_loader.dataset
         self.test_dataset_hist.append(dataset)
@@ -73,11 +61,6 @@ class MLE:
         # )
 
         print("len data", len(dataset))
-
-        lower_bound = torch.tensor(dataset.model.lower_bound)
-        upper_bound = torch.tensor(dataset.model.upper_bound)
-        theta0 = (lower_bound + upper_bound)/2
-        bounds = torch.stack((lower_bound, upper_bound)).T
 
         # with torch.no_grad():
         for i in tqdm(range(len(dataset)), desc=f"Inference {self.estimation_label}"):

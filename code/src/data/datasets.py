@@ -17,10 +17,11 @@ class GenericSimulationDataset(Dataset):
         self,
         model: SimulationModel,
         theta_size=200,
-        time_size=40,
+        time_size=30,
         space_dim=1,
-        space_size=40,
+        space_size=30,
         missing_ratio=0,
+        seed=None,
     ):
         self.model = model
         self.theta_size = theta_size
@@ -28,14 +29,23 @@ class GenericSimulationDataset(Dataset):
         self.space_dim = space_dim
         self.space_size = space_size
         self.missing_ratio = missing_ratio
+        self.global_seed = seed
 
         self.path = None
         self.time_generation = None
 
-        self.thetas = self.model.sample_thetas(theta_size)
+        self.training = True
+
+        self.thetas = self.model.sample_thetas(theta_size, seed=self.global_seed)
 
     def __len__(self):
         return self.theta_size
+
+    def train(self):
+        self.training = True
+
+    def eval(self):
+        self.training = False
 
     def get_theta_tensor(self) -> torch.Tensor:
         """Return every theta in a tensor"""
@@ -113,73 +123,79 @@ class GenericSimulationDataset(Dataset):
             mask = create_mask(self.space_size, self.space_dim, self.missing_ratio)
             torch.save(mask, f"{Path(path)}/mask_{idx}.pt")
 
-    # def generate(self, path: Path, base_seed: int = 42):
-    #     samples_dir = Path(path) / "samples"
-    #     os.makedirs(samples_dir, exist_ok=True)
-    #
-    #     start_time = time.time()
-    #
-    #     max_workers = None
-    #
-    #     with concurrent.futures.ProcessPoolExecutor(
-    #         max_workers=max_workers
-    #     ) as executor:
-    #         futures = []
-    #         for idx in range(self.theta_size):
-    #             theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
-    #
-    #             worker_seed = base_seed + idx
-    #
-    #             f = executor.submit(
-    #                 GenericSimulationDataset._worker_simulate_and_save,
-    #                 idx,
-    #                 theta_i,
-    #                 self.model,
-    #                 self.time_size,
-    #                 self.space_dim,
-    #                 self.space_size,
-    #                 samples_dir,
-    #                 worker_seed,
-    #             )
-    #             futures.append(f)
-    #
-    #         t_iter = tqdm(
-    #             concurrent.futures.as_completed(futures),
-    #             total=self.theta_size,
-    #             desc="Simulations",
-    #         )
-    #
-    #         for future in t_iter:
-    #             _ = future.result()
-    #     self.time_generation = time.time() - start_time
-    #     self.save(path)
-    #
-    #     self.generate_masks(path)
+    def generate(self, path: Path, base_seed=None):
+        samples_dir = Path(path) / "samples"
+        os.makedirs(samples_dir, exist_ok=True)
 
-    def generate(self, path: Path, base_seed: int = 42):
-        """Generate gaussian fields on a complete grid"""
-        os.makedirs(f"{path}/samples", exist_ok=True)
-
-        t_iter = tqdm(range(self.theta_size), total=self.theta_size)
         start_time = time.time()
 
-        for idx in t_iter:
-            theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+        max_workers = None
 
-            batch = self.model.simulate(
-                theta_i,
-                self.time_size,
-                self.space_dim,
-                self.space_size,
-                seed = base_seed + idx
+        if base_seed is None :
+            base_seed = self.global_seed
+
+        with concurrent.futures.ProcessPoolExecutor(
+            max_workers=max_workers
+        ) as executor:
+            futures = []
+            for idx in range(self.theta_size):
+                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+
+                worker_seed = 0 if base_seed is None else base_seed + idx
+
+                f = executor.submit(
+                    GenericSimulationDataset._worker_simulate_and_save,
+                    idx,
+                    theta_i,
+                    self.model,
+                    self.time_size,
+                    self.space_dim,
+                    self.space_size,
+                    samples_dir,
+                    worker_seed,
+                )
+                futures.append(f)
+
+            t_iter = tqdm(
+                concurrent.futures.as_completed(futures),
+                total=self.theta_size,
+                desc="Simulations",
             )
 
-            np.save(f"{path}/samples/sample_{idx}.npy", batch)
-
+            for future in t_iter:
+                _ = future.result()
         self.time_generation = time.time() - start_time
         self.save(path)
 
         self.generate_masks(path)
+
+    # def generate(self, path: Path, base_seed=None):
+    #     """Generate gaussian fields on a complete grid"""
+    #     os.makedirs(f"{path}/samples", exist_ok=True)
+    #
+    #     if base_seed is None:
+    #         base_seed = self.global_seed
+    #
+    #     t_iter = tqdm(range(self.theta_size), total=self.theta_size)
+    #     start_time = time.time()
+    #
+    #     for idx in t_iter:
+    #         theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+    #
+    #         batch = self.model.simulate(
+    #             theta_i,
+    #             self.time_size,
+    #             self.space_dim,
+    #             self.space_size,
+    #             seed = base_seed + idx
+    #         )
+    #
+    #         torch.save(batch,f"{path}/samples/sample_{idx}.pt")
+    #
+    #     self.time_generation = time.time() - start_time
+    #     self.save(path)
+    #
+    #     self.generate_masks(path)
 
     def generate_one(self, idx: int):
         """Generate one gaussian field on a complete grid and return it"""
@@ -242,7 +258,7 @@ class GenericSimulationDataset(Dataset):
             img = batch[sample_idx, 0, time_idx]
 
             if not (mask is None):
-                img = img.copy()
+                img = img.clone()
                 img[~mask] = torch.nan
 
             ax.imshow(img, aspect="equal", extent=[0, 1, 0, 1])
@@ -251,9 +267,9 @@ class GenericSimulationDataset(Dataset):
                 fontsize=10,
             )
 
-    def sample_to_coord(self, sample):
-        y = sample[0].reshape(-1, order="C")
-        mask_obs = torch.tensor(sample[1], dtype=torch.bool).T.reshape(-1)
+    def sample_to_coord(self, sample, shuffle :int = None):
+        y = sample[0].reshape(-1) # order="C"
+        mask_obs = torch.tensor(sample[1], dtype=torch.bool).reshape(-1)
 
         t = torch.linspace(0, 1, self.time_size + 1)[:-1]
         s = torch.linspace(0, 1, self.space_size + 1)[:-1]
@@ -261,6 +277,15 @@ class GenericSimulationDataset(Dataset):
         axes = [s, t] if self.space_dim == 1 else [s, s, t]
         grid = torch.meshgrid(*axes, indexing="ij")
         coords = torch.stack(grid, dim=-1).reshape(-1, len(axes))
+
+        if not(shuffle is None):
+            v = np.arange(coords.shape[0])[~mask_obs]
+            v = v[np.random.permutation(len(v))]
+            v = v[0:shuffle]
+
+            coords = coords[v, :]
+            y = y[v]
+            mask_obs = mask_obs[v]
 
         return coords, y, mask_obs
 
@@ -289,23 +314,32 @@ class GenericSimulationDataset(Dataset):
 
     def get_grid(self, idx):
         """Load the sample idx"""
-        return torch.load(f"{self.path}/samples/sample_{idx}.pt")
+        res = torch.load(f"{self.path}/samples/sample_{idx}.pt")
+        return res  + (torch.rand_like(res) - .5) * .5
 
     def get_mask(self, idx):
-        return torch.load(f"{self.path}/masks/mask_{idx}.pt")
+        if self.missing_ratio is not None :
+            path = self.path / ("ratio_"+str(self.missing_ratio))
+        else :
+            path = self.path
+        return torch.load(f"{path}/masks/mask_{idx}.pt")
 
     def add_missing_mask(self, batch, idx=None):
 
-        if idx is None :
-            idx = torch.randint(0, self.theta_size, (1,)).item()
+        print(self.training)
+        print(idx)
+
+        if self.training:
+            mask_idx = torch.randint(0, self.theta_size, (1,)).item()
+        else:
+            mask_idx = idx if idx is not None else 0
 
         mask = torch.ones_like(batch)
-
         mask[
             :,
             :,
             :,
-            self.get_mask(idx),
+            self.get_mask(mask_idx),
         ] = 0
 
         return torch.concatenate([batch, mask], dim=1)
@@ -314,7 +348,7 @@ class GenericSimulationDataset(Dataset):
 
         batch = self.get_grid(idx)
 
-        batch = self.add_missing_mask(batch)
+        batch = self.add_missing_mask(batch, idx)
 
         theta_vec = self.get_theta_tensor()[idx]
 

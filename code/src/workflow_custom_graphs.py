@@ -326,30 +326,44 @@ if __name__ == "__main__":
     loss = torch.load(path, map_location=torch.device("cpu"))["final_test_losses"]
     kl_score = torch.load(path, map_location=torch.device("cpu"))["kl_score"]
 
-    loss = torch.concatenate([loss, kl_score.unsqueeze(0).T], dim=1)
-    cor = torch.corrcoef(torch.log(loss).T).numpy().round(3)
-    names = theta_names + ["KL score (log)"]
+    # loss = torch.concatenate([loss, kl_score.unsqueeze(0).T], dim=1)
+    # cor = torch.corrcoef(torch.log(loss).T).numpy().round(3)
+    # names = theta_names + ["KL score (log)"]
+    #
+    # cols = [c["train"] for c in THETA_COLORS[:4]]
+    # CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+    #
+    # fig, ax = plt.subplots()
+    # im = ax.imshow(cor, cmap=CMAP)
+    #
+    # ax.set_xticks(range(len(names)), labels=names)
+    # ax.set_yticks(range(len(names)), labels=names)
+    #
+    # for i in range(len(names)):
+    #     for j in range(len(names)):
+    #         text = ax.text(j, i, cor[i, j], ha="center", va="center", color="w")
+    #
+    # ax.set_title("Loss/score matrix correlation")
+    # fig.tight_layout()
+    # plt.show()
+    #
+    # fig.savefig(
+    #     output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight"
+    # )
+    # fig.savefig(
+    #     output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight"
+    # )
 
-    cols = [c["train"] for c in THETA_COLORS[:4]]
-    CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
 
     fig, ax = plt.subplots()
-    im = ax.imshow(cor, cmap=CMAP)
-
-    ax.set_xticks(range(len(names)), labels=names)
-    ax.set_yticks(range(len(names)), labels=names)
-
-    for i in range(len(names)):
-        for j in range(len(names)):
-            text = ax.text(j, i, cor[i, j], ha="center", va="center", color="w")
-
-    ax.set_title("Loss/score matrix correlation")
+    plt.hist(torch.log(kl_score), color=cols[0])
+    ax.set_title("NBE KL score")
     fig.tight_layout()
     plt.show()
 
     fig.savefig(
-        output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight"
+        output_path / f"{model}-KL-hist.pdf", format="pdf", bbox_inches="tight"
     )
     fig.savefig(
-        output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight"
+        output_path / f"{model}-KL-hist.png", format="png", bbox_inches="tight"
     )

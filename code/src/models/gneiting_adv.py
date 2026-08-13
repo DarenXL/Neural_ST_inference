@@ -157,7 +157,7 @@ class GneitingAdvModel(SimulationModel):
             else:
                 return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}"
 
-    def sample_thetas(self, n):
+    def sample_thetas(self, n, seed=42):
         if self.space_dim == 1:
             # return {
             #     "adv": np.random.uniform(
@@ -171,7 +171,7 @@ class GneitingAdvModel(SimulationModel):
             #     ),
             # }
 
-            sampler = qmc.LatinHypercube(d=3)
+            sampler = qmc.LatinHypercube(d=3, seed=seed)
             sample = sampler.random(n)
 
             l_bounds = self.lower_bound[:3]
@@ -191,7 +191,7 @@ class GneitingAdvModel(SimulationModel):
             #     'range_space': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
             # }
 
-            sampler = qmc.LatinHypercube(d=4)
+            sampler = qmc.LatinHypercube(d=4, seed=seed)
             sample = sampler.random(n)
 
             l_bounds = self.lower_bound[:4]

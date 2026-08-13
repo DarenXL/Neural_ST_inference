@@ -137,15 +137,28 @@ class GneitingSepModel(SimulationModel):
         else:
             return rf"$\gamma$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
 
-    def sample_thetas(self, n):
+    def sample_thetas(self, n, seed=42):
+        # return {
+        #     "sep": np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,)),
+        #     "range_time": np.random.uniform(
+        #         self.lower_bound[1], self.upper_bound[1], (n,)
+        #     ),
+        #     "range_space": np.random.uniform(
+        #         self.lower_bound[2], self.upper_bound[2], (n,)
+        #     ),
+        # }
+
+        sampler = qmc.LatinHypercube(d=3, seed=seed)
+        sample = sampler.random(n)
+
+        l_bounds = self.lower_bound[:3]
+        u_bounds = self.upper_bound[:3]
+        sample_scaled = qmc.scale(sample, l_bounds, u_bounds)
+
         return {
-            "sep": np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,)),
-            "range_time": np.random.uniform(
-                self.lower_bound[1], self.upper_bound[1], (n,)
-            ),
-            "range_space": np.random.uniform(
-                self.lower_bound[2], self.upper_bound[2], (n,)
-            ),
+            "adv": sample_scaled[:, 0],
+            "range_time": sample_scaled[:, 1],
+            "range_space": sample_scaled[:, 2],
         }
 
     def simulate(self, p, t_size, s_dim, s_size, seed=0):
