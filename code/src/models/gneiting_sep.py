@@ -5,8 +5,8 @@ from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
 
-def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, range_time, range_space, deepset_size=5, seed=0):
-    ns = 5000
+def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, range_time, range_space, seed=0):
+    ns = 4000
 
     model = get_gst_model(space_dim, sep, range_time, range_space)
 
@@ -17,9 +17,9 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, r
             dx=[1. / space_size, 1. / time_size]
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, deepset_size, seed, ns)
+        gl.simuSpectral(None, dbgrid, model, None, 1, seed, ns)
 
-        batch = np.stack([dbgrid[i].reshape((space_size, time_size), order='F') for i in range(3, 3+deepset_size)]).transpose(0, 2, 1)
+        batch = dbgrid[3].reshape((space_size, time_size), order="F").transpose(1, 0)
 
     elif space_dim == 2 :
 
@@ -28,17 +28,12 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, r
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, deepset_size, seed, ns
+            None, dbgrid, model, None, 1, seed, ns
         )
 
-        batch = np.stack(
-            [
-                dbgrid[i].reshape((space_size, space_size, time_size), order="F")
-                for i in range(4, 4+deepset_size)
-            ]
-        ).transpose(0, 3, 2, 1)
+        batch = dbgrid[4].reshape((space_size, space_size, time_size), order="F").transpose(2, 1, 0)
 
-    return np.expand_dims(np.stack(batch), 1)
+    return np.expand_dims(batch, (0,1))
 
 def get_gst_model(space_dim, sep, range_time, range_space):
     sep = np.maximum(sep, np.array(0.))
@@ -153,7 +148,7 @@ class GneitingSepModel(SimulationModel):
             ),
         }
 
-    def simulate(self, p, t_size, s_dim, s_size, d_size, seed=0):
+    def simulate(self, p, t_size, s_dim, s_size, seed=0):
         assert s_dim == self.space_dim
 
         return _simulate_gneiting_matern_grid_func(
@@ -163,7 +158,6 @@ class GneitingSepModel(SimulationModel):
             p["sep"],
             p["range_time"],
             p["range_space"],
-            deepset_size=d_size,
             seed=seed
         )
 
