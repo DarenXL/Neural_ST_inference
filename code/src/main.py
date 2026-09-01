@@ -61,12 +61,12 @@ freq_epochs_test = 10
 time_size = 100
 space_dim = 1
 space_size = 100
-missing_ratios = [0.94, 0.96, 0.98]  # 0.94,0.96, 0.98
+missing_ratios = [0.94, 0.96, 0.98]
 
 # Amount of data
 
-train_size = 10
-test_size = 10
+train_size = 10000
+test_size = 1500
 
 if __name__ == "__main__":
 
@@ -118,8 +118,8 @@ if __name__ == "__main__":
 
     # Model choice
 
-    model = GneitingAdvModel(space_dim=space_dim)
-    # model = GneitingSepModel(space_dim=space_dim)
+    # model = GneitingAdvModel(space_dim=space_dim)
+    model = GneitingSepModel(space_dim=space_dim)
 
     # Creation of the class dataset and its θ
 
@@ -186,15 +186,9 @@ if __name__ == "__main__":
 
     # Show data example
 
-    show_example_mask(
-        datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    )
-    show_example_mask(
-        datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    )
-    show_example_mask(
-        datasets_test[2], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    )
+    # show_example(
+    #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    # )
     # show_example(
     #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
     # )
@@ -208,75 +202,75 @@ if __name__ == "__main__":
     #############################
     #############################
 
-    # ############################
-    # ####### Architecture #######
-    # ############################
-    #
-    # # mle_trainer = MLE(device, res_path)
-    # # mle_trainer.test_mle(datasets_test[0])
-    #
-    # # Creation of the Neural Network
-    #
-    # CNN = CNN_ST_network(
-    #     in_channels=2,
-    #     hidden=72,
-    #     theta_dim=dataset_train.model.nb_params,
-    #     spatial_dim=space_dim,
-    #     label="NBE",
-    # ).to(device)
-    #
-    # print_parameters_per_layer(CNN)
-    #
-    # quantile_CNN = CNN_ST_network(
-    #     in_channels=2,
-    #     hidden=36,
-    #     theta_dim=dataset_train.model.nb_params,
-    #     spatial_dim=space_dim,
-    #     label="NBE"
-    # ).to(device)
-    #
-    # # Creation the Trainer used train, test and show results
-    #
-    # trainer_separately = Trainer(
-    #     CNN,
-    #     device,
-    #     res_path,
-    #     quantiles=[0.05, 0.95],
-    #     quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
-    # )
-    #
-    # # Training (and testing at the same time)
-    #
-    # trainer_separately.train(
-    #     train_loader=loader_train,
-    #     test_loader=loaders_test[0],
-    #     nb_epochs=nb_epochs,
-    #     freq_epochs_test=freq_epochs_test,
-    # )
-    #
-    # # Testing
-    #
-    # for loader in loaders_test:
-    #     res = trainer_separately.test(loader)  # res = ...
-    #
-    # try:
-    #     print(
-    #         "quantiles precision :",
-    #         torch.mean(
-    #             (res["true_all_theta"] > res["all_quantiles"][0.05])
-    #             * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
-    #             dim=0,
-    #         ),
-    #     )
-    # except:
-    #     print("No quantiles")
+    ############################
+    ####### Architecture #######
+    ############################
 
-    #############################
-    #############################
-    ############ NRE ############
-    #############################
-    #############################
+    # mle_trainer = MLE(device, res_path)
+    # mle_trainer.test_mle(datasets_test[0])
 
+    # Creation of the Neural Network
+
+    CNN = CNN_ST_network(
+        in_channels=2,
+        hidden=72,
+        theta_dim=dataset_train.model.nb_params,
+        spatial_dim=space_dim,
+        label="NBE",
+    ).to(device)
+
+    print_parameters_per_layer(CNN)
+
+    quantile_CNN = CNN_ST_network(
+        in_channels=2,
+        hidden=36,
+        theta_dim=dataset_train.model.nb_params,
+        spatial_dim=space_dim,
+        label="NBE"
+    ).to(device)
+
+    # Creation the Trainer used train, test and show results
+
+    trainer_separately = Trainer(
+        CNN,
+        device,
+        res_path,
+        quantiles=[0.05, 0.95],
+        quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+    )
+
+    # Training (and testing at the same time)
+
+    trainer_separately.train(
+        train_loader=loader_train,
+        test_loader=loaders_test[0],
+        nb_epochs=nb_epochs,
+        freq_epochs_test=freq_epochs_test,
+    )
+
+    # Testing
+
+    for loader in loaders_test:
+        res = trainer_separately.test(loader)  # res = ...
+
+    try:
+        print(
+            "quantiles precision :",
+            torch.mean(
+                (res["true_all_theta"] > res["all_quantiles"][0.05])
+                * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
+                dim=0,
+            ),
+        )
+    except:
+        print("No quantiles")
+
+    # #############################
+    # #############################
+    # ############ NRE ############
+    # #############################
+    # #############################
+    #
     # #####################
     # ####### Model #######
     # #####################
@@ -334,15 +328,15 @@ if __name__ == "__main__":
     # ###########################################
     # ###########################################
 
-    # # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
-    #
-    # trainers = [trainer_separately]
-    #
-    # # train_graph(trainers, res_path)
-    # time_hist(trainers, res_path)
-    # test_alt_graph(trainers, res_path)
-    #
-    # for i in range(len(datasets_test)):
-    #     test_graph(trainers, res_path, num_dataset=i)
-    #     # target_graph(trainers, res_path, k=0, num_dataset=i)
-    #     # visualise(trainers, res_path, num_dataset=i, nb_examples=2)
+    # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
+
+    trainers = [trainer_separately]
+
+    # train_graph(trainers, res_path)
+    time_hist(trainers, res_path)
+    test_alt_graph(trainers, res_path)
+
+    for i in range(len(datasets_test)):
+        test_graph(trainers, res_path, num_dataset=i)
+        # target_graph(trainers, res_path, k=0, num_dataset=i)
+        # visualise(trainers, res_path, num_dataset=i, nb_examples=2)

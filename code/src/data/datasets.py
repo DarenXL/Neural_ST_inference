@@ -315,7 +315,7 @@ class GenericSimulationDataset(Dataset):
     def get_grid(self, idx):
         """Load the sample idx"""
         res = torch.load(f"{self.path}/samples/sample_{idx}.pt")
-        return res  + (torch.rand_like(res) - .5) * .5
+        return res # + .5 * torch.normal(torch.zeros_like(res),torch.ones_like(res),) # + (torch.rand_like(res) - .5) * 2
 
     def get_mask(self, idx):
         if self.missing_ratio is not None :
@@ -325,9 +325,6 @@ class GenericSimulationDataset(Dataset):
         return torch.load(f"{path}/masks/mask_{idx}.pt")
 
     def add_missing_mask(self, batch, idx=None):
-
-        print(self.training)
-        print(idx)
 
         if self.training:
             mask_idx = torch.randint(0, self.theta_size, (1,)).item()

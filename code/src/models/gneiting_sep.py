@@ -36,8 +36,8 @@ def _simulate_gneiting_matern_grid_func(time_size, space_dim, space_size, sep, r
     return np.expand_dims(batch, (0,1))
 
 def get_gst_model(space_dim, sep, range_time, range_space):
-    sep = np.maximum(sep, np.array(0.))
-    sep = np.minimum(sep, np.array(1.))
+    sep = np.maximum(sep, np.array(0.02))
+    sep = np.minimum(sep, np.array(0.98))
     range_time = np.maximum(range_time, np.array(0.05))
     range_space = np.maximum(range_space, np.array(0.05))
 
@@ -110,8 +110,8 @@ class GneitingSepModel(SimulationModel):
 
         self._names = ["sep", "range_time", "range_space"]
         self._names_alt = [r"$\gamma$", r"$\rho_t$", r"$\rho_s$"]
-        self.lower_bound = (0., 0.05, 0.05)
-        self.upper_bound = (1., 0.15, 0.5)
+        self.lower_bound = (0.02, 0.05, 0.05)
+        self.upper_bound = (0.98, 0.15, 0.3)
 
     @property
     def param_names(self):
@@ -156,7 +156,7 @@ class GneitingSepModel(SimulationModel):
         sample_scaled = qmc.scale(sample, l_bounds, u_bounds)
 
         return {
-            "adv": sample_scaled[:, 0],
+            "sep": sample_scaled[:, 0],
             "range_time": sample_scaled[:, 1],
             "range_space": sample_scaled[:, 2],
         }

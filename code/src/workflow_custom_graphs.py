@@ -49,15 +49,15 @@ train_size = 5
 test_size = 1500
 
 model = "adv"
-inf = "mcmc"
+inf = "optim"
 if model == "sep":
-    baseline = [0.2359, 0.0255, 0.065]
+    baseline = [0.2359, 0.0255, 0.0625]
     res_path = (
         Path("./output/results/spatiotemporal").resolve()
         / f"2026-08-03_15-23-11_{model}-{inf}"
     )
 else:
-    baseline = [0.5083, 0.0253, 0.065]
+    baseline = [0.50, 0.025, 0.0625]
     res_path = (
         Path("./output/results/spatiotemporal").resolve()
         / f"2026-08-03_15-23-11_{model}-{inf}"
@@ -66,7 +66,7 @@ else:
 char = {"sep": r"$\gamma$", "adv": r"$v$"}
 theta_names = [char[model], r"$\rho_t$", r"$\rho_s$"]
 
-output_path = Path("./output/results/spatiotemporal").resolve() / f"paper"
+output_path = Path("./output/results/spatiotemporal").resolve() / f"paper/3D"
 
 if __name__ == "__main__":
 
@@ -87,10 +87,10 @@ if __name__ == "__main__":
     # fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
     #
     # losses = []
-    # # labels = ["NBE", "NRE"]
-    # labels = ["NRE\nMAP", "NRE\nmedian"]
+    # labels = ["NBE", "NRE"]
+    # # labels = ["NRE\nMAP", "NRE\nmedian"]
     #
-    # path = res_path / "complete_outputs" / f"outputs - NRE [0].pt"
+    # path = res_path / "complete_outputs" / f"outputs - NBE [0].pt"
     # loss = torch.load(path, map_location=torch.device('cpu'))["final_test_losses"]
     # print(loss.shape)
     # if isinstance(loss, torch.Tensor):
@@ -104,15 +104,16 @@ if __name__ == "__main__":
     #     loss = loss.detach().cpu().numpy()
     # losses.append(loss)
     #
-    # # path = res_path / "complete_outputs" / f"outputs - MLE [0].pt"
-    # # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] - torch.load(path, map_location=torch.device('cpu'))["final_all_theta"])
-    # # print(loss.shape)
-    # # if isinstance(loss, torch.Tensor):
-    # #     loss = loss.detach().cpu().numpy()
-    # #     loss[np.argmax(loss[:,1]),1] = baseline[1]
-    # #     loss[np.argmax(loss[:, 1]), 1] = baseline[1]
-    # # losses.append(loss)
-    # # print(loss.shape)
+    # path = res_path / "complete_outputs" / f"outputs - MLE [0].pt"
+    # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] * torch.sqrt(torch.tensor([1, 1 , 8 / 12])) - torch.load(path, map_location=torch.device('cpu'))["final_all_theta"])
+    # print(loss.shape)
+    # if isinstance(loss, torch.Tensor):
+    #     loss = loss.detach().cpu().numpy()
+    #     loss[np.argmax(loss[:,1]),1] = baseline[1]
+    #     loss[np.argmax(loss[:, 1]), 1] = baseline[1]
+    # losses.append(loss)
+    # print(loss.shape)
+    # labels += ["MLE"]
     #
     # for i, name in enumerate(theta_names):
     #
@@ -137,11 +138,11 @@ if __name__ == "__main__":
     # fig_box.tight_layout()
     # plt.show()
     #
-    # # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE.pdf", format="pdf", bbox_inches="tight")
-    # # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE.png", format="png", bbox_inches="tight")
+    # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE-MLE.pdf", format="pdf", bbox_inches="tight")
+    # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE-MLE.png", format="png", bbox_inches="tight")
     #
-    # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.pdf", format="pdf", bbox_inches="tight")
-    # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.png", format="png", bbox_inches="tight")
+    # # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.pdf", format="pdf", bbox_inches="tight")
+    # # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.png", format="png", bbox_inches="tight")
 
     ######################
     ####### Missing ######
@@ -151,7 +152,7 @@ if __name__ == "__main__":
     #
     # fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
     #
-    # method = "NBE"
+    # method = "NRE"
     # losses = []
     # labels = ["~73%\nmissing\nratio", "~86%\nmissing\nratio", "~96%\nmissing\nratio"]
     # for j in range(len(labels)):
@@ -263,107 +264,107 @@ if __name__ == "__main__":
     ####### Loss ######
     ###################
 
-    # path = (
-    #         res_path
-    #         / "loss_evolution"
-    #         / f"history - NBE [0].pt"
-    #     )
-    # all_loss_train = torch.load(path, map_location=torch.device('cpu'))["train_loss_history"]
-    # all_loss_test = torch.load(path, map_location=torch.device('cpu'))["test_loss_history"]
-    #
-    # fig, ax = plt.subplots(
-    #         1, len(theta_names), figsize=(12, 4), constrained_layout=True
-    #     )
-    #
-    # for i, name in enumerate(theta_names):
-    #     ax[i].plot(
-    #         [l[i] for l in all_loss_train],
-    #         THETA_COLORS[i]["train"],
-    #         label="train " + name,
-    #     )
-    #     ax[i].plot(
-    #         range(freq_epochs_test, nb_epochs + 1, freq_epochs_test),
-    #         [l[i] for l in all_loss_test],
-    #         THETA_COLORS[i]["test"],
-    #         label="test " + name,
-    #         linestyle=(5, (10, 2)),
-    #     )
-    #
-    #     ax[i].axhline(
-    #         baseline[i],
-    #         color=THETA_COLORS[i]["baseline"],
-    #         ls="--",
-    #         label="baseline " + name,
-    #     )
-    #
-    #     ax[i].set_title("Evolution of " + name)
-    #     ax[i].set_xlabel("epochs")
-    #     ax[i].set_ylabel("MAE")
-    #     ax[i].legend()
-    #
-    # fig.suptitle(f"Loss evolutions of NBE")
-    #
-    # fig.savefig(
-    #     output_path
-    #     / f"{model}-train_loss_NBE.png",
-    #     format="png",
-    #     bbox_inches="tight",
-    # )
-    # fig.savefig(
-    #     output_path
-    #     / f"{model}-train_loss_NBE.pdf",
-    #     format="pdf",
-    #     bbox_inches="tight",
-    # )
-    #
-    # plt.show()
+    path = (
+            res_path
+            / "loss_evolution"
+            / f"history - NBE [0].pt"
+        )
+    all_loss_train = torch.load(path, map_location=torch.device('cpu'))["train_loss_history"]
+    all_loss_test = torch.load(path, map_location=torch.device('cpu'))["test_loss_history"]
+
+    fig, ax = plt.subplots(
+            1, len(theta_names), figsize=(12, 4), constrained_layout=True
+        )
+
+    for i, name in enumerate(theta_names):
+        ax[i].plot(
+            [l[i] for l in all_loss_train],
+            THETA_COLORS[i]["train"],
+            label="train " + name,
+        )
+        ax[i].plot(
+            range(freq_epochs_test, nb_epochs + 1, freq_epochs_test),
+            [l[i] for l in all_loss_test],
+            THETA_COLORS[i]["test"],
+            label="test " + name,
+            linestyle=(5, (10, 2)),
+        )
+
+        ax[i].axhline(
+            baseline[i],
+            color=THETA_COLORS[i]["baseline"],
+            ls="--",
+            label="baseline " + name,
+        )
+
+        ax[i].set_title("Evolution of " + name)
+        ax[i].set_xlabel("epochs")
+        ax[i].set_ylabel("MAE")
+        ax[i].legend()
+
+    fig.suptitle(f"Loss evolutions of NBE")
+
+    fig.savefig(
+        output_path
+        / f"{model}-train_loss_NBE.png",
+        format="png",
+        bbox_inches="tight",
+    )
+    fig.savefig(
+        output_path
+        / f"{model}-train_loss_NBE.pdf",
+        format="pdf",
+        bbox_inches="tight",
+    )
+
+    plt.show()
 
     #######################
     ####### KL score ######
     #######################
 
-    path = res_path / "complete_outputs" / f"outputs - NBE [0] (3).pt"
-    loss = torch.load(path, map_location=torch.device("cpu"))["final_test_losses"]
-    kl_score = torch.load(path, map_location=torch.device("cpu"))["kl_score"]
-
-    # loss = torch.concatenate([loss, kl_score.unsqueeze(0).T], dim=1)
-    # cor = torch.corrcoef(torch.log(loss).T).numpy().round(3)
-    # names = theta_names + ["KL score (log)"]
+    # path = res_path / "complete_outputs" / f"outputs - NBE [0] (3).pt"
+    # loss = torch.load(path, map_location=torch.device("cpu"))["final_test_losses"]
+    # kl_score = torch.load(path, map_location=torch.device("cpu"))["kl_score"]
     #
-    # cols = [c["train"] for c in THETA_COLORS[:4]]
-    # CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+    # # loss = torch.concatenate([loss, kl_score.unsqueeze(0).T], dim=1)
+    # # cor = torch.corrcoef(torch.log(loss).T).numpy().round(3)
+    # # names = theta_names + ["KL score (log)"]
+    # #
+    # # cols = [c["train"] for c in THETA_COLORS[:4]]
+    # # CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+    # #
+    # # fig, ax = plt.subplots()
+    # # im = ax.imshow(cor, cmap=CMAP)
+    # #
+    # # ax.set_xticks(range(len(names)), labels=names)
+    # # ax.set_yticks(range(len(names)), labels=names)
+    # #
+    # # for i in range(len(names)):
+    # #     for j in range(len(names)):
+    # #         text = ax.text(j, i, cor[i, j], ha="center", va="center", color="w")
+    # #
+    # # ax.set_title("Loss/score matrix correlation")
+    # # fig.tight_layout()
+    # # plt.show()
+    # #
+    # # fig.savefig(
+    # #     output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight"
+    # # )
+    # # fig.savefig(
+    # #     output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight"
+    # # )
+    #
     #
     # fig, ax = plt.subplots()
-    # im = ax.imshow(cor, cmap=CMAP)
-    #
-    # ax.set_xticks(range(len(names)), labels=names)
-    # ax.set_yticks(range(len(names)), labels=names)
-    #
-    # for i in range(len(names)):
-    #     for j in range(len(names)):
-    #         text = ax.text(j, i, cor[i, j], ha="center", va="center", color="w")
-    #
-    # ax.set_title("Loss/score matrix correlation")
+    # plt.hist(torch.log(kl_score), color=cols[0])
+    # ax.set_title("NBE KL score")
     # fig.tight_layout()
     # plt.show()
     #
     # fig.savefig(
-    #     output_path / f"{model}-log-KL-score.pdf", format="pdf", bbox_inches="tight"
+    #     output_path / f"{model}-KL-hist.pdf", format="pdf", bbox_inches="tight"
     # )
     # fig.savefig(
-    #     output_path / f"{model}-log-KL-score.png", format="png", bbox_inches="tight"
+    #     output_path / f"{model}-KL-hist.png", format="png", bbox_inches="tight"
     # )
-
-
-    fig, ax = plt.subplots()
-    plt.hist(torch.log(kl_score), color=cols[0])
-    ax.set_title("NBE KL score")
-    fig.tight_layout()
-    plt.show()
-
-    fig.savefig(
-        output_path / f"{model}-KL-hist.pdf", format="pdf", bbox_inches="tight"
-    )
-    fig.savefig(
-        output_path / f"{model}-KL-hist.png", format="png", bbox_inches="tight"
-    )

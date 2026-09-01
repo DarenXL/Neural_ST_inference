@@ -5,8 +5,11 @@ import torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
+from matplotlib.ticker import ScalarFormatter
 import gstlearn as gl
 import time
+import xarray as xr
+
 
 THETA_COLORS = [
     {
@@ -441,7 +444,7 @@ def show_example_gif(
 
         return [ax.get_images() for ax in axs.flat]
 
-    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=100)
+    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=200)
 
     out_dir = data_path / "examples"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -453,6 +456,192 @@ def show_example_gif(
     plt.close(fig)
 
     print(gif_path)
+
+
+def load_data(path, times=range(100000, 100025), nb_bins=75):
+
+    ds = xr.open_dataset(path, engine="netcdf4")
+
+    north = ds.northing.values
+    east = ds.easting.values
+    vals = ds.raw_GHI.isel(time=times).values
+
+    mask = ~np.isnan(vals).any(axis=1)
+    vals = vals[mask]
+    north = north[mask]
+    east = east[mask]
+
+    n_min, n_max = north.min(), north.max()
+    e_min, e_max = east.min(), east.max()
+
+    e_span = e_max - e_min
+    n_span = n_max - n_min
+    max_span = max(e_span, n_span)
+
+    if e_span < n_span:
+        e_max = e_min + max_span
+    else:
+        n_max = n_min + max_span
+
+    north_norm = (north - n_min) / (n_max - n_min)
+    east_norm = (east - e_min) / (e_max - e_min)
+    vals_norm = (vals - vals.mean()) / (vals.std())
+
+    y = torch.from_numpy(north_norm)
+    x = torch.from_numpy(east_norm)
+    values = torch.from_numpy(vals_norm).T
+
+    bin_size = 1.0 / nb_bins
+
+    ix = torch.clamp((x / bin_size).long(), max=nb_bins - 1)
+    iy = torch.clamp((y / bin_size).long(), max=nb_bins - 1)
+
+    flat_idx = ix * nb_bins + iy
+
+    value_flat = torch.full((values.shape[0], nb_bins * nb_bins), float("nan"))
+
+    unique_idx = flat_idx.unique()
+    for idx in unique_idx:
+        indices_in_cell = torch.where(flat_idx == idx)[0]
+        chosen = indices_in_cell[torch.randint(0, len(indices_in_cell), (1,))]
+        value_flat[:, idx] = values[:, chosen.squeeze()]
+
+    res = value_flat.view(values.shape[0], nb_bins, nb_bins)
+
+
+    # fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+    #
+    # for ax in axs:
+    #     ax.set_xlim(0, 1)
+    #     ax.set_ylim(0, 1)
+    #     ax.set_aspect("equal")
+    #
+    # sc = axs[0].scatter(east, north, c=vals[:, 0], cmap=CMAP,)
+    # axs[0].set_xlim(e_min, e_max)
+    # axs[0].set_ylim(n_min, n_max)
+    # axs[0].set_xlabel("Easting (m)")
+    # axs[0].set_ylabel("Northing (m)")
+    #
+    # axs[1].imshow(
+    #     res[0].T, aspect="equal", extent=[0, 1, 0, 1], origin="lower", cmap=CMAP
+    # )
+    #
+    # cbar = fig.colorbar(sc, ax=axs, location="right", shrink=1, pad=0.03)
+    # cbar.set_label("GHI")
+    #
+    # fig.suptitle("GHI 04:01:00 6th June 2013")
+    # axs[0].set_title("Raw data")
+    # axs[1].set_title("Grid Projection")
+    #
+    # plt.show()
+    # plt.tight_layout()
+    #
+    # output_path = Path("./output/results/spatiotemporal").resolve() / f"paper/3D"
+    #
+    # fig.savefig(
+    #     output_path / f"projection.pdf", format="pdf", bbox_inches="tight"
+    # )
+    # fig.savefig(output_path / f"projection.png", format="png", bbox_inches="tight")
+
+    return res
+
+def arrow(path, wind, times=range(100000, 100025)):
+
+    ds = xr.open_dataset(path, engine="netcdf4")
+
+    north = ds.northing.values
+    east = ds.easting.values
+    vals = ds.raw_GHI.isel(time=times).values
+
+    mask = ~np.isnan(vals).any(axis=1)
+    vals = vals[mask]
+    north = north[mask]
+    east = east[mask]
+
+    n_min, n_max = north.min(), north.max()
+    e_min, e_max = east.min(), east.max()
+
+    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
+
+    sc = ax.scatter(east, north, c=vals[:, 0], cmap=CMAP,)
+    ax.set_xlim(e_min, e_max)
+    ax.set_ylim(n_min, n_max)
+    ax.set_xlabel("Easting (m)")
+    ax.set_ylabel("Northing (m)")
+
+    cbar = fig.colorbar(sc, ax=ax, location="right", shrink=1, pad=0.03)
+    cbar.set_label("GHI")
+
+    fig.suptitle("Wind direction on time")
+
+    # Pour l'axe Y (Northing)
+    formatter_y = ScalarFormatter(useOffset=False)
+    formatter_y.set_scientific(False)
+    ax.yaxis.set_major_formatter(formatter_y)
+
+    # Pour l'axe X (Easting) si besoin
+    formatter_x = ScalarFormatter(useOffset=False)
+    formatter_x.set_scientific(False)
+    ax.xaxis.set_major_formatter(formatter_x)
+
+    def update(t):
+        ax.clear()
+
+        ax.scatter(
+            east,
+            north,
+            c=vals[:, t],
+            cmap=CMAP,
+        )
+        ax.set_xlim(e_min, e_max)
+        ax.set_ylim(n_min, n_max)
+        ax.set_xlabel("Easting (m)")
+        ax.set_ylabel("Northing (m)")
+        ax.set_title(f"Time {t}")
+
+        u_wind = wind[t, 1].item()
+        v_wind = wind[t, 0].item()
+
+        x_pos = e_min + 0.80 * (e_max - e_min)
+        y_pos = n_min + 0.80 * (n_max - n_min)
+
+        ax.quiver(
+            x_pos,
+            y_pos,
+            u_wind,
+            v_wind,
+            color="red",
+            units="inches",  # La taille dépend de pouces physiques
+            scale=20,
+            width=0.008,
+            headwidth=4,
+        )
+
+        ax.text(
+            x_pos,
+            y_pos + 0.003 * (n_max - n_min),
+            "Wind",
+            color="red",
+            ha="center",
+            weight="bold",
+        )
+
+        ax.ticklabel_format(style="plain", useOffset=False, axis="y")
+        ax.tick_params(axis="x", labelrotation=45)
+        ax.tick_params(axis="y", labelrotation=45)
+
+        return [ax.get_images()]
+
+    plt.subplots_adjust(left=0.18, bottom=0.15, right=0.95, top=0.88, wspace=0.3)
+
+    anim = animation.FuncAnimation(fig, update, frames=len(times), interval=100)
+
+    output_path = Path("./output/results/spatiotemporal").resolve() / f"paper/3D"
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    gif_path = output_path / f"wind.gif"
+
+    anim.save(gif_path, writer="pillow")
 
 
 def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
