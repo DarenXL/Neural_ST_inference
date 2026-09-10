@@ -64,7 +64,7 @@ class MLE:
 
         # with torch.no_grad():
         for i in tqdm(range(len(dataset)), desc=f"Inference {self.estimation_label}"):
-            data_test, theta_test, _ = dataset[i]
+            data_test, theta_test = dataset[i]
 
             data_test = data_test.detach().numpy()
             theta_test = theta_test

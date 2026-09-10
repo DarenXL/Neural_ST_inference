@@ -130,12 +130,15 @@ class Trainer:
         self.train_dataset_hist.append(train_loader.dataset)
         self.simu_time += train_loader.dataset.time_generation
 
+        # self.weights = torch.ones((len(train_loader.model.theta_names)), device=self.device)
+        # torch.tensor([1,1,1,.5], device=self.device)
+
         if self.network.nls:
             self.train_nls(train_loader, nb_epochs)
         else:
             self.train_quantiles(train_loader, test_loader, nb_epochs, freq_epochs_test)
 
-    def test(self, test_loader, dataset_gridsearch=None):
+    def test(self, test_loader):
         """ "
         Test the neural network.
         keeps track of the datasets used.
@@ -154,8 +157,8 @@ class Trainer:
 
         if self.network.nls:
             # return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch)
-            # return self.test_nls_optim(test_loader)
-            return self.test_nls_MCMC(test_loader)
+            return self.test_nls_optim(test_loader)
+            # return self.test_nls_MCMC(test_loader)
         else:
             return self.test_quantiles(test_loader)
 
@@ -193,7 +196,7 @@ class Trainer:
 
                 base_output = self.network(batched_data)
 
-                loss_median = MAE(base_output, theta)
+                loss_median = MAE(base_output, theta) # * self.weights
 
                 all_outputs = {}
 
@@ -592,6 +595,14 @@ class Trainer:
         lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
 
+        if model_ref.add_noise :
+            lower_bound = torch.cat(
+                [lower_bound, torch.tensor([0], device=self.device)]
+            )
+            upper_bound = torch.cat(
+                [upper_bound, torch.tensor([model_ref.noise], device=self.device)]
+            )
+
         if theta0 is None:
             theta0_latent = (lower_bound + upper_bound) / 2
         else:
@@ -604,15 +615,16 @@ class Trainer:
         t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
 
         for i, batch in enumerate(t):
-            data_batch, theta_batch, classi_batch = batch
+            # data_batch, theta_batch, classi_batch = batch
+            data_batch, theta_batch = batch
 
             data_batch = data_batch.to(self.device, non_blocking=True).float()
             true_theta_batch = theta_batch.to(self.device, non_blocking=True)
 
             for j in range(data_batch.size(0)):
 
-                if classi_batch[j] == 1:
-                    continue
+                # if classi_batch[j] == 1:
+                #     continue
 
                 data_single = data_batch[j].unsqueeze(0)
                 true_theta_single = true_theta_batch[j]
@@ -688,8 +700,12 @@ class Trainer:
         lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
         upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
 
-        num_samples = 200
-        warmup_steps = 50
+        if model_ref.add_noise :
+            lower_bound = torch.cat([lower_bound, torch.tensor([0], device=self.device)])
+            upper_bound = torch.cat([upper_bound, torch.tensor([model_ref.noise], device=self.device)])
+
+        num_samples = 2000
+        warmup_steps = 500
 
         kernel = NUTS(self._pyro_model, max_tree_depth=5, jit_compile=True)
         # kernel = HMC(self._pyro_model, num_steps=3, jit_compile=True)
@@ -736,7 +752,7 @@ class Trainer:
                     chain_log_ratio = torch.stack(log_ratio_list)
                     time_map += time.time() - time_map_t
 
-                    print("time_map", time_map)
+                    # print("time_map", time_map)
 
                 time_poutine = time.time()
 
@@ -755,14 +771,12 @@ class Trainer:
                 best_log_prob = log_probs[best_idx].item()
                 best_sample = {k: v[best_idx] for k, v in samples.items()}
 
-                print(f"Max Log-Joint: {best_log_prob:.4f}")
-                print("MAP Estimate:", best_sample["theta"])
+                # print(f"Max Log-Joint: {best_log_prob:.4f}")
+                # print("MAP Estimate:", best_sample["theta"])
 
                 time_poutine = time.time() - time_poutine
 
-                print("time_poutine", time_poutine)
-
-
+                # print("time_poutine", time_poutine)
 
                 batch_chains.append(chain_samples.cpu())
                 batch_log_ratios.append(chain_log_ratio)
@@ -771,16 +785,16 @@ class Trainer:
             samples = samples.reshape(-1, samples.shape[2], samples.shape[3])
 
             log_ratios = torch.stack(batch_log_ratios, dim=0)
-            print(log_ratios.shape)
+            # print(log_ratios.shape)
             log_ratios = log_ratios.reshape(-1, log_ratios.shape[-1])
-            print(log_ratios.shape)
+            # print(log_ratios.shape)
             map_indices = torch.argmax(log_ratios, dim=0)
 
-            print(map_indices.shape)
+            # print(map_indices.shape)
 
             theta_MAP = samples[map_indices, torch.arange(data_batch.size(0)), :]
 
-            print(theta_MAP.shape)
+            # print(theta_MAP.shape)
 
             all_theta_final.append(theta_MAP)
 

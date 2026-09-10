@@ -9,6 +9,7 @@ from matplotlib.ticker import ScalarFormatter
 import gstlearn as gl
 import time
 import xarray as xr
+import random
 
 
 THETA_COLORS = [
@@ -56,6 +57,30 @@ THETA_COLORS = [
 
 cols = [c["train"] for c in THETA_COLORS]
 CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+
+
+class temporary_seed:
+    def __init__(self, seed: int | None):
+        self.seed = seed
+        self.torch_state = None
+        self.np_state = None
+        self.py_state = None
+
+    def __enter__(self):
+        if self.seed is not None:
+            self.torch_state = torch.get_rng_state()
+            self.np_state = np.random.get_state()
+            self.py_state = random.getstate()
+
+            torch.manual_seed(self.seed)
+            np.random.seed(self.seed % (2**32))
+            random.seed(self.seed)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.seed is not None:
+            torch.set_rng_state(self.torch_state)
+            np.random.set_state(self.np_state)
+            random.setstate(self.py_state)
 
 
 def create_data_path(base_path: str) -> Path:
@@ -464,10 +489,11 @@ def load_data(path, times=range(100000, 100025), nb_bins=75):
 
     north = ds.northing.values
     east = ds.easting.values
-    vals = ds.raw_GHI.isel(time=times).values
+    vals = ds.qc_GHI.isel(time=times).values
+    clear_sky = ds.cs_GHI.isel(time=times).values
 
     mask = ~np.isnan(vals).any(axis=1)
-    vals = vals[mask]
+    vals = vals[mask] / clear_sky[mask]
     north = north[mask]
     east = east[mask]
 
@@ -507,7 +533,6 @@ def load_data(path, times=range(100000, 100025), nb_bins=75):
         value_flat[:, idx] = values[:, chosen.squeeze()]
 
     res = value_flat.view(values.shape[0], nb_bins, nb_bins)
-
 
     # fig, axs = plt.subplots(1, 2, figsize=(14, 6))
     #
@@ -558,7 +583,7 @@ def arrow(path, wind, times=range(100000, 100025)):
     north = north[mask]
     east = east[mask]
 
-    n_min, n_max = north.min(), north.max()
+    n_min, n_max = north.min(),  north.max()
     e_min, e_max = east.min(), east.max()
 
     fig, ax = plt.subplots(1, 1, figsize=(6, 6))
@@ -574,12 +599,10 @@ def arrow(path, wind, times=range(100000, 100025)):
 
     fig.suptitle("Wind direction on time")
 
-    # Pour l'axe Y (Northing)
     formatter_y = ScalarFormatter(useOffset=False)
     formatter_y.set_scientific(False)
     ax.yaxis.set_major_formatter(formatter_y)
 
-    # Pour l'axe X (Easting) si besoin
     formatter_x = ScalarFormatter(useOffset=False)
     formatter_x.set_scientific(False)
     ax.xaxis.set_major_formatter(formatter_x)
@@ -611,8 +634,8 @@ def arrow(path, wind, times=range(100000, 100025)):
             u_wind,
             v_wind,
             color="red",
-            units="inches",  # La taille dépend de pouces physiques
-            scale=20,
+            units="inches",
+            scale=1,
             width=0.008,
             headwidth=4,
         )

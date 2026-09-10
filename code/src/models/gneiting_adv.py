@@ -4,10 +4,10 @@ import gstlearn as gl
 from .base import SimulationModel
 from scipy.special import gamma, kv
 from scipy.stats import qmc
-
+import secrets
 
 def _simulate_gneiting_matern_grid_func(
-    time_size, space_dim, space_size, adv, range_time, range_space, seed=0
+    time_size, space_dim, space_size, adv, range_time, range_space, seed=None
 ):
 
     ns = 4000  # 5000
@@ -20,7 +20,7 @@ def _simulate_gneiting_matern_grid_func(
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, 1, seed, ns
+            None, dbgrid, model, None, 1, secrets.randbits(32) if seed is None else seed, ns
         )  # np.random.randint(1000000)
 
         batch = dbgrid[3].reshape((space_size, time_size), order="F").transpose(1, 0)
@@ -109,18 +109,20 @@ def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_spac
 
 
 class GneitingAdvModel(SimulationModel):
-    def __init__(self, space_dim=1):
+    def __init__(self, space_dim=1, noise=None):
         self.space_dim = space_dim
+        self.noise = noise
+        self.add_noise = not(noise is None)
 
         if self.space_dim == 1:
-            self._names = ["adv", "range_time", "range_space"]
-            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"]
+            self._names = ["adv", "range_time", "range_space"] + self.add_noise * ["noise"]
+            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"] + self.add_noise * [r"$\tau$"]
             self.lower_bound = (-1, 0.05, 0.05)
             self.upper_bound = (1, 0.15, 0.3)
 
         elif self.space_dim == 2:
-            self._names = ["adv1", "adv2", "range_time", "range_space"]
-            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]
+            self._names = ["adv1", "adv2", "range_time", "range_space"] + self.add_noise * ["noise"]
+            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]  + self.add_noise * [r"$\tau$"]
             self.lower_bound = (-1, -1, 0.05, 0.05)
             self.upper_bound = (1, 1, 0.15, 0.3)
 
@@ -137,27 +139,13 @@ class GneitingAdvModel(SimulationModel):
     def nb_params(self):
         return len(self.param_names)
 
-    def to_title(self, vals, alt_format=False):
+    def to_title(self, vals):
         if self.space_dim == 1:
-            if not alt_format:
-                return (
-                    rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f}"
-                    + "\n"
-                    + rf"$\rho_s: {vals[2]:.2f}"
-                )
-            else:
-                return rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
+            return rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"
         elif self.space_dim == 2:
-            if not alt_format:
-                return (
-                    rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f}"
-                    + "\n"
-                    + rf"$\rho_s$: {vals[3]:.2f}"
-                )
-            else:
-                return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}"
+            return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"
 
-    def sample_thetas(self, n, seed=42):
+    def sample_thetas(self, n, seed=None):
         if self.space_dim == 1:
             # return {
             #     "adv": np.random.uniform(
@@ -205,7 +193,7 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": sample_scaled[:, 3],
             }
 
-    def simulate(self, p, t_size, s_dim, s_size, seed=0):
+    def simulate(self, p, t_size, s_dim, s_size, seed=None):
         assert s_dim == self.space_dim
         if self.space_dim == 1:
             return _simulate_gneiting_matern_grid_func(

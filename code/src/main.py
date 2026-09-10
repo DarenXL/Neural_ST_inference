@@ -41,19 +41,19 @@ torch.manual_seed(2)
 # Path to data saving file
 
 data_path = create_data_path("output/data/spatiotemporal_adv")
-# data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-08-06_16-57-59")  # "2026-08-03_15-23-11"
+# data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-09-10_10-00-57")  # "2026-08-03_15-23-11"
 
 # Path to results saving file
 
 res_path = create_res_path("output/results/spatiotemporal")
-# res_path = (Path("./output/results/spatiotemporal").resolve() / "2026-08-06_16-57-59")  # "2026-08-03_15-23-11"
+# res_path = (Path("./output/results/spatiotemporal").resolve() / "2026-09-10_10-00-57")  # "2026-08-03_15-23-11"
 
 print("res_path", res_path)
 
 # Neural Network train options
 
-batch_size = 150
-nb_epochs = 500
+batch_size = 1000
+nb_epochs = 20
 freq_epochs_test = 10
 
 # Data options
@@ -61,12 +61,12 @@ freq_epochs_test = 10
 time_size = 100
 space_dim = 1
 space_size = 100
-missing_ratios = [0.94, 0.96, 0.98]
+missing_ratios = [.94,.96,.98] # [0.94, 0.96, 0.98] # [0.7, 0.85, 0.95]
 
 # Amount of data
 
-train_size = 10000
-test_size = 1500
+train_size = 10
+test_size = 10
 
 if __name__ == "__main__":
 
@@ -80,11 +80,12 @@ if __name__ == "__main__":
     ####### Load #######
     ####################
 
-    # model = GneitingAdvModel(space_dim=space_dim)
+    # model = GneitingAdvModel(space_dim=space_dim, noise=.5)
     #
     # dataset_train = GenericSimulationDataset.load(data_path / "train", model)
+    # dataset_train.global_seed = 1
     # loader_train = DataLoader(
-    #     dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate
+    #     dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate, num_workers=4, pin_memory=True, persistent_workers=True
     # )
     #
     # datasets_test = []
@@ -95,7 +96,10 @@ if __name__ == "__main__":
     #
     #     dataset = GenericSimulationDataset.load(specific_test_path, model)
     #     dataset.missing_ratio = ratio
+    #     # dataset.global_seed = 1+train_size*10
     #     print(dataset.missing_ratio)
+    #     dataset.eval()
+    #
     #
     #     datasets_test.append(dataset)
     #     loaders_test.append(
@@ -118,8 +122,8 @@ if __name__ == "__main__":
 
     # Model choice
 
-    # model = GneitingAdvModel(space_dim=space_dim)
-    model = GneitingSepModel(space_dim=space_dim)
+    model = GneitingAdvModel(space_dim=space_dim, noise=.5)
+    # model = GneitingSepModel(space_dim=space_dim)
 
     # Creation of the class dataset and its θ
 
@@ -186,10 +190,16 @@ if __name__ == "__main__":
 
     # Show data example
 
-    # show_example(
+    # show_example_mask(
     #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
     # )
-    # show_example(
+    # show_example_mask(
+    #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    # )
+    # show_example_mask(
+    #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=5
+    # )
+    # show_example_mask(
     #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
     # )
     # show_example_gif(
@@ -206,8 +216,8 @@ if __name__ == "__main__":
     ####### Architecture #######
     ############################
 
-    # mle_trainer = MLE(device, res_path)
-    # mle_trainer.test_mle(datasets_test[0])
+    mle_trainer = MLE(device, res_path)
+    mle_trainer.test_mle(datasets_test[0])
 
     # Creation of the Neural Network
 
@@ -253,7 +263,7 @@ if __name__ == "__main__":
     for loader in loaders_test:
         res = trainer_separately.test(loader)  # res = ...
 
-    try:
+    try: # 0.8960, 0.9113, 0.8900, 0.9113
         print(
             "quantiles precision :",
             torch.mean(
@@ -308,7 +318,7 @@ if __name__ == "__main__":
     #     nb_epochs=nb_epochs,
     # )
     # for loader in loaders_test:
-    #     res = trainer_nls.test(loader, dataset_train)
+    #     res = trainer_nls.test(loader)
     #
     # try :
     #     print(

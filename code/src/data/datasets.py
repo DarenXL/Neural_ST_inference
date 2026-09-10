@@ -1,13 +1,15 @@
 import torch
 from pathlib import Path
 import numpy as np
+import random
 import os
 import time
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import concurrent.futures
 from models.base import SimulationModel
-from utils import CMAP, create_mask
+from utils import CMAP, create_mask, temporary_seed
+from scipy.stats import qmc
 import gstlearn as gl
 import matplotlib.pyplot as plt
 
@@ -34,9 +36,11 @@ class GenericSimulationDataset(Dataset):
         self.path = None
         self.time_generation = None
 
-        self.training = True
+        self.training = True # Shuffle mask, Shuffle Tau
 
         self.thetas = self.model.sample_thetas(theta_size, seed=self.global_seed)
+        if self.model.add_noise :
+            self.taus = self.sample_taus(theta_size) # torch.rand((theta_size,)) * self.model.noise
 
     def __len__(self):
         return self.theta_size
@@ -49,8 +53,26 @@ class GenericSimulationDataset(Dataset):
 
     def get_theta_tensor(self) -> torch.Tensor:
         """Return every theta in a tensor"""
-        stack = [self.thetas[name] for name in self.model.param_names]
-        return torch.from_numpy(np.stack(stack).T)
+        stack = [self.thetas[name] for name in self.model.param_names[:-1 if self.model.add_noise else None]]
+        res = torch.from_numpy(np.stack(stack).T)
+        if self.model.add_noise :
+            res = torch.cat([res,self.taus], dim=1)
+        return res
+
+    def get_theta_by_idx(self, idx) -> torch.Tensor:
+        """Return every theta in a tensor"""
+        stack = [self.thetas[name][idx] for name in self.model.param_names[:-1 if self.model.add_noise else None]]
+        res = torch.tensor(stack)
+        if self.model.add_noise :
+            res = torch.cat([res,self.taus[idx]])
+        return res
+
+    def sample_taus(self, size):
+        sampler = qmc.LatinHypercube(d=1, seed=self.global_seed)
+        sample = sampler.random(size)
+
+        res =  qmc.scale(sample, 0, self.model.noise)
+        return torch.from_numpy(res)
 
     def save(self, path: Path):
         """Save all attributes and the thetas"""
@@ -61,6 +83,7 @@ class GenericSimulationDataset(Dataset):
                 "space_size": self.space_size,
                 "theta_size": self.theta_size,
                 "missing_ratio": self.missing_ratio,
+                "global_seed": self.global_seed,
                 "time_generation": self.time_generation,
                 "model_class": self.model.__class__.__name__,
             },
@@ -82,6 +105,7 @@ class GenericSimulationDataset(Dataset):
             space_dim=config["space_dim"],
             space_size=config["space_size"],
             missing_ratio=config["missing_ratio"],
+            seed=config["global_seed"],
         )
 
         instance.thetas = data["thetas"]
@@ -120,10 +144,12 @@ class GenericSimulationDataset(Dataset):
         path.mkdir(parents=True, exist_ok=True)
 
         for idx in range(self.theta_size):
-            mask = create_mask(self.space_size, self.space_dim, self.missing_ratio)
+            seed_idx = None if self.global_seed is None else self.global_seed + idx
+            with temporary_seed(seed_idx):
+                mask = create_mask(self.space_size, self.space_dim, self.missing_ratio)
             torch.save(mask, f"{Path(path)}/mask_{idx}.pt")
 
-    def generate(self, path: Path, base_seed=None):
+    def generate(self, path: Path):
         samples_dir = Path(path) / "samples"
         os.makedirs(samples_dir, exist_ok=True)
 
@@ -131,17 +157,14 @@ class GenericSimulationDataset(Dataset):
 
         max_workers = None
 
-        if base_seed is None :
-            base_seed = self.global_seed
-
         with concurrent.futures.ProcessPoolExecutor(
             max_workers=max_workers
         ) as executor:
             futures = []
             for idx in range(self.theta_size):
-                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
+                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names[:-1 if self.model.add_noise else None]}
 
-                worker_seed = 0 if base_seed is None else base_seed + idx
+                worker_seed = None if self.global_seed is None else self.global_seed + idx
 
                 f = executor.submit(
                     GenericSimulationDataset._worker_simulate_and_save,
@@ -238,9 +261,9 @@ class GenericSimulationDataset(Dataset):
     ):
         """Show a gaussian field"""
         batch = self.get_grid(idx)
-        theta = self.get_theta_tensor()[idx]
+        theta = self.get_theta_by_idx(idx)
 
-        title_text = self.model.to_title(theta, alt_format=True)
+        title_text = self.model.to_title(theta)
 
         if self.space_dim == 1:
 
@@ -315,7 +338,7 @@ class GenericSimulationDataset(Dataset):
     def get_grid(self, idx):
         """Load the sample idx"""
         res = torch.load(f"{self.path}/samples/sample_{idx}.pt")
-        return res # + .5 * torch.normal(torch.zeros_like(res),torch.ones_like(res),) # + (torch.rand_like(res) - .5) * 2
+        return res
 
     def get_mask(self, idx):
         if self.missing_ratio is not None :
@@ -324,14 +347,14 @@ class GenericSimulationDataset(Dataset):
             path = self.path
         return torch.load(f"{path}/masks/mask_{idx}.pt")
 
-    def add_missing_mask(self, batch, idx=None):
+    def add_missing_mask(self, sample, idx=None):
 
         if self.training:
             mask_idx = torch.randint(0, self.theta_size, (1,)).item()
         else:
             mask_idx = idx if idx is not None else 0
 
-        mask = torch.ones_like(batch)
+        mask = torch.ones_like(sample)
         mask[
             :,
             :,
@@ -339,17 +362,41 @@ class GenericSimulationDataset(Dataset):
             self.get_mask(mask_idx),
         ] = 0
 
-        return torch.concatenate([batch, mask], dim=1)
+        return torch.concatenate([sample, mask], dim=1)
+
+    def add_noise(self, sample, idx=None):
+
+        if self.training:
+            tau_idx = torch.randint(0, self.theta_size, (1,)).item()
+            noise = self.taus[tau_idx] * torch.randn_like(sample)
+        else:
+            tau_idx = idx if idx is not None else 0
+            seed = None if self.global_seed is None else self.global_seed + tau_idx
+
+            if seed is not None:
+                g = torch.Generator(device=sample.device)
+                g.manual_seed(seed)
+                noise = self.taus[tau_idx] * torch.randn(
+                    sample.shape, generator=g, dtype=sample.dtype, device=sample.device
+                )
+            else:
+                noise = self.taus[tau_idx] * torch.randn_like(sample)
+
+        return sample + noise, self.taus[tau_idx]
 
     def __getitem__(self, idx):
 
-        batch = self.get_grid(idx)
+        theta_vec = self.get_theta_by_idx(idx)
 
-        batch = self.add_missing_mask(batch, idx)
+        sample = self.get_grid(idx)
 
-        theta_vec = self.get_theta_tensor()[idx]
+        if self.model.add_noise :
+            sample, tau = self.add_noise(sample, idx)
+            theta_vec[-1] = tau
 
-        return (batch, theta_vec.unsqueeze(0))
+        sample = self.add_missing_mask(sample, idx)
+
+        return (sample, theta_vec.unsqueeze(0))
 
 
 class NlsSimulationDataset(GenericSimulationDataset):
@@ -368,15 +415,21 @@ class NlsSimulationDataset(GenericSimulationDataset):
         is_perm = idx // self.theta_size
         sample_idx = idx % self.theta_size
 
-        batch = self.get_grid(sample_idx)
-
-        batch = self.add_missing_mask(batch)
-
         if is_perm == 0:
-            theta = self.all_thetas[sample_idx]
+            theta = self.all_thetas[sample_idx] # TODO
         else:
             theta = self.all_thetas[self.pi[sample_idx]]
 
+        sample = self.get_grid(sample_idx)
+        if self.model.add_noise :
+            sample, tau = self.add_noise(sample, sample_idx)
+            if is_perm == 0:
+                theta[-1] = tau
+            else :
+                theta[-1] = self.taus[self.pi[sample_idx]]
+
+        sample = self.add_missing_mask(sample)
+
         classi = torch.tensor([is_perm])
 
-        return batch, theta.unsqueeze(0), classi
+        return sample, theta.unsqueeze(0), classi

@@ -591,7 +591,7 @@ def visualise_output(
         axs[i, 1].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 1].set_title(
             (r"= Simu with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta, alt_format=True)
+            + dataset.model.to_title(true_theta)
         )
 
         masked_sample = full_sample.clone()
@@ -611,7 +611,7 @@ def visualise_output(
         axs[i, 0].set_ylabel(label_y)
         axs[i, 0].set_title(
             (r"= Data with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta, alt_format=True)
+            + dataset.model.to_title(true_theta)
         )
 
         theta_pred = (
@@ -642,7 +642,7 @@ def visualise_output(
         axs[i, 2].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 2].set_title(
             (r"= Prediction with inferred $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred, alt_format=True)
+            + dataset.model.to_title(theta_pred)
         )
 
         mae_data = (
@@ -755,7 +755,7 @@ def visualise_output_alt(
         axs[i, 1].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 1].set_title(
             (r"= Simulation with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta, alt_format=True)
+            + dataset.model.to_title(true_theta)
         )
 
         masked_sample = full_sample.clone()
@@ -775,7 +775,7 @@ def visualise_output_alt(
         axs[i, 0].set_ylabel(label_y)
         axs[i, 0].set_title(
             (r"= Data with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta, alt_format=True)
+            + dataset.model.to_title(true_theta)
         )
 
         theta_pred = true_all_theta[i + k].detach().cpu().numpy() * (
@@ -802,7 +802,7 @@ def visualise_output_alt(
         axs[i, 2].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 2].set_title(
             (r"= Prediction with kriging =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred, alt_format=True)
+            + dataset.model.to_title(theta_pred)
         )
 
         sample_krig = sample_krig + sample_uncond - sample_krig_uncond
@@ -813,7 +813,7 @@ def visualise_output_alt(
         axs[i, 3].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 3].set_title(
             (r"= Simulation with $\hat{\theta}$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred, alt_format=True)
+            + dataset.model.to_title(theta_pred)
         )
 
         axs[i, 4].imshow(
@@ -822,7 +822,7 @@ def visualise_output_alt(
         axs[i, 4].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 4].set_title(
             (r"= Conditional Simulation with $\hat{\theta}$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred, alt_format=True)
+            + dataset.model.to_title(theta_pred)
         )
 
     data_images = [
