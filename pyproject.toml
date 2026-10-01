@@ -12,6 +12,8 @@ dependencies = [
     "gstlearn[doc,plot]>=1.11.1",
     "ipython>=9.17.1",
     "matplotlib>=3.11.1",
+    "netcdf4>=1.7.4",
+    "notebook>=7.6.2",
     "numpy>=2.5.3",
     "nvidia-cuda-cccl-cu12==12.6.77",
     "nvidia-cuda-nvcc-cu12==12.4.131",
@@ -23,6 +25,7 @@ dependencies = [
     "pytorch-minimize>=0.1.0",
     "scipy>=1.18.1",
     "torch>=2.14.0",
+    "touying>=0.14.4",
     "tqdm>=4.70.0",
     "typst>=0.15.0",
     "xarray>=2026.7.0",
@@ -34,3 +37,6 @@ neural-st-inference = "neural_st_inference:main"
 [build-system]
 requires = ["uv_build>=0.12.5,<0.13.0"]
 build-backend = "uv_build"
+
+[tool.uv]
+package = false

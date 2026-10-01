@@ -179,89 +179,99 @@ class Trainer:
 
         MAE = torch.nn.L1Loss(reduction="none")
 
-        for epoch in t:
-            self.network.train()
+        try:
 
-            epoch_batch_means = []
+            for epoch in t:
+                self.network.train()
 
-            epoch_full_errors = []
+                epoch_batch_means = []
 
-            for i, (batched_data, theta) in enumerate(train_loader):
-                self.optimizer.zero_grad()
-                for opt in self.quantile_optimizer:
-                    opt.zero_grad()
+                epoch_full_errors = []
 
-                batched_data = batched_data.to(self.device, non_blocking=True).float()
-                theta = theta.to(self.device, non_blocking=True)
+                for i, (batched_data, theta) in enumerate(train_loader):
+                    self.optimizer.zero_grad()
+                    for opt in self.quantile_optimizer:
+                        opt.zero_grad()
 
-                base_output = self.network(batched_data)
+                    batched_data = batched_data.to(self.device, non_blocking=True).float()
+                    theta = theta.to(self.device, non_blocking=True)
 
-                loss_median = MAE(base_output, theta) # * self.weights
+                    base_output = self.network(batched_data)
 
-                all_outputs = {}
+                    loss_median = MAE(base_output, theta) # * self.weights
 
-                current_out = base_output
-                for idx in self.lower_indices:
-                    q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(batched_data))
-                    current_out = current_out - delta
-                    all_outputs[self.quantiles[idx]] = current_out
+                    all_outputs = {}
 
-                current_out = base_output
-                for idx in self.upper_indices:
-                    q_net = self.quantile_network[idx]
-                    delta = torch.exp(q_net(batched_data))
-                    current_out = current_out + delta
-                    all_outputs[self.quantiles[idx]] = current_out
+                    current_out = base_output
+                    for idx in self.lower_indices:
+                        q_net = self.quantile_network[idx]
+                        delta = torch.exp(q_net(batched_data))
+                        current_out = current_out - delta
+                        all_outputs[self.quantiles[idx]] = current_out
 
-                total_loss = loss_median.mean()
-                for q_val, out in all_outputs.items():
-                    total_loss += self._q_loss(out, theta, q_val)
+                    current_out = base_output
+                    for idx in self.upper_indices:
+                        q_net = self.quantile_network[idx]
+                        delta = torch.exp(q_net(batched_data))
+                        current_out = current_out + delta
+                        all_outputs[self.quantiles[idx]] = current_out
 
-                total_loss.backward()
+                    total_loss = loss_median.mean()
+                    for q_val, out in all_outputs.items():
+                        total_loss += self._q_loss(out, theta, q_val)
 
-                self.optimizer.step()
-                for opt in self.quantile_optimizer:
-                    opt.step()
+                    total_loss.backward()
 
-                epoch_batch_means.append(loss_median.mean(dim=0).detach())
+                    self.optimizer.step()
+                    for opt in self.quantile_optimizer:
+                        opt.step()
+
+                    epoch_batch_means.append(loss_median.mean(dim=0).detach())
+
+                    if epoch == nb_epochs - 1:
+                        epoch_full_errors.append(loss_median.detach())
+
+                mean_epoch = torch.stack(epoch_batch_means).mean(dim=0).cpu()
+                all_loss_train.append(mean_epoch)
 
                 if epoch == nb_epochs - 1:
-                    epoch_full_errors.append(loss_median.detach())
+                    loss_final_train = torch.cat(epoch_full_errors, dim=0)
 
-            mean_epoch = torch.stack(epoch_batch_means).mean(dim=0).cpu()
-            all_loss_train.append(mean_epoch)
+                loss_str = ", ".join([f"{l:.4f}" for l in mean_epoch])
+                t.set_description(f"Epoch {epoch + 1}/{nb_epochs}")
+                t.set_postfix_str(f"Loss: [{loss_str}]")
 
-            if epoch == nb_epochs - 1:
-                loss_final_train = torch.cat(epoch_full_errors, dim=0)
+                if (epoch + 1) % freq_epochs_test == 0:
+                    start_test = time.time()
+                    self.network.eval()
 
-            loss_str = ", ".join([f"{l:.4f}" for l in mean_epoch])
-            t.set_description(f"Epoch {epoch + 1}/{nb_epochs}")
-            t.set_postfix_str(f"Loss: [{loss_str}]")
+                    test_errors_list = []
 
-            if (epoch + 1) % freq_epochs_test == 0:
-                start_test = time.time()
-                self.network.eval()
+                    with torch.no_grad():
+                        for data_test, theta_test in test_loader:
+                            data_test = data_test.to(self.device, non_blocking=True).float()
+                            theta_test = theta_test.to(self.device, non_blocking=True)
 
-                test_errors_list = []
+                            output = self.network(data_test)
 
-                with torch.no_grad():
-                    for data_test, theta_test in test_loader:
-                        data_test = data_test.to(self.device, non_blocking=True).float()
-                        theta_test = theta_test.to(self.device, non_blocking=True)
+                            errors = torch.abs(output - theta_test)
+                            test_errors_list.append(errors.detach())
 
-                        output = self.network(data_test)
+                    full_test_errors = torch.cat(test_errors_list, dim=0).cpu()
 
-                        errors = torch.abs(output - theta_test)
-                        test_errors_list.append(errors.detach())
+                    all_loss_test.append(full_test_errors.mean(dim=0))
 
-                full_test_errors = torch.cat(test_errors_list, dim=0).cpu()
+                    loss_final_test = full_test_errors
 
-                all_loss_test.append(full_test_errors.mean(dim=0))
+                    time_test_accumulated += time.time() - start_test
 
-                loss_final_test = full_test_errors
+                if epoch % 20 == 0 :
+                    self.save_network()
+                    self.save_quantile_network()
 
-                time_test_accumulated += time.time() - start_test
+        except KeyboardInterrupt:
+            self.save_network()
+            self.save_quantile_network()
 
         total_time_train = (time.time() - time_train_start) - time_test_accumulated
 
@@ -754,27 +764,27 @@ class Trainer:
 
                     # print("time_map", time_map)
 
-                time_poutine = time.time()
-
-                log_probs = []
-
-                for i in range(num_samples):
-                    sample_i = {k: v[i] for k, v in samples.items()}
-
-                    tr = trace(pyro.condition(self._pyro_model, data=sample_i)).get_trace(data_batch, lower_bound, upper_bound)
-                    tr.compute_log_prob()
-                    log_probs.append(tr.log_prob_sum().item())
-
-                log_probs = torch.tensor(log_probs)
-
-                best_idx = torch.argmax(log_probs).item()
-                best_log_prob = log_probs[best_idx].item()
-                best_sample = {k: v[best_idx] for k, v in samples.items()}
-
-                # print(f"Max Log-Joint: {best_log_prob:.4f}")
-                # print("MAP Estimate:", best_sample["theta"])
-
-                time_poutine = time.time() - time_poutine
+                # time_poutine = time.time()
+                #
+                # log_probs = []
+                #
+                # for i in range(num_samples):
+                #     sample_i = {k: v[i] for k, v in samples.items()}
+                #
+                #     tr = trace(pyro.condition(self._pyro_model, data=sample_i)).get_trace(data_batch, lower_bound, upper_bound)
+                #     tr.compute_log_prob()
+                #     log_probs.append(tr.log_prob_sum().item())
+                #
+                # log_probs = torch.tensor(log_probs)
+                #
+                # best_idx = torch.argmax(log_probs).item()
+                # best_log_prob = log_probs[best_idx].item()
+                # best_sample = {k: v[best_idx] for k, v in samples.items()}
+                #
+                # # print(f"Max Log-Joint: {best_log_prob:.4f}")
+                # # print("MAP Estimate:", best_sample["theta"])
+                #
+                # time_poutine = time.time() - time_poutine
 
                 # print("time_poutine", time_poutine)
 

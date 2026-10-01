@@ -7,7 +7,7 @@ from scipy.stats import qmc
 import secrets
 
 def _simulate_gneiting_matern_grid_func(
-    time_size, space_dim, space_size, adv, range_time, range_space, seed=None
+    time_size, space_dim, space_size, adv, range_time, range_space, seed=None, mult_time=1,
 ):
 
     ns = 4000  # 5000
@@ -16,25 +16,25 @@ def _simulate_gneiting_matern_grid_func(
     if space_dim == 1:
 
         dbgrid = gl.DbGrid.create(
-            nx=[space_size, time_size], dx=[1.0 / space_size, 1.0 / time_size]
+            nx=[space_size, time_size * mult_time], dx=[1.0 / space_size, 1. / (mult_time * time_size)]
         )
 
         gl.simuSpectral(
             None, dbgrid, model, None, 1, secrets.randbits(32) if seed is None else seed, ns
         )  # np.random.randint(1000000)
 
-        batch = dbgrid[3].reshape((space_size, time_size), order="F").transpose(1, 0)
+        batch = dbgrid[3].reshape((space_size, time_size * mult_time), order="F").transpose(1, 0)
 
     elif space_dim == 2:
 
         dbgrid = gl.DbGrid.create(
-            nx=[space_size, space_size, time_size],
-            dx=[1.0 / space_size, 1.0 / space_size, 1.0 / time_size],
+            nx=[space_size, space_size, time_size * mult_time],
+            dx=[1.0 / space_size, 1.0 / space_size, mult_time / (mult_time * time_size)],
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, 1, seed, ns)
+        gl.simuSpectral(None, dbgrid, model, None, 1,  secrets.randbits(32) if seed is None else seed, ns)
 
-        batch = dbgrid[4].reshape((space_size, space_size, time_size), order="F").transpose(2, 1, 0)
+        batch = dbgrid[4].reshape((space_size, space_size, time_size * mult_time), order="F").transpose(2, 1, 0)
 
     return np.expand_dims(batch, (0,1))
 
@@ -85,7 +85,7 @@ def get_gst_model(space_dim, adv, range_time, range_space):
     return model
 
 
-def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_space):
+def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_space, tau=None):
 
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
@@ -99,6 +99,9 @@ def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_spac
     dbin.setLocators(names, gl.ELoc.X)
     dbout.setLocators(names, gl.ELoc.X)
 
+    if not(tau is None) :
+        dbin["verr"] = 0 * y + tau ** 2
+        dbin.setLocator("verr", gl.ELoc.V)
     dbin.addColumns(y, radix="z1")
     dbin.setLocator("z1", gl.ELoc.Z)
 
@@ -124,7 +127,9 @@ class GneitingAdvModel(SimulationModel):
             self._names = ["adv1", "adv2", "range_time", "range_space"] + self.add_noise * ["noise"]
             self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]  + self.add_noise * [r"$\tau$"]
             self.lower_bound = (-1, -1, 0.05, 0.05)
-            self.upper_bound = (1, 1, 0.15, 0.3)
+            self.upper_bound = (1, 1, 0.5, 0.5) # (1, 1, 0.15, 0.3)
+            # self.lower_bound = (-0.7751,  0.300,  0.510,  0.261,  0.043)
+            # self.upper_bound = (-0.775,  0.3001,  0.5107,  0.2612,  0.0436)  # (1, 1, 0.15, 0.3)
 
     @property
     def param_names(self):
@@ -193,7 +198,7 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": sample_scaled[:, 3],
             }
 
-    def simulate(self, p, t_size, s_dim, s_size, seed=None):
+    def simulate(self, p, t_size, s_dim, s_size, seed=None, mult_time=1):
         assert s_dim == self.space_dim
         if self.space_dim == 1:
             return _simulate_gneiting_matern_grid_func(
@@ -204,6 +209,7 @@ class GneitingAdvModel(SimulationModel):
                 p["range_time"],
                 p["range_space"],
                 seed=seed,
+                mult_time=mult_time,
             )
         elif self.space_dim == 2:
             return _simulate_gneiting_matern_grid_func(
@@ -214,6 +220,7 @@ class GneitingAdvModel(SimulationModel):
                 p["range_time"],
                 p["range_space"],
                 seed=seed,
+                mult_time=mult_time,
             )
 
     def eval_cov(self, coords, y, space_dim, theta_values):
@@ -246,6 +253,7 @@ class GneitingAdvModel(SimulationModel):
                 theta_values[0],
                 theta_values[1],
                 theta_values[2],
+                theta_values[3] if self.add_noise else None,
             )
         elif self.space_dim == 2:
             return matern_krig(
@@ -256,6 +264,7 @@ class GneitingAdvModel(SimulationModel):
                 [theta_values[0], theta_values[1]],
                 theta_values[2],
                 theta_values[3],
+                theta_values[4] if self.add_noise else None,
             )
 
     def get_likelihood(self, coords, y, theta):

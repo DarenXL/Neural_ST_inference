@@ -525,35 +525,36 @@ class GneitingGP(gpytorch.models.ExactGP):
 
 def train_gneiting_gp(train_x, train_y, spatial_dim=2, trace_kernel="matern",
                       nu=1.5, learn_nu=False, n_iter=200, lr=0.05,
+                      tau_init=0.1,
                       use_keops=None, verbose=True):
     """
     Train a GneitingGP by marginal log-likelihood (Adam optimiser).
-
-    Args:
-        train_x:      (n, spatial_dim+1) tensor, last column = time.
-        train_y:      (n,) response tensor.
-        spatial_dim:  d, default 2.
-        trace_kernel: 'gauss', 'matern', or 'cauchy'.
-        nu:           Smoothness (Matern/Cauchy).
-        learn_nu:     Learn nu (dense only).
-        n_iter:       Adam steps.
-        lr:           Learning rate.
-        use_keops:    True / False / None (auto).
-        verbose:      Print loss every 20 iters.
-
-    Returns:
-        (model, likelihood) in eval mode.
     """
     device = train_x.device
 
+    # 1. La Likelihood contient le paramètre de bruit (variance de l'erreur de mesure)
     likelihood = gpytorch.likelihoods.GaussianLikelihood()
+
+    # Initialisation de tau (le paramètre 'noise' de GPyTorch correspond à tau^2)
+    likelihood.noise = tau_init ** 2
+
     model = GneitingGP(train_x, train_y, likelihood, spatial_dim=spatial_dim,
                        trace_kernel=trace_kernel, nu=nu, learn_nu=learn_nu,
                        use_keops=use_keops).to(device)
-    model.train(); likelihood.train()
+
+    model.train()
+    likelihood.train()
+
+    # L'optimiseur mettra à jour à la fois les paramètres du modèle (adv, a_s, a_t)
+    # et de la vraisemblance (tau)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
+
     losses = []
+
+    # Calcul du facteur de conversion une seule fois pour l'affichage
+    sq12 = math.sqrt(12)
+
     for i in range(n_iter):
         optimizer.zero_grad()
 
@@ -561,13 +562,22 @@ def train_gneiting_gp(train_x, train_y, spatial_dim=2, trace_kernel="matern",
         loss.backward()
         optimizer.step()
         losses.append(loss.item())
+
         if verbose and (i + 1) % 20 == 0:
             k = model.covar_module.base_kernel
+
+            # Récupération de tau = sqrt(noise)
+            tau_est = torch.sqrt(likelihood.noise).item()
+
             print(f"Iter {i+1:4d}/{n_iter} | Loss {loss.item():.4f} | "
                   f"adv={k.adv.item():.3f} "
-                  f"a_t={k.length_scale_t.item():.3f}  a_s={k.length_scale_s.item()/torch.sqrt(torch.tensor(8)):.3f}")
+                  f"a_t={k.length_scale_t.item():.3f}  "
+                  f"a_s={k.length_scale_s.item()/sq12:.3f}  "
+                  f"tau={tau_est:.3f}"
+                )
 
-    model.eval(); likelihood.eval()
+    model.eval()
+    likelihood.eval()
     return model, likelihood, losses
 
 

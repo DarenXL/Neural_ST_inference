@@ -131,6 +131,7 @@ class GenericSimulationDataset(Dataset):
             space_dim,
             space_size,
             seed,
+            mult_time=2,
         )
         batch = torch.from_numpy(batch)
         torch.save(batch, f"{samples_dir}/sample_{idx}.pt")
@@ -143,11 +144,18 @@ class GenericSimulationDataset(Dataset):
         path = path / "masks"
         path.mkdir(parents=True, exist_ok=True)
 
+        # somme = 0
+
         for idx in range(self.theta_size):
             seed_idx = None if self.global_seed is None else self.global_seed + idx
             with temporary_seed(seed_idx):
                 mask = create_mask(self.space_size, self.space_dim, self.missing_ratio)
             torch.save(mask, f"{Path(path)}/mask_{idx}.pt")
+            # somme += (~mask).sum()
+            # plt.imshow(mask)
+            # plt.show()
+        # print(somme / (50*50*self.theta_size))
+
 
     def generate(self, path: Path):
         samples_dir = Path(path) / "samples"
@@ -230,13 +238,13 @@ class GenericSimulationDataset(Dataset):
 
         return batch
 
-    def generate_from_theta(self, theta_values):
+    def generate_from_theta(self, theta_values, seed=None):
         theta_dict = dict(zip(self.model.param_names, theta_values))
 
         batch = self.model.simulate(
-            theta_dict, self.time_size, self.space_dim, self.space_size, 1
+            theta_dict, self.time_size, self.space_dim, self.space_size, seed
         )
-        return batch
+        return torch.from_numpy(batch)
 
     def get_min_max(self, k: list[int]):
         all_values = []
@@ -292,7 +300,7 @@ class GenericSimulationDataset(Dataset):
 
     def sample_to_coord(self, sample, shuffle :int = None):
         y = sample[0].reshape(-1) # order="C"
-        mask_obs = torch.tensor(sample[1], dtype=torch.bool).reshape(-1)
+        mask_obs = sample[1].clone().detach().to(torch.bool).reshape(-1)
 
         t = torch.linspace(0, 1, self.time_size + 1)[:-1]
         s = torch.linspace(0, 1, self.space_size + 1)[:-1]
@@ -316,23 +324,27 @@ class GenericSimulationDataset(Dataset):
         """Kriging"""
 
         coords, y, mask_obs = self.sample_to_coord(sample)
+        coords = coords.detach().numpy()
+        y = y.detach().numpy()
+        mask_obs = mask_obs.detach().numpy()
 
         y_obs = y[~mask_obs]
         coords_obs = coords[~mask_obs]
-        coords_miss = coords[mask_obs]
+        coords_miss = coords # [mask_obs]
 
         krig = self.model.kriging(coords_obs, coords_miss, y_obs, self.space_dim, theta)
 
-        y_full = y.copy()
-        y_full[mask_obs] = krig
+        # y_full = y.copy()
+        # y_full[mask_obs] = krig
+        y_full = krig
 
         if self.space_dim == 1:
-            return y_full.reshape(
-                self.space_size, self.time_size, order="F"
+            return torch.from_numpy(y_full).reshape(
+                self.space_size, self.time_size # , order="F"
             )  # , order="F"
         else:
-            return y_full.reshape(
-                self.space_size, self.space_size, self.time_size, order="F"
+            return torch.from_numpy(y_full).reshape(
+                self.space_size, self.space_size, self.time_size # , order="F"
             )
 
     def get_grid(self, idx):
@@ -382,7 +394,7 @@ class GenericSimulationDataset(Dataset):
             else:
                 noise = self.taus[tau_idx] * torch.randn_like(sample)
 
-        return sample + noise, self.taus[tau_idx]
+        return torch.sqrt(1 - self.taus[tau_idx]**2) * sample + noise, self.taus[tau_idx]
 
     def __getitem__(self, idx):
 

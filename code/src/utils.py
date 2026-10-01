@@ -1,5 +1,5 @@
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
@@ -240,8 +240,9 @@ def create_mask(
 
     if missing_ratio is None:
         # missing_ratio = torch.rand(1) * 0.35 + 0.6   # space 30
-        missing_ratio = torch.rand(1) * 0.08 + 0.9   # space 100
+        # missing_ratio = torch.rand(1) * 0.08 + 0.9   # space 100
         # missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
+        missing_ratio = torch.rand(1) * 0.22 + 0.7  # space 50x50
 
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing
@@ -462,14 +463,14 @@ def show_example_gif(
                 im.set_clim(v_min, v_max)
                 im.set_cmap(CMAP)
 
-            axs[1, i].set_xlabel(r"$\it{Space 1}$")
+            axs[1, i].set_xlabel(r"Space 1")
             if i == 0:
-                axs[0, i].set_ylabel(r"$\it{Space 2}$")
-                axs[1, i].set_ylabel(r"$\it{Space 2}$")
+                axs[0, i].set_ylabel(r"Space 2")
+                axs[1, i].set_ylabel(r"Space 2")
 
         return [ax.get_images() for ax in axs.flat]
 
-    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=200)
+    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=100)
 
     out_dir = data_path / "examples"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -483,7 +484,7 @@ def show_example_gif(
     print(gif_path)
 
 
-def load_data(path, times=range(100000, 100025), nb_bins=75):
+def load_data(path, times=range(100000, 100020), nb_bins=50, get_norm=False):
 
     ds = xr.open_dataset(path, engine="netcdf4")
 
@@ -547,14 +548,26 @@ def load_data(path, times=range(100000, 100025), nb_bins=75):
     # axs[0].set_xlabel("Easting (m)")
     # axs[0].set_ylabel("Northing (m)")
     #
+    # formatter_y = ScalarFormatter(useOffset=False)
+    # formatter_y.set_scientific(False)
+    # axs[0].yaxis.set_major_formatter(formatter_y)
+    #
+    # formatter_x = ScalarFormatter(useOffset=False)
+    # formatter_x.set_scientific(False)
+    # axs[0].xaxis.set_major_formatter(formatter_x)
+    #
+    # axs[0].ticklabel_format(style="plain", useOffset=False, axis="y")
+    # axs[0].tick_params(axis="x", labelrotation=45)
+    # axs[0].tick_params(axis="y", labelrotation=45)
+    #
     # axs[1].imshow(
     #     res[0].T, aspect="equal", extent=[0, 1, 0, 1], origin="lower", cmap=CMAP
     # )
     #
-    # cbar = fig.colorbar(sc, ax=axs, location="right", shrink=1, pad=0.03)
-    # cbar.set_label("GHI")
+    # # cbar = fig.colorbar(sc, ax=axs, location="right", shrink=1, pad=0.03)
+    # # cbar.set_label("GHI")
     #
-    # fig.suptitle("GHI 04:01:00 6th June 2013")
+    # fig.suptitle("GHI 05:21:00 29 June 2013")
     # axs[0].set_title("Raw data")
     # axs[1].set_title("Grid Projection")
     #
@@ -568,10 +581,62 @@ def load_data(path, times=range(100000, 100025), nb_bins=75):
     # )
     # fig.savefig(output_path / f"projection.png", format="png", bbox_inches="tight")
 
+    # start_time = datetime.strptime("05:21:00 29 June 2013", "%H:%M:%S %d %B %Y")
+    #
+    # fig, axs = plt.subplots(1, 2, figsize=(14, 6))
+    #
+    # # Premier subplot (Scatter)
+    # sc = axs[0].scatter(east, north, c=vals[:, 0], cmap=CMAP)
+    # axs[0].set_xlim(e_min, e_max)
+    # axs[0].set_ylim(n_min, n_max)
+    # axs[0].set_aspect("equal")
+    # axs[0].set_xlabel("Easting (m)")
+    # axs[0].set_ylabel("Northing (m)")
+    # axs[0].set_title("Raw data")
+    #
+    # # Second subplot (Grid Projection)
+    # im = axs[1].imshow(
+    #     res[0].T, aspect="equal", extent=[0, 1, 0, 1], origin="lower", cmap=CMAP
+    # )
+    # axs[1].set_title("Grid Projection")
+    #
+    # # Colorbar globale
+    # cbar = fig.colorbar(sc, ax=axs, location="right", shrink=1, pad=0.03)
+    # cbar.set_label("GHI")
+    #
+    # title = fig.suptitle("")
+    #
+    # # Fonction de mise à jour (+1 minute par frame)
+    # def update(frame):
+    #     # Mise à jour des données graphiques
+    #     sc.set_array(vals[:, frame])
+    #     im.set_data(res[frame].T)
+    #
+    #     # Calcul et affichage de l'heure exacte (+1 min par frame)
+    #     current_time = start_time + timedelta(minutes=frame)
+    #     title.set_text(f"GHI {current_time.strftime('%H:%M:%S %d %B %Y')}")
+    #
+    #     return sc, im, title
+    #
+    # # Création et sauvegarde de l'animation
+    # num_frames = len(vals)
+    # anim = animation.FuncAnimation(
+    #     fig, update, frames=num_frames, interval=200, blit=False
+    # )
+    #
+    # output_path = Path("./output/results/spatiotemporal").resolve() / "paper/3D"
+    # output_path.mkdir(parents=True, exist_ok=True)
+    #
+    # # 5 frames/sec = 5 minutes simulées par seconde dans le GIF
+    # anim.save(output_path / "projection.gif", writer="pillow", fps=5)
+    # plt.close()
+
+    if get_norm :
+        return res, ((vals * clear_sky[mask]).mean(), (vals * clear_sky[mask]).std())
+
     return res
 
-def arrow(path, wind, times=range(100000, 100025)):
-
+def arrow(path, wind=None, times=range(100000, 100020)):
     ds = xr.open_dataset(path, engine="netcdf4")
 
     north = ds.northing.values
@@ -583,22 +648,48 @@ def arrow(path, wind, times=range(100000, 100025)):
     north = north[mask]
     east = east[mask]
 
-    n_min, n_max = north.min(),  north.max()
+    n_min, n_max = north.min(), north.max()
     e_min, e_max = east.min(), east.max()
+
+    # 1. Calcul des limites globales pour figer l'échelle de couleurs
+    v_min, v_max = vals.min(), vals.max()
 
     fig, ax = plt.subplots(1, 1, figsize=(6, 6))
 
-    sc = ax.scatter(east, north, c=vals[:, 0], cmap=CMAP,)
+    # start_time = datetime.strptime("05:21:00 29 June 2013", "%H:%M:%S %d %B %Y")
+    # start_time = datetime.strptime("09:31:00 29 June 2013", "%H:%M:%S %d %B %Y")
+    start_time = datetime.strptime("09:31:00 19 May 2013", "%H:%M:%S %d %B %Y")
+
+
+    # 2. Initialisation du Scatter (avec vmin et vmax !)
+    sc = ax.scatter(
+        east,
+        north,
+        c=vals[:, 0],
+        cmap=CMAP,
+        vmin=v_min,
+        vmax=v_max
+    )
     ax.set_xlim(e_min, e_max)
     ax.set_ylim(n_min, n_max)
     ax.set_xlabel("Easting (m)")
     ax.set_ylabel("Northing (m)")
 
+    # Colorbar qui restera figée sur les vraies limites
     cbar = fig.colorbar(sc, ax=ax, location="right", shrink=1, pad=0.03)
     cbar.set_label("GHI")
 
-    fig.suptitle("Wind direction on time")
+    show_wind = not(wind is None)
 
+    if show_wind :
+        fig.suptitle("Wind direction over time")
+    else :
+        fig.suptitle("GHI over time")
+
+    # Titre initial
+    title = ax.set_title(f"{start_time.strftime('%H:%M:%S %d %B %Y')}")
+
+    # Formatage des axes (défini une seule fois)
     formatter_y = ScalarFormatter(useOffset=False)
     formatter_y.set_scientific(False)
     ax.yaxis.set_major_formatter(formatter_y)
@@ -607,39 +698,15 @@ def arrow(path, wind, times=range(100000, 100025)):
     formatter_x.set_scientific(False)
     ax.xaxis.set_major_formatter(formatter_x)
 
-    def update(t):
-        ax.clear()
+    ax.ticklabel_format(style="plain", useOffset=False, axis="y")
+    ax.tick_params(axis="x", labelrotation=45)
+    ax.tick_params(axis="y", labelrotation=45)
 
-        ax.scatter(
-            east,
-            north,
-            c=vals[:, t],
-            cmap=CMAP,
-        )
-        ax.set_xlim(e_min, e_max)
-        ax.set_ylim(n_min, n_max)
-        ax.set_xlabel("Easting (m)")
-        ax.set_ylabel("Northing (m)")
-        ax.set_title(f"Time {t}")
+    # Position statique du texte et du Quiver (flèche)
+    x_pos = e_min + 0.75 * (e_max - e_min)
+    y_pos = n_min + 0.80 * (n_max - n_min)
 
-        u_wind = wind[t, 1].item()
-        v_wind = wind[t, 0].item()
-
-        x_pos = e_min + 0.80 * (e_max - e_min)
-        y_pos = n_min + 0.80 * (n_max - n_min)
-
-        ax.quiver(
-            x_pos,
-            y_pos,
-            u_wind,
-            v_wind,
-            color="red",
-            units="inches",
-            scale=1,
-            width=0.008,
-            headwidth=4,
-        )
-
+    if show_wind :
         ax.text(
             x_pos,
             y_pos + 0.003 * (n_max - n_min),
@@ -649,22 +716,53 @@ def arrow(path, wind, times=range(100000, 100025)):
             weight="bold",
         )
 
-        ax.ticklabel_format(style="plain", useOffset=False, axis="y")
-        ax.tick_params(axis="x", labelrotation=45)
-        ax.tick_params(axis="y", labelrotation=45)
-
-        return [ax.get_images()]
+        # Initialisation de la flèche (Quiver)
+        u_wind_init = wind[0, 1].item()
+        v_wind_init = wind[0, 0].item()
+        q = ax.quiver(
+            x_pos,
+            y_pos,
+            u_wind_init,
+            v_wind_init,
+            color="red",
+            units="inches",
+            scale=1,
+            width=0.008,
+            headwidth=4,
+        )
 
     plt.subplots_adjust(left=0.18, bottom=0.15, right=0.95, top=0.88, wspace=0.3)
 
+    # 3. Fonction de mise à jour propre
+    def update(t):
+        # Mise à jour des couleurs des points
+        sc.set_array(vals[:, t])
+
+        # Mise à jour du titre
+        current_time = start_time + timedelta(minutes=t)
+        title.set_text(f"{current_time.strftime('%H:%M:%S %d %B %Y')}")
+
+        if show_wind:
+            # Mise à jour de la flèche du vent (composantes U et V)
+            u_wind = wind[t, 1].item()
+            v_wind = wind[t, 0].item()
+            q.set_UVC(u_wind, v_wind)
+            return [sc, q, title]
+
+        return [sc, title]
+
     anim = animation.FuncAnimation(fig, update, frames=len(times), interval=100)
 
-    output_path = Path("./output/results/spatiotemporal").resolve() / f"paper/3D"
+    output_path = Path("./output/results/spatiotemporal").resolve() / "paper/3D"
     output_path.mkdir(parents=True, exist_ok=True)
 
-    gif_path = output_path / f"wind.gif"
-
+    if show_wind :
+        gif_path = output_path / f"wind_{times[0]}.gif"
+    else :
+        gif_path = output_path / f"no-wind_{times[0]}.gif"
     anim.save(gif_path, writer="pillow")
+
+    plt.close(fig)
 
 
 def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:

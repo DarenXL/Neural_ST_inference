@@ -210,12 +210,10 @@ def _test_alt_graph(trainer: Trainer, res_path: Path):
     fig_box, axs = plt.subplots(1, len(theta_names), figsize=(13, 5))
 
     losses = []
-    labels = (
-        []
-    )  # ["~73%\nmissing\nratio", "~86%\nmissing\nratio", "~96%\nmissing\nratio"]
+    labels = ["~92.0%\nmissing\nratio", "~97.6%\nmissing\nratio", "~99.4%\nmissing\nratio"]
     missing_ratios = []
     for j, dataset in enumerate(trainer.test_dataset_hist):
-        labels.append(f"missing\nratio\n{dataset.missing_ratio}")
+        # labels.append(f"missing\nratio\n{dataset.missing_ratio}")
         missing_ratios.append(dataset.missing_ratio)
         path = (
             trainer.res_path
@@ -523,7 +521,7 @@ def target_graph(
     )
 
 
-def visualise(trainers, res_path, nb_examples=2, num_dataset=0, k=0, simu_cond=False):
+def visualise(trainers, res_path, nb_examples=2, num_dataset=0, k=None, simu_cond=False):
     """
     Visualisation containing observation, true gaussian field, kriging and MAE of kriging
     trainers : A list of Trainer
@@ -535,27 +533,27 @@ def visualise(trainers, res_path, nb_examples=2, num_dataset=0, k=0, simu_cond=F
     k : index where the first example start
     """
 
-    if isinstance(num_dataset, int):
-        num_dataset = [num_dataset] * len(trainers)
+    with torch.no_grad() :
 
-    mask = []
-    for i in range(nb_examples):
-        full_sample, _, _ = trainers[0].test_dataset_hist[num_dataset[0]][i]
-        mask.append(full_sample[0][1])
+        if isinstance(num_dataset, int):
+            num_dataset = [num_dataset] * len(trainers)
 
-    for j, trainer in enumerate(trainers):
-        if not trainer.nls:
-            visualise_output_alt(
-                trainer,
-                res_path,
-                nb_examples,
-                num_dataset[j],
-                k,
-                mask=mask,
-                simu_cond=simu_cond,
-            )
-        else:
-            return
+        if k is None :
+            k = [i for i in range(nb_examples)]
+
+        for j, trainer in enumerate(trainers):
+            if not trainer.nls:
+                visualise_output_alt(
+                    trainer,
+                    res_path,
+                    nb_examples,
+                    num_dataset[j],
+                    k,
+                    mask=None,
+                    simu_cond=simu_cond,
+                )
+            else:
+                return
 
 
 def visualise_output(
@@ -716,12 +714,12 @@ def visualise_output(
 
 
 def visualise_output_alt(
-    trainer, res_path, nb_examples=2, num_dataset=0, k=0, mask=None, simu_cond=False
+    trainer, res_path, nb_examples=2, num_dataset=0, k=None, mask=None, simu_cond=False
 ):
     """Visualisation containing observation, true gaussian field, kriging and MAE of kriging"""
     p = 5
     fig_map, axs = plt.subplots(
-        nb_examples, p, figsize=(4 * p, nb_examples * 4.2), constrained_layout=True
+        nb_examples, p, figsize=(4 * p, nb_examples * 4.2), constrained_layout=True, squeeze=False
     )
     fig_map.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
 
@@ -736,6 +734,9 @@ def visualise_output_alt(
     all_theta_pred = torch.load(path)["final_all_theta"]
     true_all_theta = torch.load(path)["true_all_theta"]
 
+    print(all_theta_pred)
+    print(true_all_theta)
+
     if space_dim == 1:
         label_x = r"Space"
         label_y = r"Time"
@@ -744,8 +745,10 @@ def visualise_output_alt(
         label_y = r"Space 2"
 
     for i in range(nb_examples):
-        full_sample, true_theta, _ = dataset[i + k]
+        print(k[i])
+        full_sample, true_theta = dataset[k[i]]
         full_sample, true_theta = full_sample[0], true_theta[0]
+        print(true_theta)
 
         axs[i, 1].imshow(
             full_sample[0] if space_dim == 1 else full_sample[0, 0],
@@ -758,13 +761,13 @@ def visualise_output_alt(
             + dataset.model.to_title(true_theta)
         )
 
-        masked_sample = full_sample.clone()
-        if not (mask is None):
-            masked_sample[1] = mask[i]
-        masked_sample[0][np.array(masked_sample[1], dtype=bool)] = 0
 
-        masked_sample_nan = masked_sample.detach().numpy().copy()
-        masked_sample_nan[0][np.array(masked_sample[1], dtype=bool)] = np.nan
+        masked_sample = full_sample.clone()
+        mask = masked_sample[1].clone().detach().to(torch.bool)
+        masked_sample[0][mask] = 0
+
+        masked_sample_nan = masked_sample.detach() # .numpy().copy()
+        masked_sample_nan[0][torch.tensor(masked_sample[1], dtype=torch.bool)] = torch.nan
 
         axs[i, 0].imshow(
             masked_sample_nan[0] if space_dim == 1 else masked_sample_nan[0, 0],
@@ -778,22 +781,27 @@ def visualise_output_alt(
             + dataset.model.to_title(true_theta)
         )
 
-        theta_pred = true_all_theta[i + k].detach().cpu().numpy() * (
-            1 + np.random.normal(0, 0.15, size=true_theta.shape)
-        )  # all_theta_pred[i+k].detach().cpu().numpy()
+
+        # theta_pred = true_all_theta[k[i]].detach().cpu().numpy() * (
+        #     1 + np.random.normal(0, 0.1, size=true_theta.shape)
+        # )  # all_theta_pred[i+k].detach().cpu().numpy()
+
+        theta_pred = all_theta_pred[k[i]].detach().cpu().numpy()
+        print(theta_pred)
 
         # sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
         sample_uncond = dataset.generate_from_theta(theta_pred)[0][0]
-        sample_uncond_masked = sample_uncond.copy()
-        sample_uncond_masked[np.array(masked_sample[1], dtype=bool)] = 0
+        sample_uncond_masked = sample_uncond.clone()
+        mask = masked_sample[1].clone().detach().to(torch.bool)
+        sample_uncond_masked[mask] = 0
 
         sample_krig_uncond = dataset.kriging_from_sample(
-            np.stack([sample_uncond_masked, masked_sample[1]]),
+            torch.stack([sample_uncond_masked, masked_sample[1]]),
             theta_pred,
         )
 
         sample_krig = dataset.kriging_from_sample(
-            masked_sample.detach().numpy(), theta_pred
+            masked_sample, theta_pred
         )
 
         axs[i, 2].imshow(

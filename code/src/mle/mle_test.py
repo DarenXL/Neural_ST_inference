@@ -74,6 +74,7 @@ class MLE:
                 print(j, "Truth :", theta_test)
 
                 coords, y, mask = dataset.sample_to_coord(data_test[j], shuffle=300)
+                coords = coords.flip(1)
 
                 # output, _ = self.mle(dataset.get_likelihood, coords, y, theta0, bounds=bounds)
                 # output = torch.from_numpy(output)
@@ -84,13 +85,18 @@ class MLE:
                     spatial_dim=1,
                     trace_kernel="matern",
                     nu=1.5,
-                    n_iter=300,
+                    n_iter=500,
                     lr=0.05,
                     use_keops=True,
                 )
                 k = model_stationary.covar_module.base_kernel
                 output = torch.tensor(
-                    [k.adv.item(), k.length_scale_t.item(), k.length_scale_s.item()/torch.sqrt(torch.tensor(8))]
+                    [
+                        k.adv.item(),
+                        k.length_scale_t.item(),
+                        k.length_scale_s.item(),
+                        torch.sqrt(lik_stationary.noise).item()
+                     ]
                 )
 
                 loss = torch.abs(output - theta_test[j])
