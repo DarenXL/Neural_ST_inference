@@ -40,8 +40,8 @@ torch.manual_seed(2)
 
 # Path to data saving file
 
-# data_path = create_data_path("output/data/spatiotemporal_adv")
-data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-09-24_16-50-46")  # "2026-08-03_15-23-11"
+data_path = create_data_path("output/data/spatiotemporal_adv")
+# data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-09-24_16-50-46")  # "2026-08-03_15-23-11"
 
 # Path to results saving file
 
@@ -53,20 +53,20 @@ print("res_path", res_path)
 # Neural Network train options
 
 batch_size = 50
-nb_epochs = 500
+nb_epochs = 20
 freq_epochs_test = 10
 
 # Data options
 
-time_size = 20
-space_dim = 2
+time_size = 50
+space_dim = 1
 space_size = 50
 missing_ratios = [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]
 
 # Amount of data
 
-train_size = 10000
-test_size = 2000
+train_size = 10
+test_size = 10
 
 if __name__ == "__main__":
 
@@ -80,124 +80,124 @@ if __name__ == "__main__":
     ####### Load #######
     ####################
 
-    model = GneitingAdvModel(space_dim=space_dim, noise=.5)
-
-    dataset_train = GenericSimulationDataset.load(data_path / "train", model)
-    # dataset_train.global_seed = 1
-    print("train global_seed", dataset_train.global_seed)
-    loader_train = DataLoader(
-        dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate, num_workers=4, pin_memory=True, persistent_workers=True
-    )
-
-    datasets_test = []
-    loaders_test = []
-
-    for ratio in missing_ratios:
-        specific_test_path = data_path / "test"
-
-        dataset = GenericSimulationDataset.load(specific_test_path, model)
-        dataset.missing_ratio = ratio
-        # print("test global_seed", dataset.global_seed)
-        # print(dataset.missing_ratio)
-        dataset.eval()
-
-
-        datasets_test.append(dataset)
-        loaders_test.append(
-            DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate, num_workers=4, pin_memory=True)
-        )
-
-        # sum = 0
-        # for _ in range(100):
-        #     for i in range(len(dataset)):
-        #         sum += torch.mean(dataset[i][0][0,1])
-        # print("missing ratio", sum, len(dataset), sum/len(dataset))
-
-        # show_example_mask(
-        #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-        # )
-
-    ########################
-    ####### Generate #######
-    ########################
-
-    # # Model choice
+    # model = GneitingAdvModel(space_dim=space_dim, noise=.5)
     #
-    # model = GneitingAdvModel(space_dim=space_dim, noise=0.5)
-    # # model = GneitingSepModel(space_dim=space_dim)
-    #
-    # # Creation of the class dataset and its θ
-    #
-    # dataset_train = GenericSimulationDataset(
-    #     model=model,
-    #     theta_size=train_size,
-    #     time_size=time_size,
-    #     space_dim=space_dim,
-    #     space_size=space_size,
-    #     missing_ratio=None,
-    #     seed=1,
-    # )
-    # # dataset_train.generate_masks(data_path / "train")
-    #
-    # # Generation of data on a complete grid
-    #
-    # print(f"\nData train generation : {model.__class__.__name__}")
-    # dataset_train.generate(data_path / "train")
-    #
-    # # Creation of the loader used during training (or test)
-    #
+    # dataset_train = GenericSimulationDataset.load(data_path / "train", model)
+    # # dataset_train.global_seed = 1
+    # print("train global_seed", dataset_train.global_seed)
     # loader_train = DataLoader(
-    #     dataset_train,
-    #     batch_size=batch_size,
-    #     shuffle=True,
-    #     collate_fn=collate,
-    #     num_workers=4,
-    #     pin_memory=True,
+    #     dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate, num_workers=4, pin_memory=True, persistent_workers=True
     # )
-    #
-    # # Creation of the several datasets used to test
-    #
-    # dataset_test = GenericSimulationDataset(
-    #     model=model,
-    #     theta_size=test_size,
-    #     time_size=time_size,
-    #     space_dim=space_dim,
-    #     space_size=space_size,
-    #     missing_ratio=None,
-    #     seed=1+train_size*10,
-    # )
-    # dataset_test.generate(data_path / "test")
-    # dataset_test.eval()
     #
     # datasets_test = []
     # loaders_test = []
     #
     # for ratio in missing_ratios:
+    #     specific_test_path = data_path / "test"
     #
-    #     dataset = copy.deepcopy(dataset_test)
+    #     dataset = GenericSimulationDataset.load(specific_test_path, model)
     #     dataset.missing_ratio = ratio
-    #     dataset.generate_masks(data_path / "test")
+    #     # print("test global_seed", dataset.global_seed)
+    #     # print(dataset.missing_ratio)
+    #     dataset.eval()
+    #
     #
     #     datasets_test.append(dataset)
     #     loaders_test.append(
-    #         DataLoader(
-    #             dataset,
-    #             batch_size=batch_size,
-    #             shuffle=False,
-    #             collate_fn=collate,
-    #             num_workers=4,
-    #             pin_memory=True,
-    #         )
+    #         DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=collate, num_workers=4, pin_memory=True)
     #     )
     #
-    # # Show data example
+    #     # sum = 0
+    #     # for _ in range(100):
+    #     #     for i in range(len(dataset)):
+    #     #         sum += torch.mean(dataset[i][0][0,1])
+    #     # print("missing ratio", sum, len(dataset), sum/len(dataset))
     #
-    # # show_example_mask(
-    # #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=4
-    # # )
-    # # show_example_gif(
-    # #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
-    # # )
+    #     # show_example_mask(
+    #     #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    #     # )
+
+    ########################
+    ####### Generate #######
+    ########################
+
+    # Model choice
+
+    model = GneitingAdvModel(space_dim=space_dim, noise=0.5)
+    # model = GneitingSepModel(space_dim=space_dim)
+
+    # Creation of the class dataset and its θ
+
+    dataset_train = GenericSimulationDataset(
+        model=model,
+        theta_size=train_size,
+        time_size=time_size,
+        space_dim=space_dim,
+        space_size=space_size,
+        missing_ratio=None,
+        seed=1,
+    )
+    # dataset_train.generate_masks(data_path / "train")
+
+    # Generation of data on a complete grid
+
+    print(f"\nData train generation : {model.__class__.__name__}")
+    dataset_train.generate(data_path / "train")
+
+    # Creation of the loader used during training (or test)
+
+    loader_train = DataLoader(
+        dataset_train,
+        batch_size=batch_size,
+        shuffle=True,
+        collate_fn=collate,
+        num_workers=4,
+        pin_memory=True,
+    )
+
+    # Creation of the several datasets used to test
+
+    dataset_test = GenericSimulationDataset(
+        model=model,
+        theta_size=test_size,
+        time_size=time_size,
+        space_dim=space_dim,
+        space_size=space_size,
+        missing_ratio=None,
+        seed=1+train_size*10,
+    )
+    dataset_test.generate(data_path / "test")
+    dataset_test.eval()
+
+    datasets_test = []
+    loaders_test = []
+
+    for ratio in missing_ratios:
+
+        dataset = copy.deepcopy(dataset_test)
+        dataset.missing_ratio = ratio
+        dataset.generate_masks(data_path / "test")
+
+        datasets_test.append(dataset)
+        loaders_test.append(
+            DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False,
+                collate_fn=collate,
+                num_workers=4,
+                pin_memory=True,
+            )
+        )
+
+    # Show data example
+
+    # show_example_mask(
+    #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=4
+    # )
+    # show_example_gif(
+    #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
+    # )
 
     #############################
     #############################
@@ -340,7 +340,7 @@ if __name__ == "__main__":
     time_hist(trainers, res_path)
     test_alt_graph(trainers, res_path)
 
-    # for i in range(len(datasets_test)):
-    #     test_graph(trainers, res_path, num_dataset=i)
-    #     # target_graph(trainers, res_path, k=0, num_dataset=i)
-    #     # visualise(trainers, res_path, num_dataset=i, nb_examples=2)
+    for i in range(len(datasets_test)):
+        test_graph(trainers, res_path, num_dataset=i)
+        # target_graph(trainers, res_path, k=0, num_dataset=i)
+        visualise(trainers, res_path, num_dataset=i, nb_examples=2)
