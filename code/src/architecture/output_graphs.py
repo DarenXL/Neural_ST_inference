@@ -37,12 +37,12 @@ def train_graph(
     if isinstance(num_dataset, int):
         num_dataset = [num_dataset] * len(trainers)
 
-    # assert all(item.train_dataset_hist[0].model.param_names == trainers[0].train_dataset_hist[0].model.param_names for item in trainers)
-    theta_names = trainers[0].train_dataset_hist[num_dataset[0]].model.param_names
+    # assert all(item.train_dataset_hist[0].theta_alt_names == trainers[0].train_dataset_hist[0].theta_alt_names for item in trainers)
+    theta_alt_names = trainers[0].train_dataset_hist[num_dataset[0]].theta_alt_names
 
     baseline, baseline_theta_mean = baseline_mae(trainers[0].test_dataset_hist[0])
 
-    fig_box_train, axs = plt.subplots(1, len(theta_names), figsize=(18, 7))
+    fig_box_train, axs = plt.subplots(1, len(theta_alt_names), figsize=(18, 7))
 
     losses = []
     labels = []
@@ -62,7 +62,7 @@ def train_graph(
     if len(losses) == 0:
         return
 
-    for i, name in enumerate(theta_names):
+    for i, name in enumerate(theta_alt_names):
 
         axs[i].boxplot(
             [loss[:, i] for loss in losses],
@@ -118,16 +118,16 @@ def test_graph(
     if isinstance(num_dataset, int):
         num_dataset = [num_dataset] * len(trainers)
 
-    # assert all(item.test_dataset_hist[0].model.param_names == trainers[0].test_dataset_hist[0].model.param_names for item in trainers)
-    theta_names = (
-        trainers[0].test_dataset_hist[0].model.get_param_names(alt_format=True)
+    # assert all(item.test_dataset_hist[0].theta_alt_names == trainers[0].test_dataset_hist[0].theta_alt_names for item in trainers)
+    theta_alt_names = (
+        trainers[0].test_dataset_hist[0].theta_alt_names
     )
 
     baseline, baseline_theta_mean = baseline_mae(
         trainers[0].test_dataset_hist[num_dataset[0]]
     )
 
-    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
+    fig_box, axs = plt.subplots(1, len(theta_alt_names), figsize=(15, 5))
 
     losses = []
     labels = []
@@ -143,7 +143,7 @@ def test_graph(
             loss = loss.detach().cpu().numpy()
         losses.append(loss)
 
-    for i, name in enumerate(theta_names):
+    for i, name in enumerate(theta_alt_names):
 
         axs[i].boxplot(
             [loss[:, i] for loss in losses],
@@ -203,11 +203,11 @@ def _test_alt_graph(trainer: Trainer, res_path: Path):
     Show a test score boxplot on every test datasets of the Trainer
     """
 
-    theta_names = trainer.test_dataset_hist[0].model.get_param_names(alt_format=True)
+    theta_alt_names = trainer.test_dataset_hist[0].theta_alt_names
 
     baseline, baseline_theta_mean = baseline_mae(trainer.test_dataset_hist[0])
 
-    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(13, 5))
+    fig_box, axs = plt.subplots(1, len(theta_alt_names), figsize=(15, 5))
 
     losses = []
     labels = ["~92.0%\nmissing\nratio", "~97.6%\nmissing\nratio", "~99.4%\nmissing\nratio"]
@@ -225,7 +225,7 @@ def _test_alt_graph(trainer: Trainer, res_path: Path):
             loss = loss.detach().cpu().numpy()
         losses.append(loss)
 
-    for i, name in enumerate(theta_names):
+    for i, name in enumerate(theta_alt_names):
 
         axs[i].boxplot(
             [loss[:, i] for loss in losses],
@@ -373,8 +373,8 @@ def target_graph(
         num_dataset = [num_dataset] * len(trainers)
 
     dataset0 = trainers[0].test_dataset_hist[num_dataset[0]]
-    theta_names = dataset0.model.param_names
-    n_params = len(theta_names)
+    theta_alt_names = dataset0.theta_alt_names
+    n_params = len(theta_alt_names)
 
     lower_bound = dataset0.model.lower_bound
     upper_bound = dataset0.model.upper_bound
@@ -478,9 +478,9 @@ def target_graph(
                 )
 
             if i == n_params - 1:
-                ax.set_xlabel(theta_names[j], fontsize=12, fontweight="bold")
+                ax.set_xlabel(theta_alt_names[j], fontsize=12, fontweight="bold")
             if j == 0:
-                ax.set_ylabel(theta_names[i], fontsize=12, fontweight="bold")
+                ax.set_ylabel(theta_alt_names[i], fontsize=12, fontweight="bold")
 
             ax.grid(True, linestyle="--", alpha=0.3)
 
@@ -564,7 +564,6 @@ def visualise_output(
     fig_map, axs = plt.subplots(
         nb_examples, p, figsize=(4 * p, nb_examples * 4), constrained_layout=True
     )
-    print(nb_examples)
     fig_map.get_layout_engine().set(w_pad=0, h_pad=0, hspace=0, wspace=0)
 
     dataset = trainer.test_dataset_hist[num_dataset]
@@ -589,7 +588,7 @@ def visualise_output(
         axs[i, 1].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 1].set_title(
             (r"= Simu with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta)
+            + dataset.to_title(true_theta)
         )
 
         masked_sample = full_sample.clone()
@@ -609,7 +608,7 @@ def visualise_output(
         axs[i, 0].set_ylabel(label_y)
         axs[i, 0].set_title(
             (r"= Data with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta)
+            + dataset.to_title(true_theta)
         )
 
         theta_pred = (
@@ -640,7 +639,7 @@ def visualise_output(
         axs[i, 2].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 2].set_title(
             (r"= Prediction with inferred $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred)
+            + dataset.to_title(theta_pred)
         )
 
         mae_data = (
@@ -758,7 +757,7 @@ def visualise_output_alt(
         axs[i, 1].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 1].set_title(
             (r"= Simulation with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta)
+            + dataset.to_title(true_theta)
         )
 
 
@@ -778,7 +777,7 @@ def visualise_output_alt(
         axs[i, 0].set_ylabel(label_y)
         axs[i, 0].set_title(
             (r"= Data with true $\theta$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(true_theta)
+            + dataset.to_title(true_theta)
         )
 
 
@@ -787,12 +786,15 @@ def visualise_output_alt(
         # )  # all_theta_pred[i+k].detach().cpu().numpy()
 
         theta_pred = all_theta_pred[k[i]].detach().cpu().numpy()
-        print(theta_pred)
 
         # sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
         sample_uncond = dataset.generate_from_theta(theta_pred)[0][0]
+
+        if not(dataset.dev is None) :
+            sample_uncond *= theta_pred[dataset.sigma_pos]
+
         sample_uncond_masked = sample_uncond.clone()
-        mask = masked_sample[1].clone().detach().to(torch.bool)
+        # mask = masked_sample[1].clone().detach().to(torch.bool)
         sample_uncond_masked[mask] = 0
 
         sample_krig_uncond = dataset.kriging_from_sample(
@@ -810,7 +812,7 @@ def visualise_output_alt(
         axs[i, 2].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 2].set_title(
             (r"= Prediction with kriging =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred)
+            + dataset.to_title(theta_pred)
         )
 
         sample_krig = sample_krig + sample_uncond - sample_krig_uncond
@@ -821,7 +823,7 @@ def visualise_output_alt(
         axs[i, 3].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 3].set_title(
             (r"= Simulation with $\hat{\theta}$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred)
+            + dataset.to_title(theta_pred)
         )
 
         axs[i, 4].imshow(
@@ -830,7 +832,7 @@ def visualise_output_alt(
         axs[i, 4].set_xlabel(label_x if i == (nb_examples - 1) else "")
         axs[i, 4].set_title(
             (r"= Conditional Simulation with $\hat{\theta}$ =" + "\n" if i == 0 else "")
-            + dataset.model.to_title(theta_pred)
+            + dataset.to_title(theta_pred)
         )
 
     data_images = [

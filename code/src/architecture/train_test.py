@@ -67,7 +67,7 @@ class Trainer:
         else:
             self.quantile_optimizer = quantile_optimizer
 
-        self.theta_names = None
+        self.theta_alt_names = None
         self.simu_time = 0
         self.train_time = 0
         self.test_time = 0
@@ -124,13 +124,13 @@ class Trainer:
         """
         if len(self.train_dataset_hist) > 0:
             assert (
-                train_loader.dataset.model.param_names
-                == self.train_dataset_hist[0].dataset.model.param_names
+                train_loader.dataset.theta_alt_names
+                == self.train_dataset_hist[0].dataset.theta_alt_names
             )
         self.train_dataset_hist.append(train_loader.dataset)
         self.simu_time += train_loader.dataset.time_generation
 
-        # self.weights = torch.ones((len(train_loader.model.theta_names)), device=self.device)
+        # self.weights = torch.ones((len(train_loader.model.theta_alt_names)), device=self.device)
         # torch.tensor([1,1,1,.5], device=self.device)
 
         if self.network.nls:
@@ -145,8 +145,8 @@ class Trainer:
         """
         if len(self.test_dataset_hist) > 0:
             assert (
-                test_loader.dataset.model.param_names
-                == self.test_dataset_hist[0].model.param_names
+                test_loader.dataset.theta_alt_names
+                == self.test_dataset_hist[0].theta_alt_names
             ), "loader's model do not correspond with the precedent ones"
 
         assert isinstance(
@@ -307,14 +307,14 @@ class Trainer:
         self.save_network()
         self.save_quantile_network()
 
-        theta_names = test_loader.dataset.model.param_names
+        theta_alt_names = test_loader.dataset.theta_alt_names
 
         fig, ax = plt.subplots(
-            1, len(theta_names), figsize=(20, 7), constrained_layout=True
+            1, len(theta_alt_names), figsize=(20, 5), constrained_layout=True
         )
         based, _ = baseline_mae(test_loader.dataset)
 
-        for i, name in enumerate(theta_names):
+        for i, name in enumerate(theta_alt_names):
             ax[i].plot(
                 [l[i] for l in all_loss_train],
                 THETA_COLORS[i]["train"],

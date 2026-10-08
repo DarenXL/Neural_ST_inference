@@ -85,7 +85,7 @@ def get_gst_model(space_dim, adv, range_time, range_space):
     return model
 
 
-def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_space, tau=None):
+def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, range_space, dev=None, noise=None):
 
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
@@ -99,12 +99,11 @@ def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_spac
     dbin.setLocators(names, gl.ELoc.X)
     dbout.setLocators(names, gl.ELoc.X)
 
-    print(tau)
-
-    if not(tau is None) :
-        dbin["verr"] = 0 * y + tau ** 2
+    #TODO : Add sigma
+    if not(noise is None) :
+        dbin["verr"] = 0 * vals_in + noise ** 2
         dbin.setLocator("verr", gl.ELoc.V)
-    dbin.addColumns(y, radix="z1")
+    dbin.addColumns(vals_in, radix="z1")
     dbin.setLocator("z1", gl.ELoc.Z)
 
     uniqueNeigh = gl.NeighUnique.create(space=gl.SpaceRN.create(space_dim + 1))
@@ -114,24 +113,24 @@ def matern_krig(coords_in, coords_out, y, space_dim, adv, range_time, range_spac
 
 
 class GneitingAdvModel(SimulationModel):
-    def __init__(self, space_dim=1, noise=None, dev=None):
+    def __init__(self, space_dim=1):
         self.space_dim = space_dim
 
-        self.noise = noise
-        self.add_noise = not(noise is None)
-
-        self.dev = dev
-        self.add_dev = not(dev is None)
+        # self.dev = dev
+        # self.add_dev = not(dev is None)
+        #
+        # self.noise = noise
+        # self.add_noise = not(noise is None)
 
         if self.space_dim == 1:
-            self._names = ["adv", "range_time", "range_space"] + self.add_noise * ["noise"] + self.add_dev * ["dev"]
-            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"] + self.add_noise * [r"$\tau$"] + self.add_dev * [r"$\sigma"]
+            self._names = ["adv", "range_time", "range_space"] # + self.add_dev * ["dev"] + self.add_noise * ["noise"]
+            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"] # + self.add_dev * [r"$\sigma"] + self.add_noise * [r"$\tau$"]
             self.lower_bound = (-1, 0.05, 0.05)
             self.upper_bound = (1, 0.15, 0.3)
 
         elif self.space_dim == 2:
-            self._names = ["adv1", "adv2", "range_time", "range_space"] + self.add_noise * ["noise"] + self.add_dev * ["dev"]
-            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]  + self.add_noise * [r"$\tau$"] + self.add_dev * [r"$\sigma"]
+            self._names = ["adv1", "adv2", "range_time", "range_space"] # + self.add_dev * ["dev"] + self.add_noise * ["noise"]
+            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"] # + self.add_dev * [r"$\sigma"] + self.add_noise * [r"$\tau$"]
             self.lower_bound = (-1, -1, 0.05, 0.05)
             self.upper_bound = (1, 1, 0.5, 0.5) # (1, 1, 0.15, 0.3)
             # self.lower_bound = (-0.7751,  0.300,  0.510,  0.261,  0.043)
@@ -143,8 +142,8 @@ class GneitingAdvModel(SimulationModel):
 
     def get_param_names(self, alt_format=False):
         if alt_format:
-            return self._names_alt
-        return self.param_names
+            return self._names_alt.copy()
+        return self.param_names.copy()
 
     @property
     def nb_params(self):
@@ -152,9 +151,9 @@ class GneitingAdvModel(SimulationModel):
 
     def to_title(self, vals):
         if self.space_dim == 1:
-            return rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"  + self.add_dev * rf" | $\sigma$: {vals[-1]:.2f}"
+            return rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}" # + self.add_dev * rf" | $\sigma$: {vals[-1]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"
         elif self.space_dim == 2:
-            return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}" + self.add_dev * rf" | $\sigma$: {vals[-1]:.2f}"
+            return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}" #  + self.add_dev * rf" | $\sigma$: {vals[-1]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"
 
     def sample_thetas(self, n, seed=None):
         if self.space_dim == 1:
@@ -204,95 +203,56 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": sample_scaled[:, 3],
             }
 
-    time_size, space_dim, space_size, adv, range_time, range_space, seed = None, mult_time = 1
-    def simulate(self, p, t_size, s_dim, s_size, seed=None, mult_time=1):
-        assert s_dim == self.space_dim
+    def simulate(self, theta_values, time_size, space_dim, space_size, seed=None, mult_time=1):
+        assert space_dim == self.space_dim
         if self.space_dim == 1:
             return _simulate_gneiting_matern_grid_func(
-                time_size=t_size,
-                space_dim=s_dim,
-                s_size,
-                p["adv"],
-                p["range_time"],
-                p["range_space"],
+                time_size=time_size,
+                space_dim=space_dim,
+                space_size=space_size,
+                adv=theta_values["adv"],
+                range_time=theta_values["range_time"],
+                range_space=theta_values["range_space"],
                 seed=seed,
                 mult_time=mult_time,
             )
         elif self.space_dim == 2:
             return _simulate_gneiting_matern_grid_func(
-                time_size=t_size,
-                space_dim=s_dim,
-                s_size,
-                [p["adv1"], p["adv2"]],
-                p["range_time"],
-                p["range_space"],
+                time_size=time_size,
+                space_dim=space_dim,
+                space_size=space_size,
+                adv=[theta_values["adv1"], theta_values["adv2"]],
+                range_time=theta_values["range_time"],
+                range_space=theta_values["range_space"],
                 seed=seed,
                 mult_time=mult_time,
             )
 
-    def eval_cov(self, coords, y, space_dim, theta_values):
-        if len(theta_values) == 4:
-            model = get_gst_model(
-                self.space_dim, theta_values[0:2], theta_values[2], theta_values[3]
-            )
-        else:
-            model = get_gst_model(self.space_dim, *theta_values)
 
-        dbgrid = gl.Db.create()
-        names = []
-        for i in range(len(coords[0])):
-            dbgrid.addColumns(coords[:, i], radix="x" + str(i + 1))
-            names.append("x" + str(i + 1))
-        dbgrid.setLocators(names, gl.ELoc.X)
-
-        dbgrid.addColumns(y, radix="z1")
-        dbgrid.setLocator("z1", gl.ELoc.Z)
-
-        return model.evalCovMat(dbgrid, dbgrid)
-
-    coords_in, coords_out, y, space_dim, adv, range_time, range_space, tau = None
-
-    def kriging(self, coords_in, coords_out, y, space_dim, theta_values):
+    def kriging(self, coords_in, coords_out, vals_in, space_dim, theta_values, noise=None, dev=None):
+        assert space_dim == self.space_dim
         if self.space_dim == 1:
             return matern_krig(
-                coords_in,
-                coords_out,
-                y,
-                space_dim,
-                theta_values[0],
-                theta_values[1],
-                theta_values[2],
-                theta_values[3] if self.add_noise else None,
+                coords_in=coords_in,
+                coords_out=coords_out,
+                vals_in=vals_in,
+                space_dim=space_dim,
+                adv=theta_values["adv"],
+                range_time=theta_values["range_time"],
+                range_space=theta_values["range_space"],
+                dev=dev,  # theta_values[4] if self.add_dev else None,
+                noise=noise, # theta_values[3] if self.add_noise else None,
             )
         elif self.space_dim == 2:
             return matern_krig(
-                coords_in,
-                coords_out,
-                y,
-                space_dim,
-                [theta_values[0], theta_values[1]],
-                theta_values[2],
-                theta_values[3],
-                theta_values[4] if self.add_noise else None,
+                coords_in=coords_in,
+                coords_out=coords_out,
+                vals_in=vals_in,
+                space_dim=space_dim,
+                adv=[theta_values["adv1"], theta_values["adv2"]],
+                range_time=theta_values["range_time"],
+                range_space=theta_values["range_space"],
+                dev=dev, # theta_values[5] if self.add_dev else None,
+                noise=noise,  # theta_values[4] if self.add_noise else None,
             )
 
-    def get_likelihood(self, coords, y, theta):
-        model = get_gst_model(self.space_dim, *theta)
-
-        # print(coords.shape)
-
-        dbgrid = gl.Db.create()
-        names = []
-        for i in range(len(coords[0])):
-            dbgrid.addColumns(coords[:, i], radix="x" + str(i + 1))
-            names.append("x" + str(i + 1))
-        dbgrid.setLocators(names, gl.ELoc.X)
-
-        # print(y)
-
-        dbgrid.addColumns(y, radix="z1")
-        dbgrid.setLocator("z1", gl.ELoc.Z)
-
-        # print(dbgrid)
-
-        return model.computeLogLikelihood(dbgrid)

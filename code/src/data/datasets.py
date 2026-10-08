@@ -24,6 +24,8 @@ class GenericSimulationDataset(Dataset):
         space_size=30,
         missing_ratio=0,
         seed=None,
+        dev=None,
+        noise=None,
     ):
         self.model = model
         self.theta_size = theta_size
@@ -32,15 +34,30 @@ class GenericSimulationDataset(Dataset):
         self.space_size = space_size
         self.missing_ratio = missing_ratio
         self.global_seed = seed
+        self.dev = dev,
+        self.noise = noise,
 
         self.path = None
         self.time_generation = None
 
-        self.training = True # Shuffle mask, Shuffle Tau
+        self.training = True # Shuffle mask, Shuffle Sigma and Tau
+
+
 
         self.thetas = self.model.sample_thetas(theta_size, seed=self.global_seed)
-        if self.model.add_noise :
-            self.taus = self.sample_taus(theta_size) # torch.rand((theta_size,)) * self.model.noise
+        self.theta_names = self.model.get_param_names(alt_format=False)
+        self.theta_alt_names = self.model.get_param_names(alt_format=True)
+
+        if not(self.dev is None):
+            self.sigmas = self.sample_sigmas(theta_size)
+            self.theta_names += ["dev"]
+            self.theta_alt_names += [r"$\sigma$"]
+            self.sigma_pos = len(self.theta_names) - 1
+        if not(self.noise is None) :
+            self.taus = self.sample_taus(theta_size)
+            self.theta_names += ["noise"]
+            self.theta_alt_names += [r"$\tau$"]
+            self.tau_pos = len(self.theta_names) - 1
 
     def __len__(self):
         return self.theta_size
@@ -51,27 +68,46 @@ class GenericSimulationDataset(Dataset):
     def eval(self):
         self.training = False
 
+    def to_title(self, vals):
+        n_drop = (1 if not (self.dev is None) else 0) + (1 if not (self.noise is None) else 0)
+        res = self.model.to_title(vals[:-n_drop])
+        return res + (not (self.dev is None)) * ("\n" + rf"$\sigma$: {vals[-1]:.2f}") + (not (self.noise is None)) * rf" | $\tau$: {vals[-1]:.2f}"
+
     def get_theta_tensor(self) -> torch.Tensor:
         """Return every theta in a tensor"""
-        stack = [self.thetas[name] for name in self.model.param_names[:-1 if self.model.add_noise else None]]
+
+        stack = [self.thetas[name] for name in self.model.param_names]
+
         res = torch.from_numpy(np.stack(stack).T)
-        if self.model.add_noise :
+        if not(self.dev is None) :
+            res = torch.cat([res,self.sigmas], dim=1)
+        if not(self.noise is None) :
             res = torch.cat([res,self.taus], dim=1)
         return res
 
     def get_theta_by_idx(self, idx) -> torch.Tensor:
         """Return every theta in a tensor"""
-        stack = [self.thetas[name][idx] for name in self.model.param_names[:-1 if self.model.add_noise else None]]
+        stack = [self.thetas[name][idx] for name in self.model.param_names]
+
         res = torch.tensor(stack)
-        if self.model.add_noise :
+        if not(self.dev is None) :
+            res = torch.cat([res,self.sigmas[idx]])
+        if not(self.noise is None) :
             res = torch.cat([res,self.taus[idx]])
         return res
+
+    def sample_sigmas(self, size):
+        sampler = qmc.LatinHypercube(d=1, seed=self.global_seed)
+        sample = sampler.random(size)
+
+        res =  qmc.scale(sample, self.noise if not(self.noise is None) else .3, self.dev)
+        return torch.from_numpy(res)
 
     def sample_taus(self, size):
         sampler = qmc.LatinHypercube(d=1, seed=self.global_seed)
         sample = sampler.random(size)
 
-        res =  qmc.scale(sample, 0, self.model.noise)
+        res =  qmc.scale(sample, 0, self.noise)
         return torch.from_numpy(res)
 
     def save(self, path: Path):
@@ -84,6 +120,8 @@ class GenericSimulationDataset(Dataset):
                 "theta_size": self.theta_size,
                 "missing_ratio": self.missing_ratio,
                 "global_seed": self.global_seed,
+                "dev": self.dev,
+                "noise": self.noise,
                 "time_generation": self.time_generation,
                 "model_class": self.model.__class__.__name__,
             },
@@ -106,7 +144,10 @@ class GenericSimulationDataset(Dataset):
             space_size=config["space_size"],
             missing_ratio=config["missing_ratio"],
             seed=config["global_seed"],
+            dev=config.get("dev", 1.414),
+            noise=config.get("noise", 0.5),
         )
+
 
         instance.thetas = data["thetas"]
         instance.time_generation = config["time_generation"]
@@ -131,7 +172,7 @@ class GenericSimulationDataset(Dataset):
             space_dim,
             space_size,
             seed,
-            mult_time=2,
+            mult_time=1,
         )
         batch = torch.from_numpy(batch)
         torch.save(batch, f"{samples_dir}/sample_{idx}.pt")
@@ -170,7 +211,8 @@ class GenericSimulationDataset(Dataset):
         ) as executor:
             futures = []
             for idx in range(self.theta_size):
-                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names[:-1 if self.model.add_noise else None]}
+
+                theta_i = {key: self.thetas[key][idx] for key in self.model.param_names}
 
                 worker_seed = None if self.global_seed is None else self.global_seed + idx
 
@@ -332,7 +374,10 @@ class GenericSimulationDataset(Dataset):
         coords_obs = coords[~mask_obs]
         coords_miss = coords # [mask_obs]
 
-        krig = self.model.kriging(coords_obs, coords_miss, y_obs, self.space_dim, theta)
+        n_drop = (1 if not(self.dev is None) else 0) + (1 if not(self.noise is None) else 0)
+        theta_dict = dict(zip(self.model.param_names, theta[:-n_drop]))
+
+        krig = self.model.kriging(coords_in=coords_obs, coords_out=coords_miss, vals_in=y_obs, space_dim=self.space_dim, theta_values=theta_dict, dev=theta[self.sigma_pos] if not(self.dev is None) else None, noise=theta[self.tau_pos] if not(self.dev is None) else None)
 
         # y_full = y.copy()
         # y_full[mask_obs] = krig
@@ -376,6 +421,17 @@ class GenericSimulationDataset(Dataset):
 
         return torch.concatenate([sample, mask], dim=1)
 
+    def add_dev(self, sample, idx=None):
+
+        if self.training:
+            sigma_idx = torch.randint(0, self.theta_size, (1,)).item()
+            dev = self.sigmas[sigma_idx]
+        else:
+            sigma_idx = idx if idx is not None else 0
+            dev = self.sigmas[sigma_idx]
+
+        return dev * sample, self.sigmas[sigma_idx]
+
     def add_noise(self, sample, idx=None):
 
         if self.training:
@@ -394,7 +450,9 @@ class GenericSimulationDataset(Dataset):
             else:
                 noise = self.taus[tau_idx] * torch.randn_like(sample)
 
-        return torch.sqrt(1 - self.taus[tau_idx]**2) * sample + noise, self.taus[tau_idx]
+        return  sample + noise, self.taus[tau_idx]
+
+
 
     def __getitem__(self, idx):
 
@@ -402,9 +460,14 @@ class GenericSimulationDataset(Dataset):
 
         sample = self.get_grid(idx)
 
-        if self.model.add_noise :
+        if not(self.dev is None) :
+            sample, sigma = self.add_dev(sample, idx)
+            theta_vec[self.sigma_pos] = sigma
+
+        if not(self.noise is None) :
             sample, tau = self.add_noise(sample, idx)
-            theta_vec[-1] = tau
+            theta_vec[self.tau_pos] = tau
+
 
         sample = self.add_missing_mask(sample, idx)
 
@@ -433,12 +496,20 @@ class NlsSimulationDataset(GenericSimulationDataset):
             theta = self.all_thetas[self.pi[sample_idx]]
 
         sample = self.get_grid(sample_idx)
-        if self.model.add_noise :
+
+        if not(self.dev is None) :
+            sample, sigma = self.add_dev(sample, sample_idx)
+            if is_perm == 0:
+                theta[self.sigma_pos] = sigma
+            else:
+                theta[self.sigma_pos] = self.sigmas[self.pi[sample_idx]]
+
+        if not(self.noise is None) :
             sample, tau = self.add_noise(sample, sample_idx)
             if is_perm == 0:
-                theta[-1] = tau
+                theta[self.tau_pos] = tau
             else :
-                theta[-1] = self.taus[self.pi[sample_idx]]
+                theta[self.tau_pos] = self.taus[self.pi[sample_idx]]
 
         sample = self.add_missing_mask(sample)
 

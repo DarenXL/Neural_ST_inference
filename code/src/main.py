@@ -58,10 +58,11 @@ freq_epochs_test = 10
 
 # Data options
 
-time_size = 50
+time_size = 20
 space_dim = 1
-space_size = 50
+space_size = 20
 missing_ratios = [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]
+dev, noise = 1.414, .5
 
 # Amount of data
 
@@ -123,7 +124,7 @@ if __name__ == "__main__":
 
     # Model choice
 
-    model = GneitingAdvModel(space_dim=space_dim, noise=0.5)
+    model = GneitingAdvModel(space_dim=space_dim)
     # model = GneitingSepModel(space_dim=space_dim)
 
     # Creation of the class dataset and its θ
@@ -136,6 +137,8 @@ if __name__ == "__main__":
         space_size=space_size,
         missing_ratio=None,
         seed=1,
+        dev=dev,
+        noise=noise
     )
     # dataset_train.generate_masks(data_path / "train")
 
@@ -165,6 +168,8 @@ if __name__ == "__main__":
         space_size=space_size,
         missing_ratio=None,
         seed=1+train_size*10,
+        dev=dev,
+        noise=noise
     )
     dataset_test.generate(data_path / "test")
     dataset_test.eval()
@@ -217,7 +222,7 @@ if __name__ == "__main__":
     CNN = CNN_ST_network(
         in_channels=2,
         hidden=72,
-        theta_dim=dataset_train.model.nb_params,
+        theta_dim=len(dataset_train.theta_names),
         spatial_dim=space_dim,
         label="NBE",
     ).to(device)
@@ -228,7 +233,7 @@ if __name__ == "__main__":
     quantile_CNN = CNN_ST_network(
         in_channels=2,
         hidden=36,
-        theta_dim=dataset_train.model.nb_params,
+        theta_dim=len(dataset_train.theta_names),
         spatial_dim=space_dim,
         label="NBE"
     ).to(device)
@@ -293,7 +298,7 @@ if __name__ == "__main__":
     # CNN = CNN_ST_network(
     #     in_channels=2,
     #     hidden=72,
-    #     theta_dim=dataset_train.model.nb_params,
+    #     theta_dim=len(dataset_train.theta_names),
     #     spatial_dim=space_dim,
     #     nls=True,
     #     label="NRE"
