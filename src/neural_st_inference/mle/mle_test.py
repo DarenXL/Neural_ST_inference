@@ -7,8 +7,8 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
 
-from utils import baseline_mae, THETA_COLORS
-from mle.gneiting_kernel_adv import *
+from neural_st_inference.utils import baseline_mae, THETA_COLORS
+from neural_st_inference.mle.gneiting_kernel_adv import *
 from scipy.optimize import minimize
 
 import torch
@@ -66,7 +66,7 @@ class MLE:
         for i in tqdm(range(len(dataset)), desc=f"Inference {self.estimation_label}"):
             data_test, theta_test = dataset[i]
 
-            data_test = data_test.detach().numpy()
+            data_test = data_test.detach().float()
             theta_test = theta_test
 
             for j in range(len(data_test)):
@@ -85,16 +85,18 @@ class MLE:
                     spatial_dim=1,
                     trace_kernel="matern",
                     nu=1.5,
-                    n_iter=500,
+                    n_iter=600,
                     lr=0.05,
                     use_keops=True,
                 )
-                k = model_stationary.covar_module.base_kernel
+                covar_module = model_stationary.covar_module
+                k = covar_module.base_kernel
                 output = torch.tensor(
                     [
                         k.adv.item(),
                         k.length_scale_t.item(),
                         k.length_scale_s.item(),
+                        torch.sqrt(covar_module.outputscale).item(),
                         torch.sqrt(lik_stationary.noise).item()
                      ]
                 )

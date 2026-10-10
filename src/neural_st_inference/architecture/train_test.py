@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm
 import time
 
-from utils import baseline_mae, THETA_COLORS
+from neural_st_inference.utils import baseline_mae, THETA_COLORS
 from scipy.optimize import minimize
 from scipy.stats import chi2
 
@@ -156,9 +156,8 @@ class Trainer:
         self.test_dataset_hist.append(test_loader.dataset)
 
         if self.network.nls:
-            # return self.test_nls_grid_quantiles(test_loader, dataset_gridsearch=dataset_gridsearch)
-            return self.test_nls_optim(test_loader)
-            # return self.test_nls_MCMC(test_loader)
+            # return self.test_nls_optim(test_loader)
+            return self.test_nls_MCMC(test_loader)
         else:
             return self.test_quantiles(test_loader)
 
@@ -601,17 +600,28 @@ class Trainer:
 
         time_start = time.time()
 
-        model_ref = loader_test.dataset.model
-        lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
-        upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
+        dataset_ref = loader_test.dataset
+        lower_bound = torch.tensor(dataset_ref.model.lower_bound).to(self.device)
+        upper_bound = torch.tensor(dataset_ref.model.upper_bound).to(self.device)
 
-        if model_ref.add_noise :
+        if not (dataset_ref.dev is None):
+            lower_bound = torch.cat(
+                [lower_bound,
+                 torch.tensor([dataset_ref.noise] if not (dataset_ref.noise is None) else [.3], device=self.device)]
+            )
+            upper_bound = torch.cat(
+                [upper_bound, torch.tensor([dataset_ref.dev], device=self.device)]
+            )
+
+        if not (dataset_ref.noise is None):
             lower_bound = torch.cat(
                 [lower_bound, torch.tensor([0], device=self.device)]
             )
             upper_bound = torch.cat(
-                [upper_bound, torch.tensor([model_ref.noise], device=self.device)]
+                [upper_bound, torch.tensor([dataset_ref.noise], device=self.device)]
             )
+
+        print(lower_bound, upper_bound)
 
         if theta0 is None:
             theta0_latent = (lower_bound + upper_bound) / 2
@@ -706,13 +716,26 @@ class Trainer:
         for param in self.network.parameters():
             param.requires_grad = False
 
-        model_ref = loader_test.dataset.model
-        lower_bound = torch.tensor(model_ref.lower_bound).to(self.device)
-        upper_bound = torch.tensor(model_ref.upper_bound).to(self.device)
+        dataset_ref = loader_test.dataset
+        lower_bound = torch.tensor(dataset_ref.model.lower_bound).to(self.device)
+        upper_bound = torch.tensor(dataset_ref.model.upper_bound).to(self.device)
 
-        if model_ref.add_noise :
-            lower_bound = torch.cat([lower_bound, torch.tensor([0], device=self.device)])
-            upper_bound = torch.cat([upper_bound, torch.tensor([model_ref.noise], device=self.device)])
+        if not (dataset_ref.dev is None):
+            lower_bound = torch.cat(
+                [lower_bound,
+                 torch.tensor([dataset_ref.noise] if not (dataset_ref.noise is None) else [.3], device=self.device)]
+            )
+            upper_bound = torch.cat(
+                [upper_bound, torch.tensor([dataset_ref.dev], device=self.device)]
+            )
+
+        if not (dataset_ref.noise is None):
+            lower_bound = torch.cat(
+                [lower_bound, torch.tensor([0], device=self.device)]
+            )
+            upper_bound = torch.cat(
+                [upper_bound, torch.tensor([dataset_ref.noise], device=self.device)]
+            )
 
         num_samples = 2000
         warmup_steps = 500
@@ -739,31 +762,34 @@ class Trainer:
             batch_log_ratios = []
 
             for chain_idx in range(3):
+                pyro.clear_param_store()
+
                 mcmc.run(data_batch, lower_bound, upper_bound)
-                samples = mcmc.get_samples()
-                chain_samples = samples["theta"]
+                chain_samples = mcmc.get_samples()["theta"].detach().cpu()
 
                 # determinist = Predictive(self._pyro_model, samples)(data_batch, lower_bound, upper_bound)
                 # chain_log_ratio = determinist["log_ratio_samples"].cpu()
 
-                with torch.no_grad():
-                    time_map_t = time.time()
-                    log_ratio_list = []
+                # # MAP 1
+                # with torch.no_grad():
+                #     time_map_t = time.time()
+                #     log_ratio_list = []
+                #
+                #     for s_idx in range(chain_samples.size(0)):
+                #         single_theta = chain_samples[s_idx]
+                #
+                #         log_ratio = -self.network(
+                #             data_batch, theta=single_theta
+                #         ).squeeze(-1)
+                #
+                #         log_ratio_list.append(log_ratio.cpu())
+                #
+                #     chain_log_ratio = torch.stack(log_ratio_list)
+                #     time_map += time.time() - time_map_t
+                #
+                #     # print("time_map", time_map)
 
-                    for s_idx in range(chain_samples.size(0)):
-                        single_theta = chain_samples[s_idx]
-
-                        log_ratio = -self.network(
-                            data_batch, theta=single_theta
-                        ).squeeze(-1)
-
-                        log_ratio_list.append(log_ratio.cpu())
-
-                    chain_log_ratio = torch.stack(log_ratio_list)
-                    time_map += time.time() - time_map_t
-
-                    # print("time_map", time_map)
-
+                # # MAP 2
                 # time_poutine = time.time()
                 #
                 # log_probs = []
@@ -788,46 +814,42 @@ class Trainer:
 
                 # print("time_poutine", time_poutine)
 
-                batch_chains.append(chain_samples.cpu())
-                batch_log_ratios.append(chain_log_ratio)
+                batch_chains.append(chain_samples.detach().cpu())
+                # batch_log_ratios.append(chain_log_ratio) # MAP
+
+                torch.cuda.empty_cache()
 
             samples = torch.stack(batch_chains, dim=0)
             samples = samples.reshape(-1, samples.shape[2], samples.shape[3])
 
-            log_ratios = torch.stack(batch_log_ratios, dim=0)
-            # print(log_ratios.shape)
-            log_ratios = log_ratios.reshape(-1, log_ratios.shape[-1])
-            # print(log_ratios.shape)
-            map_indices = torch.argmax(log_ratios, dim=0)
+            # log_ratios = torch.stack(batch_log_ratios, dim=0) # MAP
+            # log_ratios = log_ratios.reshape(-1, log_ratios.shape[-1]) # MAP
+            # map_indices = torch.argmax(log_ratios, dim=0) # MAP
 
-            # print(map_indices.shape)
+            # theta_MAP = samples[map_indices, torch.arange(data_batch.size(0)), :] # MAP
 
-            theta_MAP = samples[map_indices, torch.arange(data_batch.size(0)), :]
-
-            # print(theta_MAP.shape)
-
-            all_theta_final.append(theta_MAP)
+            # all_theta_final.append(theta_MAP) # MAP
 
             all_samples.append(samples)
-            all_true_theta.append(theta_batch.cpu())
+            all_true_theta.append(theta_batch.detach().cpu())
 
         time_total = time.time() - time_start
 
         all_samples = torch.cat(all_samples, dim=1)
         all_samples = all_samples.permute(1, 0, 2)
-        all_theta_final = torch.concatenate(
-            all_theta_final, dim=0
-        )  #  all_theta_final = torch.median(all_samples, dim=1)
-        all_true_theta = torch.concatenate(all_true_theta, dim=0)
-        final_test_losses = torch.abs(all_theta_final - all_true_theta)
         for q in self.quantiles:
             all_quantiles[q] = torch.quantile(all_samples, q, dim=1)
+        all_theta_final = all_quantiles[0.5]
+        # all_theta_final = torch.concatenate(all_theta_final, dim=0)  # MAP
+        all_true_theta = torch.concatenate(all_true_theta, dim=0)
+        final_test_losses = torch.abs(all_theta_final - all_true_theta)
+
 
         results = {
-            "final_test_losses": final_test_losses,  # (Nb_epochs, Nb_params)
+            "final_test_losses": final_test_losses,
             "test_time": time_total - time_map,
             "map_time": time_map,
-            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
+            "final_all_theta": all_theta_final,
             "true_all_theta": all_true_theta,
             "all_quantiles": all_quantiles,
         }

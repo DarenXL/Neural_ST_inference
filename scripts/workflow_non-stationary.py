@@ -22,12 +22,12 @@ device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
 # Path to data saving file
 
-data_path = create_data_path("code/data/spatiotemporal_adv")
-# data_path = Path("./code/data/spatiotemporal_adv").resolve() / "2D-try"
+data_path = create_data_path("other_codes/data/spatiotemporal_adv")
+# data_path = Path("./other_codes/data/spatiotemporal_adv").resolve() / "2D-try"
 
 # Path to results saving file
 
-res_path = create_res_path("code/results/spatiotemporal")
+res_path = create_res_path("other_codes/results/spatiotemporal")
 
 # Neural Network train options
 

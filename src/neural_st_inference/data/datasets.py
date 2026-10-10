@@ -7,11 +7,12 @@ import time
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import concurrent.futures
-from models.base import SimulationModel
-from utils import CMAP, create_mask, temporary_seed
 from scipy.stats import qmc
 import gstlearn as gl
 import matplotlib.pyplot as plt
+
+from neural_st_inference.models.base import SimulationModel
+from neural_st_inference.utils import CMAP, create_mask, temporary_seed
 
 
 class GenericSimulationDataset(Dataset):
@@ -34,8 +35,8 @@ class GenericSimulationDataset(Dataset):
         self.space_size = space_size
         self.missing_ratio = missing_ratio
         self.global_seed = seed
-        self.dev = dev,
-        self.noise = noise,
+        self.dev = dev
+        self.noise = noise
 
         self.path = None
         self.time_generation = None
@@ -135,6 +136,8 @@ class GenericSimulationDataset(Dataset):
         """Load all attributes and the thetas"""
         data = torch.load(f"{path}/metadata.pt", weights_only=False)
         config = data["config"]
+
+        print("loading ", f"{path}/metadata.pt")
 
         instance = cls(
             model=model_instance,

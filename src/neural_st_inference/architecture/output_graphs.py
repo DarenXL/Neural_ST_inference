@@ -4,13 +4,13 @@ from matplotlib import pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 from pathlib import Path
 
-from utils import (
+from neural_st_inference.utils import (
     THETA_COLORS,
     CMAP,
     baseline_mae,
     format_seconds,
 )
-from architecture.train_test import Trainer
+from neural_st_inference.architecture.train_test import Trainer
 
 
 def list_trainers_name(trainers: list[Trainer], num_dataset: list):

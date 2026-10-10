@@ -7,15 +7,15 @@ import copy
 gdoc.setNoScroll()
 
 import matplotlib.dates as mdates
-from utils import *
-from utils_data_sun import *
-from models.gneiting_adv import GneitingAdvModel
-from models.gneiting_sep import GneitingSepModel
-from data.datasets import GenericSimulationDataset, NlsSimulationDataset
-from architecture.train_test import *
-from mle.mle_test import *
-from architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
-from architecture.output_graphs import *
+from neural_st_inference.utils import *
+from neural_st_inference.utils_data_sun import *
+from neural_st_inference.models.gneiting_adv import GneitingAdvModel
+from neural_st_inference.models.gneiting_sep import GneitingSepModel
+from neural_st_inference.data.datasets import GenericSimulationDataset, NlsSimulationDataset
+from neural_st_inference.architecture.train_test import *
+from neural_st_inference.mle.mle_test import *
+from neural_st_inference.architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
+from neural_st_inference.architecture.output_graphs import *
 import warnings
 import torch
 

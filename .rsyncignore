@@ -1,0 +1,7 @@
+output/
+slides/
+other_codes/
+.venv/
+.git/
+__pycache__/
+*.pyc

@@ -525,34 +525,34 @@ class GneitingGP(gpytorch.models.ExactGP):
 
 def train_gneiting_gp(train_x, train_y, spatial_dim=2, trace_kernel="matern",
                       nu=1.5, learn_nu=False, n_iter=200, lr=0.05,
-                      tau_init=0.1,
+                      tau_init=0.1, sigma2_init=1.0,
                       use_keops=None, verbose=True):
     """
     Train a GneitingGP by marginal log-likelihood (Adam optimiser).
     """
     device = train_x.device
 
-    # 1. La Likelihood contient le paramètre de bruit (variance de l'erreur de mesure)
+    # 1. Vraisemblance (Bruit / Nugget effect)
     likelihood = gpytorch.likelihoods.GaussianLikelihood()
-
-    # Initialisation de tau (le paramètre 'noise' de GPyTorch correspond à tau^2)
     likelihood.noise = tau_init ** 2
 
+    # 2. Modèle
     model = GneitingGP(train_x, train_y, likelihood, spatial_dim=spatial_dim,
                        trace_kernel=trace_kernel, nu=nu, learn_nu=learn_nu,
                        use_keops=use_keops).to(device)
 
+    # Initialisation de la variance du signal (Scale / Sill)
+    # Dans GPyTorch, c'est le paramètre 'outputscale' du ScaleKernel
+    model.covar_module.outputscale = sigma2_init
+
     model.train()
     likelihood.train()
 
-    # L'optimiseur mettra à jour à la fois les paramètres du modèle (adv, a_s, a_t)
-    # et de la vraisemblance (tau)
+    # L'optimiseur met à jour le noyau (adv, a_s, a_t), le scale (sigma2) et le bruit (tau)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     mll = gpytorch.mlls.ExactMarginalLogLikelihood(likelihood, model)
 
     losses = []
-
-    # Calcul du facteur de conversion une seule fois pour l'affichage
     sq12 = math.sqrt(12)
 
     for i in range(n_iter):
@@ -561,20 +561,29 @@ def train_gneiting_gp(train_x, train_y, spatial_dim=2, trace_kernel="matern",
         loss = -mll(model(train_x), train_y)
         loss.backward()
         optimizer.step()
-        losses.append(loss.item())
+        # losses.append(loss.item())
+        losses.append(loss.detach())
 
-        if verbose and (i + 1) % 20 == 0:
-            k = model.covar_module.base_kernel
 
-            # Récupération de tau = sqrt(noise)
-            tau_est = torch.sqrt(likelihood.noise).item()
+        # if verbose and (i + 1) % 20 == 0:
+        #     k = model.covar_module.base_kernel
+        #
+        #     # Récupération de l'écart-type du bruit (tau)
+        #     tau_est = torch.sqrt(likelihood.noise).item()
+        #
+        #     # Récupération de la variance du signal (sigma^2)
+        #     sigma2_est = model.covar_module.outputscale.item()
+        #
+        #     print(f"Iter {i + 1:4d}/{n_iter} | Loss {loss.item():.4f} | "
+        #           f"adv={k.adv.item():.3f}  "
+        #           f"a_t={k.length_scale_t.item():.3f}  "
+        #           f"a_s={k.length_scale_s.item() / sq12:.3f}  "
+        #           f"sigma2={sigma2_est:.3f}  "
+        #           f"tau={tau_est:.3f}")
 
-            print(f"Iter {i+1:4d}/{n_iter} | Loss {loss.item():.4f} | "
-                  f"adv={k.adv.item():.3f} "
-                  f"a_t={k.length_scale_t.item():.3f}  "
-                  f"a_s={k.length_scale_s.item()/sq12:.3f}  "
-                  f"tau={tau_est:.3f}"
-                )
+    losses = [l.item() for l in losses]
+
+
 
     model.eval()
     likelihood.eval()
