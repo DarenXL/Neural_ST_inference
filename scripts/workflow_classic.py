@@ -53,8 +53,8 @@ print("res_path", res_path)
 
 # Neural Network train options
 
-batch_size_train = 128
-batch_size_test = 64
+batch_size_train = 512
+batch_size_test = 2000
 nb_epochs = 500
 freq_epochs_test = 10
 
@@ -63,8 +63,8 @@ freq_epochs_test = 10
 time_size = 100
 space_dim = 1
 space_size = 100
-missing_ratios = [0.94, 0.96, 0.98] # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]   # ATTENTION DANS UTILS.PY
-dev, noise = 1.414, .5
+missing_ratios = [0.96] # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]   # ATTENTION DANS UTILS.PY
+dev, noise = 1.414, .5 # 1.414, .5
 
 # Amount of data
 
@@ -104,6 +104,10 @@ if __name__ == "__main__":
         # print("test global_seed", dataset.global_seed)
         # print(dataset.missing_ratio)
         dataset.eval()
+
+        print(dataset.missing_ratio)
+        print("train global_seed", dataset.global_seed)
+        print("train dev/noise", dataset.dev, dataset.noise)
 
 
         datasets_test.append(dataset)
@@ -213,66 +217,66 @@ if __name__ == "__main__":
     #############################
     #############################
 
-    ############################
-    ####### Architecture #######
-    ############################
-
-    # Creation of the Neural Network
-
-    CNN = CNN_ST_network(
-        in_channels=2,
-        hidden=72,
-        theta_dim=len(dataset_train.theta_names),
-        spatial_dim=space_dim,
-        label="NBE",
-    ).to(device)
-    # CNN.load_state_dict(torch.load(res_path/ ".." / "2026-09-10_10-00-57_adv-mcmc (Copie)" / "networks" / "NBE.pth", map_location=device))
-
-    # print_parameters_per_layer(CNN)
-
-    quantile_CNN = CNN_ST_network(
-        in_channels=2,
-        hidden=36,
-        theta_dim=len(dataset_train.theta_names),
-        spatial_dim=space_dim,
-        label="NBE"
-    ).to(device)
-
-    # Creation the Trainer used train, test and show results
-
-    trainer_separately = Trainer(
-        CNN,
-        device,
-        res_path,
-        quantiles=[0.05, 0.95],
-        quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
-    )
-
-    # Training (and testing at the same time)
-
-    trainer_separately.train(
-        train_loader=loader_train,
-        test_loader=loaders_test[0],
-        nb_epochs=nb_epochs,
-        freq_epochs_test=freq_epochs_test,
-    )
-
-    # Testing
-
-    for loader in loaders_test:
-        res = trainer_separately.test(loader)  # res = ...
-
-    try: # [0.9030, 0.9140, 0.8920, 0.8810, 0.8770]
-        print(
-            "quantiles precision :",
-            torch.mean(
-                (res["true_all_theta"] > res["all_quantiles"][0.05])
-                * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
-                dim=0,
-            ),
-        )
-    except:
-        print("No quantiles")
+    # ############################
+    # ####### Architecture #######
+    # ############################
+    #
+    # # Creation of the Neural Network
+    #
+    # CNN = CNN_ST_network(
+    #     in_channels=2,
+    #     hidden=72,
+    #     theta_dim=len(dataset_train.theta_names),
+    #     spatial_dim=space_dim,
+    #     label="NBE",
+    # ).to(device)
+    # # CNN.load_state_dict(torch.load(res_path/ ".." / "2026-09-10_10-00-57_adv-mcmc (Copie)" / "networks" / "NBE.pth", map_location=device))
+    #
+    # # print_parameters_per_layer(CNN)
+    #
+    # quantile_CNN = CNN_ST_network(
+    #     in_channels=2,
+    #     hidden=36,
+    #     theta_dim=len(dataset_train.theta_names),
+    #     spatial_dim=space_dim,
+    #     label="NBE"
+    # ).to(device)
+    #
+    # # Creation the Trainer used train, test and show results
+    #
+    # trainer_separately = Trainer(
+    #     CNN,
+    #     device,
+    #     res_path,
+    #     quantiles=[0.05, 0.95],
+    #     quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+    # )
+    #
+    # # Training (and testing at the same time)
+    #
+    # trainer_separately.train(
+    #     train_loader=loader_train,
+    #     test_loader=loaders_test[0],
+    #     nb_epochs=nb_epochs,
+    #     freq_epochs_test=freq_epochs_test,
+    # )
+    #
+    # # Testing
+    #
+    # for loader in loaders_test:
+    #     res = trainer_separately.test(loader)  # res = ...
+    #
+    # try: # [0.9030, 0.9140, 0.8920, 0.8810, 0.8770]
+    #     print(
+    #         "quantiles precision :",
+    #         torch.mean(
+    #             (res["true_all_theta"] > res["all_quantiles"][0.05])
+    #             * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
+    #             dim=0,
+    #         ),
+    #     )
+    # except:
+    #     print("No quantiles")
 
     #############################
     #############################
@@ -290,6 +294,8 @@ if __name__ == "__main__":
         num_workers=4,
         pin_memory=True
     )
+    print("train global_seed", dataset_train_nls.global_seed)
+    print("train dev/noise", dataset_train_nls.dev, dataset_train_nls.noise)
 
     ############################
     ####### Architecture #######
@@ -303,6 +309,7 @@ if __name__ == "__main__":
         nls=True,
         label="NRE"
     ).to(device)
+    # CNN.load_state_dict(torch.load(res_path / ".." / "2026-09-10_10-00-57_adv-mcmc (Copie)" / "networks" / "NRE.pth", map_location=device))
 
     print_parameters_per_layer(CNN)
 
@@ -316,6 +323,7 @@ if __name__ == "__main__":
         train_loader=loader_train_nls,
         nb_epochs=nb_epochs,
     )
+
     for loader in loaders_test:
         res = trainer_nls.test(loader)
 
@@ -337,12 +345,12 @@ if __name__ == "__main__":
     ###########################################
     ###########################################
 
-    mle_trainer = MLE(device, res_path)
-    mle_trainer.test_mle(datasets_test[0])
+    # mle_trainer = MLE(device, res_path)
+    # mle_trainer.test_mle(datasets_test[0])
 
     # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2, k=[4,7])
 
-    trainers = [trainer_separately, trainer_nls]
+    trainers = [trainer_nls]
 
     # train_graph(trainers, res_path)
     time_hist(trainers, res_path)

@@ -89,6 +89,10 @@ def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, rang
 
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
+    # sills = gl.MatrixSymmetric(1, 1)
+    # sills.setValue(0, 0, dev**2)
+    # modelglob = gl.CovBase(model.getCov(), sills)
+
     dbin = gl.Db.create()
     dbout = gl.Db.create()
     names = []

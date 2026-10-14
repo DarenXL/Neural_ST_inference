@@ -57,105 +57,29 @@ test_size = 2000
 #     )
 
 model = "adv"
-inf = "optim"
-baseline = [0.50, 0.025, 0.0625, 0.2285, 0.125]
+inf = "mcmc"
+baseline = [0.50, 0.50, 0.1125, 0.1125, 0.2285, 0.125]
 res_path = (
     Path("./output/results/spatiotemporal").resolve()
-    / f"2026-10-08_09-55-51_{model}-{inf}"
+    / f"2026-10-09_19-07-30_3D"
 )
 
 
 char = {"sep": r"$\gamma$", "adv": r"$v$"}
-theta_names = [char[model], r"$\rho_t$", r"$\rho_s$", r"$\sigma$", r"$\tau$"]
+theta_names = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$", r"$\sigma$", r"$\tau$"]
 
-output_path = Path("./output/results/spatiotemporal").resolve() / f"paper"
+output_path = Path("./output/results/spatiotemporal").resolve() / f"paper" / "3D"
 
 
 if __name__ == "__main__":
 
-    ##############################
-    ##############################
-    ############ Test ############
-    ##############################
-    ##############################
-
-    ######################
-    ####### Median #######
-    ######################
-
-    # print(res_path)
-    #
-    # fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
-    #
-    # losses = []
-    # labels = ["NBE", "NRE"]
-    # # labels = ["NRE\nMAP", "NRE\nmedian"]
-    #
-    # path = res_path / "complete_outputs" / f"outputs - NBE [0].pt"
-    # loss = torch.load(path, map_location=torch.device('cpu'))["final_test_losses"]
-    # print(loss.shape)
-    # if isinstance(loss, torch.Tensor):
-    #     loss = loss.detach().cpu().numpy()
-    # losses.append(loss)
-    #
-    # path = res_path / "complete_outputs" / f"outputs - NRE [0].pt"
-    # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] - torch.load(path, map_location=torch.device('cpu'))["all_quantiles"][0.5])
-    # print(loss.shape)
-    # if isinstance(loss, torch.Tensor):
-    #     loss = loss.detach().cpu().numpy()
-    # losses.append(loss)
-    #
-    # # path = res_path / "complete_outputs" / f"outputs - MLE [0].pt"
-    # # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] - torch.load(path, map_location=torch.device('cpu'))["final_all_theta"] * torch.sqrt(torch.tensor([1, 1 , 1/4, 1])))
-    # # print(loss.shape)
-    # # if isinstance(loss, torch.Tensor):
-    # #     loss = loss.detach().cpu().numpy()
-    # #     loss[np.argmax(loss[:, 1]), 1] = baseline[1]
-    # #     loss[np.argmax(loss[:, 2]), 2] = baseline[2]
-    # # losses.append(loss)
-    # # print(loss.shape)
-    # # labels += ["MLE"]
-    #
-    # for i, name in enumerate(theta_names):
-    #
-    #     axs[i].boxplot(
-    #         [loss[:,i] for loss in losses],
-    #         tick_labels=labels,
-    #         patch_artist=True,
-    #         boxprops=dict(facecolor=THETA_COLORS[i]["test"], alpha=0.6),
-    #         medianprops=dict(linestyle="-", linewidth=2, color="black"),
-    #     )
-    #     axs[i].tick_params(axis="x", labelrotation=45)
-    #     axs[i].set_title("MAE – " + name)
-    #     axs[i].set_ylabel("MAE" if i == 0 else "")
-    #
-    #     axs[i].axhline(
-    #         baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline" # + name
-    #     )
-    #     if i == len(axs) - 1 :
-    #         axs[i].legend()
-    #
-    # fig_box.suptitle(f"Test error") #  {trainers[0].test_dataset_hist[0].missing_ratio*100}%") # - ~80% missing values
-    # fig_box.tight_layout()
-    # plt.show()
-    #
-    # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE.pdf", format="pdf", bbox_inches="tight")
-    # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE.png", format="png", bbox_inches="tight")
-    #
-    # # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.pdf", format="pdf", bbox_inches="tight")
-    # # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.png", format="png", bbox_inches="tight")
-
-    ######################
-    ####### Missing ######
-    ######################
-
     print(res_path)
 
-    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
+    fig_box, axs = plt.subplots(1, len(theta_names), figsize=(15, 5))
 
-    method = "NRE"
+    method = "NBE"
     losses = []
-    labels = ["~73%\nmissing\nratio", "~86%\nmissing\nratio", "~96%\nmissing\nratio"]
+    labels = ["~92.0%\nmissing\nratio", "~97.6%\nmissing\nratio", "~99.4%\nmissing\nratio"]
     for j in range(len(labels)):
         path = (
             res_path
@@ -193,9 +117,129 @@ if __name__ == "__main__":
     fig_box.savefig(output_path / f"{model}-score_test_{method}.pdf", format="pdf", bbox_inches="tight")
     fig_box.savefig(output_path / f"{model}-score_test_{method}.png", format="png", bbox_inches="tight")
 
-    ##################
-    ###### Time ######
-    ##################
+    ##############################
+    ##############################
+    ############ Test ############
+    ##############################
+    ##############################
+
+    ######################
+    ####### Median #######
+    ######################
+
+    # print(res_path)
+    #
+    # fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
+    #
+    # losses = []
+    # labels = ["NBE", "NRE"]
+    # # labels = ["NRE\nMAP", "NRE\nmedian"]
+    #
+    # path = res_path / "complete_outputs" / f"outputs - NBE [0].pt"
+    # loss = torch.load(path, map_location=torch.device('cpu'))["final_test_losses"]
+    # print(loss.shape)
+    # if isinstance(loss, torch.Tensor):
+    #     loss = loss.detach().cpu().numpy()
+    # losses.append(loss)
+    #
+    # path = res_path / "complete_outputs" / f"outputs - NRE [0].pt"
+    # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] - torch.load(path, map_location=torch.device('cpu'))["all_quantiles"][0.5])
+    # print(loss.shape)
+    # if isinstance(loss, torch.Tensor):
+    #     loss = loss.detach().cpu().numpy()
+    # losses.append(loss)
+    #
+    # path = res_path / "complete_outputs" / f"outputs - MLE [0].pt"
+    # loss = abs(torch.load(path, map_location=torch.device('cpu'))["true_all_theta"] - torch.load(path, map_location=torch.device('cpu'))["final_all_theta"]* torch.sqrt(torch.tensor([1, 1 , 1/4, 1, 1])))
+    # print(loss.shape)
+    # if isinstance(loss, torch.Tensor):
+    #     loss = loss.detach().cpu().numpy()
+    #     loss[np.argmax(loss[:, 1]), 1] = baseline[1]
+    #     loss[np.argmax(loss[:, 2]), 2] = baseline[2]
+    # losses.append(loss)
+    # print(loss.shape)
+    # labels += ["MLE"]
+    #
+    # for i, name in enumerate(theta_names):
+    #
+    #     axs[i].boxplot(
+    #         [loss[:,i] for loss in losses],
+    #         tick_labels=labels,
+    #         patch_artist=True,
+    #         boxprops=dict(facecolor=THETA_COLORS[i]["test"], alpha=0.6),
+    #         medianprops=dict(linestyle="-", linewidth=2, color="black"),
+    #     )
+    #     axs[i].tick_params(axis="x", labelrotation=45)
+    #     axs[i].set_title("MAE – " + name)
+    #     axs[i].set_ylabel("MAE" if i == 0 else "")
+    #
+    #     axs[i].axhline(
+    #         baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline" # + name
+    #     )
+    #     if i == len(axs) - 1 :
+    #         axs[i].legend()
+    #
+    # fig_box.suptitle(f"Test error") #  {trainers[0].test_dataset_hist[0].missing_ratio*100}%") # - ~80% missing values
+    # fig_box.tight_layout()
+    # plt.show()
+    #
+    # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE-MLE.pdf", format="pdf", bbox_inches="tight")
+    # fig_box.savefig(output_path / f"{model}-score_test_NBE-NRE-MLE.png", format="png", bbox_inches="tight")
+    #
+    # # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.pdf", format="pdf", bbox_inches="tight")
+    # # fig_box.savefig(output_path / f"{model}-score_test_median-MAP.png", format="png", bbox_inches="tight")
+
+    ######################
+    ####### Missing ######
+    ######################
+
+    # print(res_path)
+    #
+    # fig_box, axs = plt.subplots(1, len(theta_names), figsize=(12, 5))
+    #
+    # method = "NBE"
+    # losses = []
+    # labels = ["~73%\nmissing\nratio", "~86%\nmissing\nratio", "~96%\nmissing\nratio"]
+    # for j in range(len(labels)):
+    #     path = (
+    #         res_path
+    #         / "complete_outputs"
+    #         / f"outputs - {method} [{j}].pt"
+    #     )
+    #     loss = torch.load(path, map_location=torch.device('cpu'))["final_test_losses"]
+    #     if isinstance(loss, torch.Tensor):
+    #         loss = loss.detach().cpu().numpy()
+    #     losses.append(loss)
+    #
+    # for i, name in enumerate(theta_names):
+    #
+    #     axs[i].boxplot(
+    #         [loss[:,i] for loss in losses],
+    #         tick_labels=labels,
+    #         patch_artist=True,
+    #         boxprops=dict(facecolor=THETA_COLORS[i]["test"], alpha=0.6),
+    #         medianprops=dict(linestyle="-", linewidth=2, color="black"),
+    #     )
+    #     axs[i].tick_params(axis="x")# , labelrotation=45)
+    #     axs[i].set_title("MAE – " + name)
+    #     axs[i].set_ylabel("MAE" if i == 0 else "")
+    #
+    #     axs[i].axhline(
+    #         baseline[i], color=THETA_COLORS[i]["baseline"], ls="--", label="baseline"  # + name
+    #     )
+    #     if i == len(axs) - 1 :
+    #         axs[i].legend()
+    #
+    # fig_box.suptitle(f"Test error comparaison - {method}")
+    # fig_box.tight_layout()
+    # plt.show()
+    #
+    # fig_box.savefig(output_path / f"{model}-score_test_{method}.pdf", format="pdf", bbox_inches="tight")
+    # fig_box.savefig(output_path / f"{model}-score_test_{method}.png", format="png", bbox_inches="tight")
+
+    #################
+    ##### Time ######
+    #################
 
     # simu_times, train_times, test_times = [], [], []
     # labels = ["NBE", "NRE", "MLE"]

@@ -52,7 +52,7 @@ def train_graph(
             path = (
                 trainer.res_path
                 / "loss_evolution"
-                / f"history - {trainer.estimation_label} [{num_dataset[j]}].pt"
+                / f"history_{trainer.estimation_label} [{num_dataset[j]}].pt"
             )
             loss = torch.load(path)["final_test_losses"]
             if isinstance(loss, torch.Tensor):
@@ -136,7 +136,7 @@ def test_graph(
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.estimation_label} [{num_dataset[j]}].pt"
+            / f"outputs_{trainer.estimation_label} [{num_dataset[j]}].pt"
         )
         loss = torch.load(path)["final_test_losses"]
         if isinstance(loss, torch.Tensor):
@@ -210,15 +210,15 @@ def _test_alt_graph(trainer: Trainer, res_path: Path):
     fig_box, axs = plt.subplots(1, len(theta_alt_names), figsize=(15, 5))
 
     losses = []
-    labels = ["~92.0%\nmissing\nratio", "~97.6%\nmissing\nratio", "~99.4%\nmissing\nratio"]
+    labels = [] # ["~92.0%\nmissing\nratio", "~97.6%\nmissing\nratio", "~99.4%\nmissing\nratio"]
     missing_ratios = []
     for j, dataset in enumerate(trainer.test_dataset_hist):
-        # labels.append(f"missing\nratio\n{dataset.missing_ratio}")
+        labels.append(f"missing\nratio\n{dataset.missing_ratio}")
         missing_ratios.append(dataset.missing_ratio)
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.estimation_label} [{j}].pt"
+            / f"outputs_{trainer.estimation_label} [{j}].pt"
         )
         loss = torch.load(path)["final_test_losses"]
         if isinstance(loss, torch.Tensor):
@@ -300,14 +300,14 @@ def time_hist(
         # trainer.train_dataset_hist[0].time_generation
         path = (
             trainer.res_path
-            / "loss_evolution"
-            / f"history - {trainer.estimation_label} [{num_dataset_train[j]}].pt"
+            / "complete_outputs"
+            / f"outputs_{trainer.estimation_label} [{num_dataset_train[j]}].pt"
         )
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.estimation_label} [{num_dataset_test[j]}].pt"
+            / f"outputs_{trainer.estimation_label} [{num_dataset_test[j]}].pt"
         )
         test_times.append(torch.load(path)["test_time"])
 
@@ -384,7 +384,7 @@ def target_graph(
     path0 = (
         trainers[0].res_path
         / "complete_outputs"
-        / f"outputs - {trainers[0].estimation_label} [{num_dataset[0]}].pt"
+        / f"outputs_{trainers[0].estimation_label} [{num_dataset[0]}].pt"
     )
     true_all_theta = torch.load(path0)["true_all_theta"]
 
@@ -402,7 +402,7 @@ def target_graph(
         path = (
             trainer.res_path
             / "complete_outputs"
-            / f"outputs - {trainer.estimation_label} [{num_dataset[j]}].pt"
+            / f"outputs_{trainer.estimation_label} [{num_dataset[j]}].pt"
         )
         all_preds = torch.load(path)["final_all_theta"]
 
@@ -728,7 +728,7 @@ def visualise_output_alt(
     path = (
         trainer.res_path
         / "complete_outputs"
-        / f"outputs - {trainer.estimation_label} [{num_dataset}].pt"
+        / f"outputs_{trainer.estimation_label} [{num_dataset}].pt"
     )
     all_theta_pred = torch.load(path)["final_all_theta"]
     true_all_theta = torch.load(path)["true_all_theta"]

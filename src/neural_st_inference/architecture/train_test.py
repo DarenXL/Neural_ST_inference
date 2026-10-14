@@ -8,6 +8,7 @@ from tqdm import tqdm
 import time
 
 from neural_st_inference.utils import baseline_mae, THETA_COLORS
+from neural_st_inference.estimator import BaseEstimator
 from scipy.optimize import minimize
 from scipy.stats import chi2
 
@@ -26,7 +27,7 @@ import matplotlib.pyplot as plt
 # from .rethinking import MAP, precis
 
 
-class Trainer:
+class Trainer(BaseEstimator):
     def __init__(
         self,
         network,
@@ -37,47 +38,38 @@ class Trainer:
         quantile_networks=tuple(),
         quantile_optimizer=None,
     ):
+        super().__init__(
+            device=device,
+            res_path=res_path,
+            estimation_label=network.label,
+            nls=network.nls,
+        )
 
         self.network = network.to(device)
-        self.device = device
-        self.res_path = Path(res_path)
 
-        self.estimation_label = self.network.label
-        self.nls = self.network.nls
-
+        # Optimiseur principal
         if optimizer is None:
-            if self.network.nls:
-                self.optimizer = torch.optim.Adam(network.parameters(), lr=1e-3)
-            else:
-                self.optimizer = torch.optim.Adam(network.parameters(), lr=5e-5)
+            lr = 1e-3 if self.nls else 5e-5
+            self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
+        else:
+            self.optimizer = optimizer
 
+        # Quantiles & réseaux associés
         self.quantiles = quantiles
-
-        self.lower_indices = [i for i, q in enumerate(quantiles) if q < 0.5]
-        self.upper_indices = [i for i, q in enumerate(quantiles) if q > 0.5]
-
-        self.lower_indices.sort(key=lambda i: quantiles[i], reverse=True)
-        self.upper_indices.sort(key=lambda i: quantiles[i])
+        self.lower_indices = sorted([i for i, q in enumerate(quantiles) if q < 0.5], key=lambda i: quantiles[i], reverse=True)
+        self.upper_indices = sorted([i for i, q in enumerate(quantiles) if q > 0.5], key=lambda i: quantiles[i])
 
         self.quantile_network = quantile_networks
         if quantile_optimizer is None:
             self.quantile_optimizer = [
-                torch.optim.Adam(_.parameters(), lr=1e-4) for _ in self.quantile_network
+                torch.optim.Adam(qnn.parameters(), lr=1e-4) for qnn in self.quantile_network
             ]
         else:
             self.quantile_optimizer = quantile_optimizer
 
-        self.theta_alt_names = None
-        self.simu_time = 0
-        self.train_time = 0
-        self.test_time = 0
-
-        self.train_dataset_hist = []
-        self.test_dataset_hist = []
-
+        # Dossiers spécifiques aux réseaux de neurones
         (self.res_path / "loss_evolution").mkdir(parents=True, exist_ok=True)
         (self.res_path / "networks").mkdir(parents=True, exist_ok=True)
-        (self.res_path / "complete_outputs").mkdir(parents=True, exist_ok=True)
 
     def save_network(self, name=""):
         path = self.res_path / "networks" / f"{self.network.label}{name}.pth"
@@ -85,24 +77,21 @@ class Trainer:
 
     def save_quantile_network(self, name=""):
         for q, qnn in zip(self.quantiles, self.quantile_network):
-            path = self.res_path / "networks" / f"q{q} - {qnn.label}{name}.pth"
+            path = self.res_path / "networks" / f"q{q}_{qnn.label}{name}.pth"
             torch.save(qnn.state_dict(), path)
 
     def _save_history(self, history, prefix="history"):
-        path = (
-            self.res_path
-            / "loss_evolution"
-            / f"{prefix} - {self.network.label} [{len(self.train_dataset_hist)-1}].pt"
-        )
+        idx = len(self.train_dataset_hist) - 1
+        filename = f"{prefix}_{self.network.label} [{idx}].pt"
+        path = self.res_path / "loss_evolution" / filename
         torch.save(history, path)
 
-    def _save_results(self, outputs, prefix="outputs"):
-        path = (
-            self.res_path
-            / "complete_outputs"
-            / f"{prefix} - {self.network.label} [{len(self.test_dataset_hist)-1}].pt"
-        )
-        torch.save(outputs, path)
+    # def get_history(self, idx=None, prefix="history"):
+    #     if idx is None :
+    #         idx = len(self.train_dataset_hist) - 1
+    #     filename = f"{prefix}_{self.network.label} [{idx}].pt"
+    #     path = self.res_path / "loss_evolution" / filename
+    #     return torch.load(path)
 
     @staticmethod
     def _q_loss(output, target, tau):
@@ -485,16 +474,28 @@ class Trainer:
 
         print(all_krig_score, all_missing_ratios)
 
+        # train_time = self.get_history()["train_time"]
+
         results = {
-            "final_test_losses": full_loss_tensor,
-            "test_time": time_total,
-            "final_all_theta": all_theta_final,
+            # Données d'estimation et vérité terrain
+            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
-            "all_quantiles": all_quantiles,
-            "kl_score": all_kl_score,
-            "krig_score": all_krig_score,
-            "missing_ratios": all_missing_ratios,
+            "theta_names": self.theta_names,
+
+            # Pertes / métriques
+            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
+
+            # Temps d'exécution
+            "train_time": self.train_time,
+            "test_time": time_total,
+            "simu_time": self.simu_time,
+            "total_time": self.train_time + time_total + self.simu_time,
+
+            # Métadonnées utiles pour les légendes/exports de graphes
+            "estimation_label": self.estimation_label,
+            "nls": self.nls,
         }
+
         self.test_time += time_total
         self._save_results(results)
 
@@ -524,6 +525,8 @@ class Trainer:
                 theta = theta.to(self.device, non_blocking=True)
                 classi = classi.float().to(self.device, non_blocking=True)
 
+                # classi = classi.view(-1)
+                # output = self.network(batched_data, theta=theta).view(-1)
                 output = self.network(batched_data, theta=theta).squeeze()
 
                 loss = CE(output, classi).mean()
@@ -677,11 +680,27 @@ class Trainer:
         mean_loss = full_loss_tensor.mean(dim=0)
         std_loss = full_loss_tensor.std(dim=0)
 
+
+        # train_time = self.get_history()["train_time"]
+
         results = {
-            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-            "test_time": time_total,
+            # Données d'estimation et vérité terrain
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
+            "theta_names": self.theta_names,
+
+            # Pertes / métriques
+            "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
+
+            # Temps d'exécution
+            "train_time": self.train_time,
+            "test_time": time_total,
+            "simu_time": self.simu_time,
+            "total_time": self.train_time + time_total + self.simu_time,
+
+            # Métadonnées utiles pour les légendes/exports de graphes
+            "estimation_label": self.estimation_label,
+            "nls": self.nls,
         }
         self.test_time += time_total
         self._save_results(results)
@@ -845,13 +864,26 @@ class Trainer:
         final_test_losses = torch.abs(all_theta_final - all_true_theta)
 
 
+        # train_time = self.get_history()["train_time"]
+
         results = {
-            "final_test_losses": final_test_losses,
-            "test_time": time_total - time_map,
-            "map_time": time_map,
-            "final_all_theta": all_theta_final,
+            # Données d'estimation et vérité terrain
+            "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
-            "all_quantiles": all_quantiles,
+            "theta_names": self.theta_names,
+
+            # Pertes / métriques
+            "final_test_losses": all_theta_final,  # (Nb_epochs, Nb_params)
+
+            # Temps d'exécution
+            "train_time": self.train_time,
+            "test_time": time_total,
+            "simu_time": self.simu_time,
+            "total_time": self.train_time + time_total + self.simu_time,
+
+            # Métadonnées utiles pour les légendes/exports de graphes
+            "estimation_label": self.estimation_label,
+            "nls": self.nls,
         }
         self.test_time += time_total
         self._save_results(results)

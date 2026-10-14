@@ -240,9 +240,9 @@ def create_mask(
 
     if missing_ratio is None:
         # missing_ratio = torch.rand(1) * 0.35 + 0.6   # space 30
-        # missing_ratio = torch.rand(1) * 0.08 + 0.9   # space 100
+        missing_ratio = torch.rand(1) * 0.08 + 0.9   # space 100
         # missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
-        missing_ratio = torch.rand(1) * 0.22 + 0.7  # space 50x50
+        # missing_ratio = torch.rand(1) * 0.22 + 0.7  # space 50x50
 
     nb_missing = int(space_size * missing_ratio)
     nb_visible = space_size - nb_missing

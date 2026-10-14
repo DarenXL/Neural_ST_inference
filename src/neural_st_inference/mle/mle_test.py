@@ -1,48 +1,20 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torchmin
 
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import time
-
-from neural_st_inference.utils import baseline_mae, THETA_COLORS
-from neural_st_inference.mle.gneiting_kernel_adv import *
-from scipy.optimize import minimize
+from neural_st_inference.estimator import BaseEstimator, train_gneiting_gp, set_gp_params_from_theta
 
 import torch
 import time
-from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 
-class MLE:
+class MLE(BaseEstimator):
     def __init__(self, device, res_path):
-
-        self.device = device
-        self.res_path = Path(res_path)
-
-        self.estimation_label = "MLE"
-        self.nls = True # To avoid problem in graphs
-
-        self.theta_names = None
-        self.simu_time = 0
-        self.train_time = 0
-        self.test_time = 0
-
-        self.train_dataset_hist = []
-        self.test_dataset_hist = []
-
-        (self.res_path / "complete_outputs").mkdir(parents=True, exist_ok=True)
-
-    def _save_results(self, outputs, prefix="outputs"):
-        path = (
-            self.res_path
-            / "complete_outputs"
-            / f"{prefix} - MLE [{len(self.test_dataset_hist)-1}].pt"
+        super().__init__(
+            device=device,
+            res_path=res_path,
+            estimation_label="MLE",
+            nls=True,
         )
-        torch.save(outputs, path)
+
 
     def test_mle(self, dataset):
         # dataset = test_loader.dataset
@@ -83,11 +55,11 @@ class MLE:
                     train_x=torch.tensor(coords).detach().float(),
                     train_y=torch.tensor(y).detach().float(),
                     spatial_dim=1,
-                    trace_kernel="matern",
+                    # trace_kernel="matern",
                     nu=1.5,
                     n_iter=600,
                     lr=0.05,
-                    use_keops=True,
+                    # use_keops=True,
                 )
                 covar_module = model_stationary.covar_module
                 k = covar_module.base_kernel
@@ -114,11 +86,24 @@ class MLE:
         all_true_theta = torch.stack(all_true_theta, dim=0)
 
         results = {
-            "final_test_losses": full_loss_tensor,
+            # Prédictions et cibles
+            "final_all_theta": all_theta_final.detach().cpu() if hasattr(all_theta_final,
+                                                                         "detach") else all_theta_final,
+            "true_all_theta": all_true_theta.detach().cpu() if hasattr(all_true_theta, "detach") else all_true_theta,
+            "theta_names": self.theta_names,
+
+            # Pertes
+            "final_test_losses": full_loss_tensor.detach().cpu() if hasattr(full_loss_tensor,
+                                                                            "detach") else full_loss_tensor,
+
+            # Métriques temporelles
+            "simu_time": self.simu_time,
+            "train_time": self.train_time,  # Vaut 0 pour MLE, temps réel pour Trainer
             "test_time": time_total,
-            "train_time": None,
-            "final_all_theta": all_theta_final,
-            "true_all_theta": all_true_theta,
+            "total_time": self.simu_time + self.train_time + time_total,
+
+            # Identifiant pour les légendes de graphes
+            "estimation_label": self.estimation_label,
         }
         self.test_time += time_total
         self._save_results(results)

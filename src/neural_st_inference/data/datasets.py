@@ -72,7 +72,15 @@ class GenericSimulationDataset(Dataset):
     def to_title(self, vals):
         n_drop = (1 if not (self.dev is None) else 0) + (1 if not (self.noise is None) else 0)
         res = self.model.to_title(vals[:-n_drop])
-        return res + (not (self.dev is None)) * ("\n" + rf"$\sigma$: {vals[-1]:.2f}") + (not (self.noise is None)) * rf" | $\tau$: {vals[-1]:.2f}"
+        if (not (self.dev is None)) and (not (self.noise is None)) :
+            return res + ("\n" + rf"$\sigma$: {vals[self.sigma_pos]:.2f}") + rf" | $\tau$: {vals[self.tau_pos]:.2f}"
+        elif (not (self.dev is None)) :
+            return res + rf"$\sigma$: {vals[self.sigma_pos]:.2f}"
+        elif (not (self.noise is None)) :
+            return res + rf" | $\tau$: {vals[self.tau_pos]:.2f}"
+        else :
+            return res
+
 
     def get_theta_tensor(self) -> torch.Tensor:
         """Return every theta in a tensor"""
@@ -433,7 +441,7 @@ class GenericSimulationDataset(Dataset):
             sigma_idx = idx if idx is not None else 0
             dev = self.sigmas[sigma_idx]
 
-        return dev * sample, self.sigmas[sigma_idx]
+        return sample * dev, self.sigmas[sigma_idx]
 
     def add_noise(self, sample, idx=None):
 
@@ -489,33 +497,50 @@ class NlsSimulationDataset(GenericSimulationDataset):
         return 2 * self.theta_size
 
     def __getitem__(self, idx):
-
         is_perm = idx // self.theta_size
         sample_idx = idx % self.theta_size
 
-        if is_perm == 0:
-            theta = self.all_thetas[sample_idx] # TODO
+        # Détermination de l'index négatif (dynamique en train, fixe en test)
+        if is_perm == 1 and self.training:
+            neg_idx = torch.randint(0, self.theta_size, (1,)).item()
         else:
-            theta = self.all_thetas[self.pi[sample_idx]]
+            neg_idx = self.pi[sample_idx]
+
+        # Sélection du theta de base
+        if is_perm == 0:
+            theta = self.all_thetas[sample_idx].clone()
+        else:
+            theta = self.all_thetas[neg_idx].clone()
 
         sample = self.get_grid(sample_idx)
 
-        if not(self.dev is None) :
+        # Ajout de DEV (Variance)
+        if not (self.dev is None):
             sample, sigma = self.add_dev(sample, sample_idx)
             if is_perm == 0:
                 theta[self.sigma_pos] = sigma
             else:
-                theta[self.sigma_pos] = self.sigmas[self.pi[sample_idx]]
+                if self.training:
+                    # Le négatif doit avoir un sigma totalement aléatoire pour ne pas être mémorisé
+                    rand_sigma = torch.randint(0, self.theta_size, (1,)).item()
+                    theta[self.sigma_pos] = self.sigmas[rand_sigma]
+                else:
+                    theta[self.sigma_pos] = self.sigmas[neg_idx]
 
-        if not(self.noise is None) :
+        # Ajout de NOISE (Pépite / Bruit)
+        if not (self.noise is None):
             sample, tau = self.add_noise(sample, sample_idx)
             if is_perm == 0:
                 theta[self.tau_pos] = tau
-            else :
-                theta[self.tau_pos] = self.taus[self.pi[sample_idx]]
+            else:
+                if self.training:
+                    # Le négatif doit avoir un tau totalement aléatoire
+                    rand_tau = torch.randint(0, self.theta_size, (1,)).item()
+                    theta[self.tau_pos] = self.taus[rand_tau]
+                else:
+                    theta[self.tau_pos] = self.taus[neg_idx]
 
-        sample = self.add_missing_mask(sample)
-
+        sample = self.add_missing_mask(sample, sample_idx)
         classi = torch.tensor([is_perm])
 
         return sample, theta.unsqueeze(0), classi
