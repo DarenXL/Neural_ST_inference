@@ -2,7 +2,7 @@ from pathlib import Path
 from datetime import datetime, timedelta
 import numpy as np
 import torch
-from utils import *
+from neural_st_inference.utils import *
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
@@ -358,7 +358,7 @@ def sliding_window(
         quantile_CNN_low,
         quantile_CNN_high,
         space_size: int = 50,
-        theta_names = (r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$", r"$\tau$")
+        theta_names = (r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$", r"$\sigma$", r"$\tau$")
 ):
     with torch.no_grad():
     
@@ -385,7 +385,7 @@ def sliding_window(
                 sample = torch.stack([data, mask]).unsqueeze(0)
                 if p % 100 == 0:
                     print(p, sample.shape)
-    
+
                 res_wide[wide].append(CNN(sample)[0])
                 res_q05[wide].append(torch.exp(quantile_CNN_low(sample)[0]))
                 res_q95[wide].append(torch.exp(quantile_CNN_high(sample)[0]))
@@ -400,7 +400,7 @@ def sliding_window(
             # Indexation sur la grille 3x2 (k // 2 pour la ligne, k % 2 pour la colonne)
             for k, name in enumerate(theta_names):
                 ax = axs[k // 2, k % 2]
-    
+
                 ax.plot(x_axis, res_wide[wide][:, k], label=f"Median of the posterior" if k == 0 else "", color=color, linewidth=.5)
                 ax.fill_between(
                     x_axis,
@@ -422,7 +422,7 @@ def sliding_window(
                 ax.legend()
     
         # 3. Masquer le 6e sous-graphique inutile (ligne index 2, colonne index 1)
-        axs[2, 1].set_visible(False)
+        # axs[2, 1].set_visible(False)
     
         fig.suptitle(f"Parameters evolution during 29 June 2013")
         fig.tight_layout()
@@ -547,7 +547,7 @@ def get_gaussian_weighted_estimate(
         quantile_CNN_high,
         wide: int = 20,
         n_lags: int = 10,
-        sigma: float = 3.0,
+        sigma_window: float = 3.0,
         space_size: int = 50,
 ):
     output_quantiles = True
@@ -579,7 +579,7 @@ def get_gaussian_weighted_estimate(
     preds_median = torch.stack(preds_median)
 
     distances = torch.arange(-n_lags + 1, 1, dtype=torch.float32, device=preds_median.device)
-    weights = torch.exp(-0.5 * (distances / sigma) ** 2)
+    weights = torch.exp(-0.5 * (distances / sigma_window) ** 2)
     weights = weights / weights.sum()
 
     weighted_median = torch.sum(preds_median * weights.unsqueeze(1), dim=0)

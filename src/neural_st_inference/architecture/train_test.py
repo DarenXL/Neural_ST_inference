@@ -1,16 +1,5 @@
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torchmin
-
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-import time
-
 from neural_st_inference.utils import baseline_mae, THETA_COLORS
 from neural_st_inference.estimator import BaseEstimator
-from scipy.optimize import minimize
-from scipy.stats import chi2
 
 import pyro
 import pyro.distributions as dist
@@ -18,14 +7,12 @@ from pyro.infer import MCMC, NUTS, HMC, Predictive
 from pyro.poutine import trace
 
 import torch
+import torch.nn as nn
+import torchmin
 import time
-from pathlib import Path
 from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
-
-# from .rethinking import MAP, precis
-
 
 class Trainer(BaseEstimator):
     def __init__(
@@ -37,11 +24,12 @@ class Trainer(BaseEstimator):
         quantiles=tuple(),
         quantile_networks=tuple(),
         quantile_optimizer=None,
+        estimation_label=None,
     ):
         super().__init__(
             device=device,
             res_path=res_path,
-            estimation_label=network.label,
+            estimation_label=network.label if (estimation_label is None) else estimation_label,
             nls=network.nls,
         )
 
@@ -459,27 +447,13 @@ class Trainer(BaseEstimator):
         for q in self.quantiles:
             all_quantiles[q] = torch.cat(all_quantiles[q], dim=0)
 
-        if len(all_kl_score) > 0:
-            all_kl_score = torch.tensor(all_kl_score)
-        else:
-            all_kl_score = None
-        if len(all_krig_score) > 0:
-            all_krig_score = torch.tensor(all_krig_score)
-            all_missing_ratios = torch.from_numpy(
-                np.array(all_missing_ratios, dtype=bool)
-            )
-        else:
-            all_krig_score = None
-            all_missing_ratios = None
-
-        print(all_krig_score, all_missing_ratios)
-
         # train_time = self.get_history()["train_time"]
 
         results = {
             # Données d'estimation et vérité terrain
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
+            "all_quantiles": all_quantiles,
             "theta_names": self.theta_names,
 
             # Pertes / métriques
@@ -705,7 +679,7 @@ class Trainer(BaseEstimator):
         self.test_time += time_total
         self._save_results(results)
 
-        # return full_loss_tensor, all_theta_final, time_total
+        return results
 
     def _pyro_model(self, x_obs, lower_bound, upper_bound):
         batch_size = x_obs.shape[0]
@@ -870,10 +844,11 @@ class Trainer(BaseEstimator):
             # Données d'estimation et vérité terrain
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
+            "all_quantiles": all_quantiles,
             "theta_names": self.theta_names,
 
             # Pertes / métriques
-            "final_test_losses": all_theta_final,  # (Nb_epochs, Nb_params)
+            "final_test_losses": final_test_losses,  # (Nb_epochs, Nb_params)
 
             # Temps d'exécution
             "train_time": self.train_time,

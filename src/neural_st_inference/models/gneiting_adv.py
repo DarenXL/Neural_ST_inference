@@ -6,6 +6,8 @@ from scipy.special import gamma, kv
 from scipy.stats import qmc
 import secrets
 
+
+
 def _simulate_gneiting_matern_grid_func(
     time_size, space_dim, space_size, adv, range_time, range_space, seed=None, mult_time=1,
 ):
@@ -16,25 +18,25 @@ def _simulate_gneiting_matern_grid_func(
     if space_dim == 1:
 
         dbgrid = gl.DbGrid.create(
-            nx=[space_size, time_size * mult_time], dx=[1.0 / space_size, 1. / (mult_time * time_size)]
+            nx=[space_size, int(time_size * mult_time)], dx=[1.0 / space_size, mult_time / int(mult_time * time_size)]
         )
 
         gl.simuSpectral(
             None, dbgrid, model, None, 1, secrets.randbits(32) if seed is None else seed, ns
         )  # np.random.randint(1000000)
 
-        batch = dbgrid[3].reshape((space_size, time_size * mult_time), order="F").transpose(1, 0)
+        batch = dbgrid[3].reshape((space_size, int(time_size * mult_time)), order="F").transpose(1, 0)
 
     elif space_dim == 2:
 
         dbgrid = gl.DbGrid.create(
-            nx=[space_size, space_size, time_size * mult_time],
-            dx=[1.0 / space_size, 1.0 / space_size, mult_time / (mult_time * time_size)],
+            nx=[space_size, space_size, int(time_size * mult_time)],
+            dx=[1.0 / space_size, 1.0 / space_size, mult_time / int(mult_time * time_size)],
         )
 
         gl.simuSpectral(None, dbgrid, model, None, 1,  secrets.randbits(32) if seed is None else seed, ns)
 
-        batch = dbgrid[4].reshape((space_size, space_size, time_size * mult_time), order="F").transpose(2, 1, 0)
+        batch = dbgrid[4].reshape((space_size, space_size, int(time_size * mult_time)), order="F").transpose(2, 1, 0)
 
     return np.expand_dims(batch, (0,1))
 
@@ -89,9 +91,7 @@ def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, rang
 
     model = get_gst_model(space_dim, adv, range_time, range_space)
 
-    # sills = gl.MatrixSymmetric(1, 1)
-    # sills.setValue(0, 0, dev**2)
-    # modelglob = gl.CovBase(model.getCov(), sills)
+
 
     dbin = gl.Db.create()
     dbout = gl.Db.create()
@@ -103,17 +103,26 @@ def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, rang
     dbin.setLocators(names, gl.ELoc.X)
     dbout.setLocators(names, gl.ELoc.X)
 
-    #TODO : Add sigma
+    # if not (dev is None):
+    #     print("dev",dev)
+    #     sills = gl.MatrixSymmetric(1, 1)
+    #     sills.setValue(0, 0, dev**2)
+    #     modelglob = gl.CovBase(model.getCov(), sills)
+
     if not(noise is None) :
-        dbin["verr"] = 0 * vals_in + noise ** 2
+        print("noise",noise)
+        dbin["verr"] = 0 * vals_in + (noise / dev) ** 2
         dbin.setLocator("verr", gl.ELoc.V)
-    dbin.addColumns(vals_in, radix="z1")
+
+    dbin.addColumns(vals_in / dev, radix="z1")
     dbin.setLocator("z1", gl.ELoc.Z)
 
     uniqueNeigh = gl.NeighUnique.create(space=gl.SpaceRN.create(space_dim + 1))
 
     err = gl.kriging(dbin, dbout, model, uniqueNeigh)
-    return dbout["z1"]
+    print("in",dbin["z1"].min(), dbin["z1"].max())
+    print("out",dbout["z1"].min() * dev, dbout["z1"].max() * dev)
+    return dbout["z1"] * dev
 
 
 class GneitingAdvModel(SimulationModel):
@@ -259,4 +268,3 @@ class GneitingAdvModel(SimulationModel):
                 dev=dev, # theta_values[5] if self.add_dev else None,
                 noise=noise,  # theta_values[4] if self.add_noise else None,
             )
-

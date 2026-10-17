@@ -7,8 +7,7 @@ gdoc.setNoScroll()
 
 from neural_st_inference.utils import *
 from neural_st_inference.models.gneiting_adv import GneitingAdvModel
-from neural_st_inference.models.gneiting_sep import GneitingSepModel
-from neural_st_inference.data.datasets import GenericSimulationDataset, NlsSimulationDataset
+from neural_st_inference.data.datasets import GenericSimulationDataset, ClassifierSimulationDataset
 from neural_st_inference.architecture.train_test import *
 from neural_st_inference.architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
 from neural_st_inference.output_graphs import *
@@ -41,8 +40,8 @@ torch.manual_seed(2)
 
 # Path to data saving file
 
-data_path = create_data_path("output/data/spatiotemporal_adv")
-# data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-09-24_16-50-46")  # "2026-09-24_16-50-46"
+# data_path = create_data_path("output/data/spatiotemporal_adv")
+data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-09-24_16-50-46")  # "2026-09-24_16-50-46"
 
 # Path to results saving file
 
@@ -60,16 +59,16 @@ freq_epochs_test = 10
 
 # Data options
 
-time_size = 20
+time_size = 100
 space_dim = 1
-space_size = 20
+space_size = 100
 missing_ratios = [0.96] # [0.94, 0.96, 0.98]
 dev, noise = 1.414, .5
 
 # Amount of data
 
-train_size = 5
-test_size = 5
+train_size = 10
+test_size = 10
 
 if __name__ == "__main__":
 
@@ -217,22 +216,22 @@ if __name__ == "__main__":
     ####### Architecture #######
     ############################
 
-    mle_trainer = MLE(device, res_path)
-    mle_trainer.test_mle(datasets_test[0])
+    # mle_trainer = MLE(device, res_path)
+    # mle_trainer.test_mle(datasets_test[0])
 
     # Creation of the Neural Network
 
-    # CNN = CNN_ST_network(
-    #     in_channels=2,
-    #     hidden=72,
-    #     theta_dim=len(dataset_train.theta_names),
-    #     spatial_dim=space_dim,
-    #     label="NBE",
-    # ).to(device)
-    # CNN.load_state_dict(torch.load(res_path/ ".." / "2026-10-09_11-31-54_adv-mcmc" / "networks" / "NBE.pth", map_location=device))
-    #
-    # # print_parameters_per_layer(CNN)
-    #
+    CNN = CNN_ST_network(
+        in_channels=2,
+        hidden=72,
+        theta_dim=len(dataset_train.theta_names),
+        spatial_dim=space_dim,
+        label="NBE",
+    ).to(device)
+    CNN.load_state_dict(torch.load(res_path/ ".." / "2026-10-09_11-31-54_adv-mcmc" / "networks" / "NBE.pth", map_location=device))
+
+    # print_parameters_per_layer(CNN)
+
     # quantile_CNN = CNN_ST_network(
     #     in_channels=2,
     #     hidden=36,
@@ -240,42 +239,42 @@ if __name__ == "__main__":
     #     spatial_dim=space_dim,
     #     label="NBE"
     # ).to(device)
-    #
-    # # Creation the Trainer used train, test and show results
-    #
-    # trainer_separately = Trainer(
-    #     CNN,
-    #     device,
-    #     res_path,
-    #     quantiles=[0.05, 0.95],
-    #     quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
-    # )
-    #
-    # # Training (and testing at the same time)
-    #
+
+    # Creation the Trainer used train, test and show results
+
+    trainer_separately = Trainer(
+        CNN,
+        device,
+        res_path,
+        # quantiles=[0.05, 0.95],
+        # quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+    )
+
+    # Training (and testing at the same time)
+
     # trainer_separately.train(
     #     train_loader=loader_train,
     #     test_loader=loaders_test[0],
     #     nb_epochs=nb_epochs,
     #     freq_epochs_test=freq_epochs_test,
     # )
-    #
-    # # Testing
-    #
-    # for loader in loaders_test:
-    #     res = trainer_separately.test(loader)  # res = ...
-    #
-    # try: # 0.8960, 0.9113, 0.8900, 0.9113
-    #     print(
-    #         "quantiles precision :",
-    #         torch.mean(
-    #             (res["true_all_theta"] > res["all_quantiles"][0.05])
-    #             * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
-    #             dim=0,
-    #         ),
-    #     )
-    # except:
-    #     print("No quantiles")
+
+    # Testing
+
+    for loader in loaders_test:
+        res = trainer_separately.test(loader)  # res = ...
+
+    try: # 0.8960, 0.9113, 0.8900, 0.9113
+        print(
+            "quantiles precision :",
+            torch.mean(
+                (res["true_all_theta"] > res["all_quantiles"][0.05])
+                * (res["true_all_theta"] < res["all_quantiles"][0.95]).float(),
+                dim=0,
+            ),
+        )
+    except:
+        print("No quantiles")
 
     #############################
     #############################
@@ -340,14 +339,14 @@ if __name__ == "__main__":
     ###########################################
     ###########################################
 
-    # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2, k=[4,7])
+    visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2, k=[4,7])
 
-    trainers = [mle_trainer]
-
-    # train_graph(trainers, res_path)
-    time_hist(trainers, res_path)
-    test_alt_graph(trainers, res_path)
-
-    for i in range(len(datasets_test)):
-        test_graph(trainers, res_path, num_dataset=i)
-        # target_graph(trainers, res_path, k=0, num_dataset=i)
+    # trainers = [mle_trainer]
+    #
+    # # train_graph(trainers, res_path)
+    # time_hist(trainers, res_path)
+    # test_alt_graph(trainers, res_path)
+    #
+    # for i in range(len(datasets_test)):
+    #     test_graph(trainers, res_path, num_dataset=i)
+    #     # target_graph(trainers, res_path, k=0, num_dataset=i)

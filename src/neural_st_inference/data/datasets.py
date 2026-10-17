@@ -1,15 +1,12 @@
 import torch
 from pathlib import Path
 import numpy as np
-import random
 import os
 import time
 from torch.utils.data import Dataset
 from tqdm import tqdm
 import concurrent.futures
 from scipy.stats import qmc
-import gstlearn as gl
-import matplotlib.pyplot as plt
 
 from neural_st_inference.models.base import SimulationModel
 from neural_st_inference.utils import CMAP, create_mask, temporary_seed
@@ -351,21 +348,23 @@ class GenericSimulationDataset(Dataset):
                 fontsize=10,
             )
 
-    def sample_to_coord(self, sample, shuffle :int = None):
+    def sample_to_coord(self, sample, shuffle :int = None, time_bounds=(0,1), space_bounds=(0,1)):
         y = sample[0].reshape(-1) # order="C"
         mask_obs = sample[1].clone().detach().to(torch.bool).reshape(-1)
 
-        t = torch.linspace(0, 1, self.time_size + 1)[:-1]
-        s = torch.linspace(0, 1, self.space_size + 1)[:-1]
+        t = torch.linspace(time_bounds[0], time_bounds[1], self.time_size + 1)[:-1]
+        s = torch.linspace(space_bounds[0], space_bounds[1], self.space_size + 1)[:-1]
 
         axes = [s, t] if self.space_dim == 1 else [s, s, t]
         grid = torch.meshgrid(*axes, indexing="ij")
         coords = torch.stack(grid, dim=-1).reshape(-1, len(axes))
 
         if not(shuffle is None):
-            v = np.arange(coords.shape[0])[~mask_obs]
-            v = v[np.random.permutation(len(v))]
-            v = v[0:shuffle]
+            # v = np.arange(coords.shape[0])[~mask_obs]
+            # v = v[np.random.permutation(len(v))]
+            # v = v[0:shuffle]
+            v = np.arange(coords.shape[0])[~mask_obs.cpu().numpy()]
+            v = v[np.random.permutation(len(v))][:shuffle]
 
             coords = coords[v, :]
             y = y[v]
@@ -373,7 +372,7 @@ class GenericSimulationDataset(Dataset):
 
         return coords, y, mask_obs
 
-    def kriging_from_sample(self, sample, theta):
+    def kriging_from_sample(self, sample, theta, keep_noise=True):
         """Kriging"""
 
         coords, y, mask_obs = self.sample_to_coord(sample)
@@ -388,7 +387,7 @@ class GenericSimulationDataset(Dataset):
         n_drop = (1 if not(self.dev is None) else 0) + (1 if not(self.noise is None) else 0)
         theta_dict = dict(zip(self.model.param_names, theta[:-n_drop]))
 
-        krig = self.model.kriging(coords_in=coords_obs, coords_out=coords_miss, vals_in=y_obs, space_dim=self.space_dim, theta_values=theta_dict, dev=theta[self.sigma_pos] if not(self.dev is None) else None, noise=theta[self.tau_pos] if not(self.dev is None) else None)
+        krig = self.model.kriging(coords_in=coords_obs, coords_out=coords_miss, vals_in=y_obs, space_dim=self.space_dim, theta_values=theta_dict, dev=theta[self.sigma_pos] if not(self.dev is None) else None, noise=theta[self.tau_pos] if not(self.dev is None) and keep_noise else None)
 
         # y_full = y.copy()
         # y_full[mask_obs] = krig
@@ -485,7 +484,7 @@ class GenericSimulationDataset(Dataset):
         return (sample, theta_vec.unsqueeze(0))
 
 
-class NlsSimulationDataset(GenericSimulationDataset):
+class ClassifierSimulationDataset(GenericSimulationDataset):
     def __init__(self, dataset: GenericSimulationDataset):
         self.__dict__ = dataset.__dict__.copy()
 

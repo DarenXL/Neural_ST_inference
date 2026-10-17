@@ -5,10 +5,7 @@ import torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
-from matplotlib.ticker import ScalarFormatter
-import gstlearn as gl
 import time
-import xarray as xr
 import random
 
 

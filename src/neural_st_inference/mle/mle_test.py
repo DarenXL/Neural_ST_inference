@@ -1,5 +1,6 @@
+from neural_st_inference.estimator import BaseEstimator
+from neural_st_inference.models.utils_gp import train_gneiting_gp
 
-from neural_st_inference.estimator import BaseEstimator, train_gneiting_gp, set_gp_params_from_theta
 
 import torch
 import time
@@ -7,11 +8,11 @@ from tqdm import tqdm
 import numpy as np
 
 class MLE(BaseEstimator):
-    def __init__(self, device, res_path):
+    def __init__(self, device, res_path, estimation_label=None):
         super().__init__(
             device=device,
             res_path=res_path,
-            estimation_label="MLE",
+            estimation_label="MLE" if (estimation_label is None) else estimation_label,
             nls=True,
         )
 
@@ -107,3 +108,5 @@ class MLE(BaseEstimator):
         }
         self.test_time += time_total
         self._save_results(results)
+
+        return results

@@ -303,6 +303,8 @@ def time_hist(
             / "complete_outputs"
             / f"outputs_{trainer.estimation_label} [{num_dataset_train[j]}].pt"
         )
+        print(path)
+        print(torch.load(path))
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
@@ -316,6 +318,7 @@ def time_hist(
 
     fig_time, ax = plt.subplots(figsize=(8, 5))
     # cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
+    print(train_times)
     bar0 = ax.bar(x - width, simu_times, width, label="Simulation", color="#7AA7F1")
     bar1 = ax.bar(x, train_times, width, label="Train", color="#785EF0")
     bar2 = ax.bar(x + width, test_times, width, label="Test", color="#DC267F")
@@ -789,8 +792,7 @@ def visualise_output_alt(
 
         # sample_uncond = dataset.generate_one(np.random.randint(dataset.theta_size))[0][0]
         sample_uncond = dataset.generate_from_theta(theta_pred)[0][0]
-
-        if not(dataset.dev is None) :
+        if not(dataset.dev is None):
             sample_uncond *= theta_pred[dataset.sigma_pos]
 
         sample_uncond_masked = sample_uncond.clone()
@@ -799,7 +801,7 @@ def visualise_output_alt(
 
         sample_krig_uncond = dataset.kriging_from_sample(
             torch.stack([sample_uncond_masked, masked_sample[1]]),
-            theta_pred,
+            theta_pred, keep_noise=False
         )
 
         sample_krig = dataset.kriging_from_sample(
