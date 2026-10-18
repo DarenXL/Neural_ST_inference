@@ -137,7 +137,7 @@ if __name__ == "__main__":
         time_size=time_size,
         space_dim=space_dim,
         space_size=space_size,
-        missing_ratio=None,
+        missing_ratio=(.9, .98),
         seed=1,
         dev=dev,
         noise=noise

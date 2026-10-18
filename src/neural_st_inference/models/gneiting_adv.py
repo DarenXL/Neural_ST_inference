@@ -7,9 +7,15 @@ from scipy.stats import qmc
 import secrets
 
 
-
 def _simulate_gneiting_matern_grid_func(
-    time_size, space_dim, space_size, adv, range_time, range_space, seed=None, mult_time=1,
+    time_size,
+    space_dim,
+    space_size,
+    adv,
+    range_time,
+    range_space,
+    seed=None,
+    mult_time=1,
 ):
 
     ns = 4000  # 5000
@@ -18,33 +24,59 @@ def _simulate_gneiting_matern_grid_func(
     if space_dim == 1:
 
         dbgrid = gl.DbGrid.create(
-            nx=[space_size, int(time_size * mult_time)], dx=[1.0 / space_size, mult_time / int(mult_time * time_size)]
+            nx=[space_size, int(time_size * mult_time)],
+            dx=[1.0 / space_size, mult_time / int(mult_time * time_size)],
         )
 
         gl.simuSpectral(
-            None, dbgrid, model, None, 1, secrets.randbits(32) if seed is None else seed, ns
+            None,
+            dbgrid,
+            model,
+            None,
+            1,
+            secrets.randbits(32) if seed is None else seed,
+            ns,
         )  # np.random.randint(1000000)
 
-        batch = dbgrid[3].reshape((space_size, int(time_size * mult_time)), order="F").transpose(1, 0)
+        batch = (
+            dbgrid[3]
+            .reshape((space_size, int(time_size * mult_time)), order="F")
+            .transpose(1, 0)
+        )
 
     elif space_dim == 2:
 
         dbgrid = gl.DbGrid.create(
             nx=[space_size, space_size, int(time_size * mult_time)],
-            dx=[1.0 / space_size, 1.0 / space_size, mult_time / int(mult_time * time_size)],
+            dx=[
+                1.0 / space_size,
+                1.0 / space_size,
+                mult_time / int(mult_time * time_size),
+            ],
         )
 
-        gl.simuSpectral(None, dbgrid, model, None, 1,  secrets.randbits(32) if seed is None else seed, ns)
+        gl.simuSpectral(
+            None,
+            dbgrid,
+            model,
+            None,
+            1,
+            secrets.randbits(32) if seed is None else seed,
+            ns,
+        )
 
-        batch = dbgrid[4].reshape((space_size, space_size, int(time_size * mult_time)), order="F").transpose(2, 1, 0)
+        batch = (
+            dbgrid[4]
+            .reshape((space_size, space_size, int(time_size * mult_time)), order="F")
+            .transpose(2, 1, 0)
+        )
 
-    return np.expand_dims(batch, (0,1))
+    return np.expand_dims(batch, (0, 1))
 
 
 def get_gst_model(space_dim, adv, range_time, range_space):
     range_time = np.maximum(range_time, np.array(0.05))
     range_space = np.maximum(range_space, np.array(0.05))
-    # std = np.maximum(std, np.array(0.1))
 
     typem = ["GNEITING_G", "GNEITING_M", "GNEITING_C"][1]
 
@@ -56,8 +88,6 @@ def get_gst_model(space_dim, adv, range_time, range_space):
     angles = [0] * space_dim
     sep = 1.0
 
-    # speed = adv.copy()
-    # adv = adv/np.sqrt(np.sum(adv**2)) # direction of advection
     proj_mat = np.eye(space_dim + 1)
     proj_mat[0:space_dim, space_dim] = -np.array(adv)
 
@@ -87,11 +117,19 @@ def get_gst_model(space_dim, adv, range_time, range_space):
     return model
 
 
-def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, range_space, dev=None, noise=None):
+def matern_krig(
+    coords_in,
+    coords_out,
+    vals_in,
+    space_dim,
+    adv,
+    range_time,
+    range_space,
+    dev=None,
+    noise=None,
+):
 
     model = get_gst_model(space_dim, adv, range_time, range_space)
-
-
 
     dbin = gl.Db.create()
     dbout = gl.Db.create()
@@ -103,14 +141,8 @@ def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, rang
     dbin.setLocators(names, gl.ELoc.X)
     dbout.setLocators(names, gl.ELoc.X)
 
-    # if not (dev is None):
-    #     print("dev",dev)
-    #     sills = gl.MatrixSymmetric(1, 1)
-    #     sills.setValue(0, 0, dev**2)
-    #     modelglob = gl.CovBase(model.getCov(), sills)
-
-    if not(noise is None) :
-        print("noise",noise)
+    if not (noise is None):
+        print("noise", noise)
         dbin["verr"] = 0 * vals_in + (noise / dev) ** 2
         dbin.setLocator("verr", gl.ELoc.V)
 
@@ -120,8 +152,6 @@ def matern_krig(coords_in, coords_out, vals_in, space_dim, adv, range_time, rang
     uniqueNeigh = gl.NeighUnique.create(space=gl.SpaceRN.create(space_dim + 1))
 
     err = gl.kriging(dbin, dbout, model, uniqueNeigh)
-    print("in",dbin["z1"].min(), dbin["z1"].max())
-    print("out",dbout["z1"].min() * dev, dbout["z1"].max() * dev)
     return dbout["z1"] * dev
 
 
@@ -129,25 +159,17 @@ class GneitingAdvModel(SimulationModel):
     def __init__(self, space_dim=1):
         self.space_dim = space_dim
 
-        # self.dev = dev
-        # self.add_dev = not(dev is None)
-        #
-        # self.noise = noise
-        # self.add_noise = not(noise is None)
-
         if self.space_dim == 1:
-            self._names = ["adv", "range_time", "range_space"] # + self.add_dev * ["dev"] + self.add_noise * ["noise"]
-            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"] # + self.add_dev * [r"$\sigma"] + self.add_noise * [r"$\tau$"]
+            self._names = ["adv", "range_time", "range_space"]
+            self._names_alt = [r"$v$", r"$\rho_t$", r"$\rho_s$"]
             self.lower_bound = (-1, 0.05, 0.05)
             self.upper_bound = (1, 0.15, 0.3)
 
         elif self.space_dim == 2:
-            self._names = ["adv1", "adv2", "range_time", "range_space"] # + self.add_dev * ["dev"] + self.add_noise * ["noise"]
-            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"] # + self.add_dev * [r"$\sigma"] + self.add_noise * [r"$\tau$"]
+            self._names = ["adv1", "adv2", "range_time", "range_space"]
+            self._names_alt = [r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$"]
             self.lower_bound = (-1, -1, 0.05, 0.05)
-            self.upper_bound = (1, 1, 0.5, 0.5) # (1, 1, 0.15, 0.3)
-            # self.lower_bound = (-0.7751,  0.300,  0.510,  0.261,  0.043)
-            # self.upper_bound = (-0.775,  0.3001,  0.5107,  0.2612,  0.0436)  # (1, 1, 0.15, 0.3)
+            self.upper_bound = (1, 1, 0.5, 0.5)  # (1, 1, 0.15, 0.3)
 
     @property
     def param_names(self):
@@ -164,26 +186,15 @@ class GneitingAdvModel(SimulationModel):
 
     def to_title(self, vals):
         if self.space_dim == 1:
-            return rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}" # + self.add_dev * rf" | $\sigma$: {vals[-1]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"
+            return rf"$v$: {vals[0]:.2f} | $\rho_t$: {vals[1]:.2f} | $\rho_s$: {vals[2]:.2f}"
         elif self.space_dim == 2:
-            return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}" #  + self.add_dev * rf" | $\sigma$: {vals[-1]:.2f}" + self.add_noise * rf" | $\tau$: {vals[-1]:.2f}"
+            return rf"$v_1$: {vals[0]:.2f} | $v_2$: {vals[1]:.2f} | $\rho_t$: {vals[2]:.2f} | $\rho_s$: {vals[3]:.2f}"
 
-    def sample_thetas(self, n, seed=None):
+    def sample_thetas(self, n_samples, seed=None):
         if self.space_dim == 1:
-            # return {
-            #     "adv": np.random.uniform(
-            #         self.lower_bound[0], self.upper_bound[0], (n,)
-            #     ),
-            #     "range_time": np.random.uniform(
-            #         self.lower_bound[1], self.upper_bound[1], (n,)
-            #     ),
-            #     "range_space": np.random.uniform(
-            #         self.lower_bound[2], self.upper_bound[2], (n,)
-            #     ),
-            # }
 
             sampler = qmc.LatinHypercube(d=3, seed=seed)
-            sample = sampler.random(n)
+            sample = sampler.random(n_samples)
 
             l_bounds = self.lower_bound[:3]
             u_bounds = self.upper_bound[:3]
@@ -195,15 +206,9 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": sample_scaled[:, 2],
             }
         elif self.space_dim == 2:
-            # return {
-            #     'adv1': np.random.uniform(self.lower_bound[0], self.upper_bound[0], (n,)),
-            #     'adv2': np.random.uniform(self.lower_bound[1], self.upper_bound[1], (n,)),
-            #     'range_time': np.random.uniform(self.lower_bound[2], self.upper_bound[2], (n,)),
-            #     'range_space': np.random.uniform(self.lower_bound[3], self.upper_bound[3], (n,)),
-            # }
 
             sampler = qmc.LatinHypercube(d=4, seed=seed)
-            sample = sampler.random(n)
+            sample = sampler.random(n_samples)
 
             l_bounds = self.lower_bound[:4]
             u_bounds = self.upper_bound[:4]
@@ -216,7 +221,9 @@ class GneitingAdvModel(SimulationModel):
                 "range_space": sample_scaled[:, 3],
             }
 
-    def simulate(self, theta_values, time_size, space_dim, space_size, seed=None, mult_time=1):
+    def simulate(
+        self, theta_values, time_size, space_dim, space_size, seed=None, mult_time=1
+    ):
         assert space_dim == self.space_dim
         if self.space_dim == 1:
             return _simulate_gneiting_matern_grid_func(
@@ -241,8 +248,16 @@ class GneitingAdvModel(SimulationModel):
                 mult_time=mult_time,
             )
 
-
-    def kriging(self, coords_in, coords_out, vals_in, space_dim, theta_values, noise=None, dev=None):
+    def kriging(
+        self,
+        coords_in,
+        coords_out,
+        vals_in,
+        space_dim,
+        theta_values,
+        noise=None,
+        dev=None,
+    ):
         assert space_dim == self.space_dim
         if self.space_dim == 1:
             return matern_krig(
@@ -253,8 +268,8 @@ class GneitingAdvModel(SimulationModel):
                 adv=theta_values["adv"],
                 range_time=theta_values["range_time"],
                 range_space=theta_values["range_space"],
-                dev=dev,  # theta_values[4] if self.add_dev else None,
-                noise=noise, # theta_values[3] if self.add_noise else None,
+                dev=dev,
+                noise=noise,
             )
         elif self.space_dim == 2:
             return matern_krig(
@@ -265,6 +280,6 @@ class GneitingAdvModel(SimulationModel):
                 adv=[theta_values["adv1"], theta_values["adv2"]],
                 range_time=theta_values["range_time"],
                 range_space=theta_values["range_space"],
-                dev=dev, # theta_values[5] if self.add_dev else None,
-                noise=noise,  # theta_values[4] if self.add_noise else None,
+                dev=dev,
+                noise=noise,
             )

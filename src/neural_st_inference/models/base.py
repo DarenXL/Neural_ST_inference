@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 import numpy as np
 
+
 class SimulationModel(ABC):
 
     @property
@@ -21,7 +22,7 @@ class SimulationModel(ABC):
         pass
 
     @abstractmethod
-    def sample_thetas(self, n_samples):
+    def sample_thetas(self, n_samples, seed=None):
         pass
 
     @abstractmethod
@@ -33,7 +34,7 @@ class SimulationModel(ABC):
     #     pass
 
     @abstractmethod
-    def kriging(self, coords_in, coords_out, y, space_dim, theta_values):
+    def kriging(self, coords_in, coords_out, vals_in, space_dim, theta_values,noise=None,dev=None):
         pass
 
     # @abstractmethod

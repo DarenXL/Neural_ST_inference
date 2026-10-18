@@ -14,6 +14,7 @@ from tqdm import tqdm
 import numpy as np
 import matplotlib.pyplot as plt
 
+
 class Trainer(BaseEstimator):
     def __init__(
         self,
@@ -29,33 +30,39 @@ class Trainer(BaseEstimator):
         super().__init__(
             device=device,
             res_path=res_path,
-            estimation_label=network.label if (estimation_label is None) else estimation_label,
+            estimation_label=(
+                network.label if (estimation_label is None) else estimation_label
+            ),
             nls=network.nls,
         )
 
         self.network = network.to(device)
 
-        # Optimiseur principal
         if optimizer is None:
             lr = 1e-3 if self.nls else 5e-5
             self.optimizer = torch.optim.Adam(self.network.parameters(), lr=lr)
         else:
             self.optimizer = optimizer
 
-        # Quantiles & réseaux associés
         self.quantiles = quantiles
-        self.lower_indices = sorted([i for i, q in enumerate(quantiles) if q < 0.5], key=lambda i: quantiles[i], reverse=True)
-        self.upper_indices = sorted([i for i, q in enumerate(quantiles) if q > 0.5], key=lambda i: quantiles[i])
+        self.lower_indices = sorted(
+            [i for i, q in enumerate(quantiles) if q < 0.5],
+            key=lambda i: quantiles[i],
+            reverse=True,
+        )
+        self.upper_indices = sorted(
+            [i for i, q in enumerate(quantiles) if q > 0.5], key=lambda i: quantiles[i]
+        )
 
         self.quantile_network = quantile_networks
         if quantile_optimizer is None:
             self.quantile_optimizer = [
-                torch.optim.Adam(qnn.parameters(), lr=1e-4) for qnn in self.quantile_network
+                torch.optim.Adam(qnn.parameters(), lr=1e-4)
+                for qnn in self.quantile_network
             ]
         else:
             self.quantile_optimizer = quantile_optimizer
 
-        # Dossiers spécifiques aux réseaux de neurones
         (self.res_path / "loss_evolution").mkdir(parents=True, exist_ok=True)
         (self.res_path / "networks").mkdir(parents=True, exist_ok=True)
 
@@ -73,13 +80,6 @@ class Trainer(BaseEstimator):
         filename = f"{prefix}_{self.network.label} [{idx}].pt"
         path = self.res_path / "loss_evolution" / filename
         torch.save(history, path)
-
-    # def get_history(self, idx=None, prefix="history"):
-    #     if idx is None :
-    #         idx = len(self.train_dataset_hist) - 1
-    #     filename = f"{prefix}_{self.network.label} [{idx}].pt"
-    #     path = self.res_path / "loss_evolution" / filename
-    #     return torch.load(path)
 
     @staticmethod
     def _q_loss(output, target, tau):
@@ -107,15 +107,12 @@ class Trainer(BaseEstimator):
         self.train_dataset_hist.append(train_loader.dataset)
         self.simu_time += train_loader.dataset.time_generation
 
-        # self.weights = torch.ones((len(train_loader.model.theta_alt_names)), device=self.device)
-        # torch.tensor([1,1,1,.5], device=self.device)
-
         if self.network.nls:
-            self.train_nls(train_loader, nb_epochs)
+            self.train_nre(train_loader, nb_epochs)
         else:
-            self.train_quantiles(train_loader, test_loader, nb_epochs, freq_epochs_test)
+            self.train_nbe(train_loader, test_loader, nb_epochs, freq_epochs_test)
 
-    def test(self, test_loader):
+    def test(self, test_loader, mcmc=True):
         """ "
         Test the neural network.
         keeps track of the datasets used.
@@ -133,12 +130,14 @@ class Trainer(BaseEstimator):
         self.test_dataset_hist.append(test_loader.dataset)
 
         if self.network.nls:
-            # return self.test_nls_optim(test_loader)
-            return self.test_nls_MCMC(test_loader)
+            if mcmc :
+                return self.test_nre_MCMC(test_loader)
+            else :
+                return self.test_nre_optim(test_loader)
         else:
-            return self.test_quantiles(test_loader)
+            return self.test_nbe(test_loader)
 
-    def train_quantiles(
+    def train_nbe(
         self, train_loader, test_loader, nb_epochs, freq_epochs_test, print_result=False
     ):
 
@@ -169,12 +168,14 @@ class Trainer(BaseEstimator):
                     for opt in self.quantile_optimizer:
                         opt.zero_grad()
 
-                    batched_data = batched_data.to(self.device, non_blocking=True).float()
+                    batched_data = batched_data.to(
+                        self.device, non_blocking=True
+                    ).float()
                     theta = theta.to(self.device, non_blocking=True)
 
                     base_output = self.network(batched_data)
 
-                    loss_median = MAE(base_output, theta) # * self.weights
+                    loss_median = MAE(base_output, theta)
 
                     all_outputs = {}
 
@@ -225,7 +226,9 @@ class Trainer(BaseEstimator):
 
                     with torch.no_grad():
                         for data_test, theta_test in test_loader:
-                            data_test = data_test.to(self.device, non_blocking=True).float()
+                            data_test = data_test.to(
+                                self.device, non_blocking=True
+                            ).float()
                             theta_test = theta_test.to(self.device, non_blocking=True)
 
                             output = self.network(data_test)
@@ -241,7 +244,7 @@ class Trainer(BaseEstimator):
 
                     time_test_accumulated += time.time() - start_test
 
-                if epoch % 20 == 0 :
+                if epoch % 20 == 0:
                     self.save_network()
                     self.save_quantile_network()
 
@@ -333,15 +336,11 @@ class Trainer(BaseEstimator):
             bbox_inches="tight",
         )
 
-    def test_quantiles(self, loader_test):
+    def test_nbe(self, loader_test):
         all_loss_test = []
         all_theta_final = []
         all_true_theta = []
         all_quantiles = {}
-
-        all_kl_score = []
-        all_krig_score = []
-        all_missing_ratios = []
 
         for q in self.quantiles:
             all_quantiles[q] = []
@@ -384,58 +383,6 @@ class Trainer(BaseEstimator):
                 all_theta_final.append(theta_final)
                 all_true_theta.append(theta_test.detach())
 
-                # with torch.no_grad() :
-                #
-                #     for k in range(len(data_test)):
-                #         coords, y, mask_obs = loader_test.dataset.sample_to_coord(data_test[k].detach().cpu().numpy())
-                #
-                #         cov_true = model_ref.eval_cov(coords[~mask_obs], y[~mask_obs], space_dim=model_ref.space_dim, theta_values=theta_test[k].cpu().numpy())
-                #         cov_est = model_ref.eval_cov(coords[~mask_obs], y[~mask_obs], space_dim=model_ref.space_dim, theta_values=theta_final[k].cpu().numpy())
-                #
-                #         vals_true = cov_true.getValues()
-                #         vals_true = np.array(vals_true).reshape(cov_true.getNRows(), cov_true.getNCols())
-                #
-                #         vals_est = cov_est.getValues()
-                #         vals_est = np.array(vals_est).reshape(cov_est.getNRows(), cov_est.getNCols())
-                #
-                #         _, logdet_true = np.linalg.slogdet(vals_true)
-                #         _, logdet_est = np.linalg.slogdet(vals_est)
-                #         term_det = logdet_est - logdet_true
-                #
-                #         term_trace = np.trace(np.linalg.solve(vals_est, vals_true))
-                #
-                #         kl_score = 0.5 * (term_det + term_trace - len(vals_true))
-                #
-                #         all_kl_score.append(torch.tensor(kl_score))
-                #
-                #         print("KL score :", kl_score)
-                #         print("MAE loss :", loss[k])
-
-                # with torch.no_grad() :
-                #
-                #     for k in range(len(data_test)):
-                #
-                #         data_complete, _, _ = loader_test.dataset[i*loader_test.batch_size + k]
-                #         data_complete = data_complete[0].detach().cpu().numpy()
-                #
-                #         data_partial = data_test[k].detach().cpu().numpy()
-                #
-                #         sample_krig = loader_test.dataset.kriging_from_sample(
-                #             data_partial, theta_final[k]
-                #         )
-                #
-                #         # plt.imshow(data_partial[0])
-                #         # plt.show()
-                #         #
-                #         # plt.imshow(data_complete[0])
-                #         # plt.show()
-                #         #
-                #         # plt.imshow((sample_krig - data_complete[0])**2)
-                #         # plt.show()
-                #
-                #         all_missing_ratios.append(data_partial[1][0])
-                #         all_krig_score.append(np.mean((sample_krig - data_complete[0])**2))
-
                 if i % 5 == 0:
                     current_mae = torch.cat(all_loss_test).mean().item()
                     t.set_postfix(Loss=f"{current_mae:.4f}")
@@ -447,25 +394,16 @@ class Trainer(BaseEstimator):
         for q in self.quantiles:
             all_quantiles[q] = torch.cat(all_quantiles[q], dim=0)
 
-        # train_time = self.get_history()["train_time"]
-
         results = {
-            # Données d'estimation et vérité terrain
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
             "all_quantiles": all_quantiles,
             "theta_names": self.theta_names,
-
-            # Pertes / métriques
             "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-
-            # Temps d'exécution
             "train_time": self.train_time,
             "test_time": time_total,
             "simu_time": self.simu_time,
             "total_time": self.train_time + time_total + self.simu_time,
-
-            # Métadonnées utiles pour les légendes/exports de graphes
             "estimation_label": self.estimation_label,
             "nls": self.nls,
         }
@@ -475,7 +413,7 @@ class Trainer(BaseEstimator):
 
         return results
 
-    def train_nls(self, train_loader, nb_epochs):
+    def train_nre(self, train_loader, nb_epochs):
 
         all_loss_train = []
 
@@ -549,7 +487,7 @@ class Trainer(BaseEstimator):
             bbox_inches="tight",
         )
 
-    def _nls_optim(self, data, theta0, activation=lambda x: x):
+    def _nre_optim(self, data, theta0, activation=lambda x: x):
 
         def obj(theta):
             theta_t = activation(theta.unsqueeze(0).to(self.device))
@@ -570,7 +508,7 @@ class Trainer(BaseEstimator):
         )
         return activation(res.x), activation(res.allvecs[-2])
 
-    def test_nls_optim(self, loader_test, theta0=None):
+    def test_nre_optim(self, loader_test, theta0=None):
         all_loss_test = []
         all_theta_final = []
         all_true_theta = []
@@ -583,8 +521,17 @@ class Trainer(BaseEstimator):
 
         if not (dataset_ref.dev is None):
             lower_bound = torch.cat(
-                [lower_bound,
-                 torch.tensor([dataset_ref.noise] if not (dataset_ref.noise is None) else [.3], device=self.device)]
+                [
+                    lower_bound,
+                    torch.tensor(
+                        (
+                            [dataset_ref.noise]
+                            if not (dataset_ref.noise is None)
+                            else [0.3]
+                        ),
+                        device=self.device,
+                    ),
+                ]
             )
             upper_bound = torch.cat(
                 [upper_bound, torch.tensor([dataset_ref.dev], device=self.device)]
@@ -612,7 +559,6 @@ class Trainer(BaseEstimator):
         t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
 
         for i, batch in enumerate(t):
-            # data_batch, theta_batch, classi_batch = batch
             data_batch, theta_batch = batch
 
             data_batch = data_batch.to(self.device, non_blocking=True).float()
@@ -620,13 +566,10 @@ class Trainer(BaseEstimator):
 
             for j in range(data_batch.size(0)):
 
-                # if classi_batch[j] == 1:
-                #     continue
-
                 data_single = data_batch[j].unsqueeze(0)
                 true_theta_single = true_theta_batch[j]
 
-                output, output_not_nan = self._nls_optim(
+                output, output_not_nan = self._nre_optim(
                     data_single, theta0_latent, activation
                 )
 
@@ -651,28 +594,15 @@ class Trainer(BaseEstimator):
         all_theta_final = torch.cat(all_theta_final, dim=0)
         all_true_theta = torch.cat(all_true_theta, dim=0)
 
-        mean_loss = full_loss_tensor.mean(dim=0)
-        std_loss = full_loss_tensor.std(dim=0)
-
-
-        # train_time = self.get_history()["train_time"]
-
         results = {
-            # Données d'estimation et vérité terrain
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
             "theta_names": self.theta_names,
-
-            # Pertes / métriques
             "final_test_losses": full_loss_tensor,  # (Nb_epochs, Nb_params)
-
-            # Temps d'exécution
             "train_time": self.train_time,
             "test_time": time_total,
             "simu_time": self.simu_time,
             "total_time": self.train_time + time_total + self.simu_time,
-
-            # Métadonnées utiles pour les légendes/exports de graphes
             "estimation_label": self.estimation_label,
             "nls": self.nls,
         }
@@ -694,15 +624,13 @@ class Trainer(BaseEstimator):
         with pyro.plate("batch_factors", batch_size):
             pyro.factor("log_ratio_factor", log_ratio)
 
-        # pyro.deterministic("log_ratio_samples", log_ratio)
-
-    def test_nls_MCMC(self, loader_test, num_samples=1000, step_size=0.05, burn_in=200):
+    def test_nre_MCMC(self, loader_test, num_samples=2000, warmup_steps=500):
         """https://pyro.ai/examples/predictive_deterministic.html"""
         all_samples = []
         all_true_theta = []
         all_theta_final = []
         all_quantiles = {}
-        for q in self.quantiles:
+        for q in {*self.quantiles, 0.5}:
             all_quantiles[q] = []
 
         self.network.eval()
@@ -715,8 +643,17 @@ class Trainer(BaseEstimator):
 
         if not (dataset_ref.dev is None):
             lower_bound = torch.cat(
-                [lower_bound,
-                 torch.tensor([dataset_ref.noise] if not (dataset_ref.noise is None) else [.3], device=self.device)]
+                [
+                    lower_bound,
+                    torch.tensor(
+                        (
+                            [dataset_ref.noise]
+                            if not (dataset_ref.noise is None)
+                            else [0.3]
+                        ),
+                        device=self.device,
+                    ),
+                ]
             )
             upper_bound = torch.cat(
                 [upper_bound, torch.tensor([dataset_ref.dev], device=self.device)]
@@ -730,9 +667,6 @@ class Trainer(BaseEstimator):
                 [upper_bound, torch.tensor([dataset_ref.noise], device=self.device)]
             )
 
-        num_samples = 2000
-        warmup_steps = 500
-
         kernel = NUTS(self._pyro_model, max_tree_depth=5, jit_compile=True)
         # kernel = HMC(self._pyro_model, num_steps=3, jit_compile=True)
         mcmc = MCMC(
@@ -740,16 +674,12 @@ class Trainer(BaseEstimator):
         )
 
         time_start = time.time()
-        time_map = 0
 
         t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
 
         for i, batch in enumerate(t):
             data_batch, theta_batch = batch
             data_batch = data_batch.to(self.device).float()
-
-            # mcmc.run(data_batch, lower_bound, upper_bound)
-            # samples = mcmc.get_samples()["theta"]
 
             batch_chains = []
             batch_log_ratios = []
@@ -760,68 +690,12 @@ class Trainer(BaseEstimator):
                 mcmc.run(data_batch, lower_bound, upper_bound)
                 chain_samples = mcmc.get_samples()["theta"].detach().cpu()
 
-                # determinist = Predictive(self._pyro_model, samples)(data_batch, lower_bound, upper_bound)
-                # chain_log_ratio = determinist["log_ratio_samples"].cpu()
-
-                # # MAP 1
-                # with torch.no_grad():
-                #     time_map_t = time.time()
-                #     log_ratio_list = []
-                #
-                #     for s_idx in range(chain_samples.size(0)):
-                #         single_theta = chain_samples[s_idx]
-                #
-                #         log_ratio = -self.network(
-                #             data_batch, theta=single_theta
-                #         ).squeeze(-1)
-                #
-                #         log_ratio_list.append(log_ratio.cpu())
-                #
-                #     chain_log_ratio = torch.stack(log_ratio_list)
-                #     time_map += time.time() - time_map_t
-                #
-                #     # print("time_map", time_map)
-
-                # # MAP 2
-                # time_poutine = time.time()
-                #
-                # log_probs = []
-                #
-                # for i in range(num_samples):
-                #     sample_i = {k: v[i] for k, v in samples.items()}
-                #
-                #     tr = trace(pyro.condition(self._pyro_model, data=sample_i)).get_trace(data_batch, lower_bound, upper_bound)
-                #     tr.compute_log_prob()
-                #     log_probs.append(tr.log_prob_sum().item())
-                #
-                # log_probs = torch.tensor(log_probs)
-                #
-                # best_idx = torch.argmax(log_probs).item()
-                # best_log_prob = log_probs[best_idx].item()
-                # best_sample = {k: v[best_idx] for k, v in samples.items()}
-                #
-                # # print(f"Max Log-Joint: {best_log_prob:.4f}")
-                # # print("MAP Estimate:", best_sample["theta"])
-                #
-                # time_poutine = time.time() - time_poutine
-
-                # print("time_poutine", time_poutine)
-
                 batch_chains.append(chain_samples.detach().cpu())
-                # batch_log_ratios.append(chain_log_ratio) # MAP
 
                 torch.cuda.empty_cache()
 
             samples = torch.stack(batch_chains, dim=0)
             samples = samples.reshape(-1, samples.shape[2], samples.shape[3])
-
-            # log_ratios = torch.stack(batch_log_ratios, dim=0) # MAP
-            # log_ratios = log_ratios.reshape(-1, log_ratios.shape[-1]) # MAP
-            # map_indices = torch.argmax(log_ratios, dim=0) # MAP
-
-            # theta_MAP = samples[map_indices, torch.arange(data_batch.size(0)), :] # MAP
-
-            # all_theta_final.append(theta_MAP) # MAP
 
             all_samples.append(samples)
             all_true_theta.append(theta_batch.detach().cpu())
@@ -833,30 +707,19 @@ class Trainer(BaseEstimator):
         for q in self.quantiles:
             all_quantiles[q] = torch.quantile(all_samples, q, dim=1)
         all_theta_final = all_quantiles[0.5]
-        # all_theta_final = torch.concatenate(all_theta_final, dim=0)  # MAP
         all_true_theta = torch.concatenate(all_true_theta, dim=0)
         final_test_losses = torch.abs(all_theta_final - all_true_theta)
 
-
-        # train_time = self.get_history()["train_time"]
-
         results = {
-            # Données d'estimation et vérité terrain
             "final_all_theta": all_theta_final,  # (Size_Test, Nb_params)
             "true_all_theta": all_true_theta,
             "all_quantiles": all_quantiles,
             "theta_names": self.theta_names,
-
-            # Pertes / métriques
             "final_test_losses": final_test_losses,  # (Nb_epochs, Nb_params)
-
-            # Temps d'exécution
             "train_time": self.train_time,
             "test_time": time_total,
             "simu_time": self.simu_time,
             "total_time": self.train_time + time_total + self.simu_time,
-
-            # Métadonnées utiles pour les légendes/exports de graphes
             "estimation_label": self.estimation_label,
             "nls": self.nls,
         }

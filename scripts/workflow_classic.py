@@ -7,9 +7,15 @@ gdoc.setNoScroll()
 
 from neural_st_inference.utils import *
 from neural_st_inference.models.gneiting_adv import GneitingAdvModel
-from neural_st_inference.data.datasets import GenericSimulationDataset, ClassifierSimulationDataset
+from neural_st_inference.data.datasets import (
+    GenericSimulationDataset,
+    ClassifierSimulationDataset,
+)
 from neural_st_inference.architecture.train_test import *
-from neural_st_inference.architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
+from neural_st_inference.architecture.neural_networks import (
+    CNN_ST_network,
+    print_parameters_per_layer,
+)
 from neural_st_inference.output_graphs import *
 from neural_st_inference.mle.mle_test import *
 
@@ -62,8 +68,10 @@ freq_epochs_test = 10
 time_size = 20
 space_dim = 1
 space_size = 20
-missing_ratios = [0.96] # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]   # ATTENTION DANS UTILS.PY
-dev, noise = 1.414, .5 # 1.414, .5
+missing_ratios = [
+    0.96
+]  # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]   # ATTENTION DANS UTILS.PY
+dev, noise = 1.414, 0.5  # 1.414, .5
 
 # Amount of data
 
@@ -131,7 +139,7 @@ if __name__ == "__main__":
         missing_ratio=None,
         seed=1,
         dev=dev,
-        noise=noise
+        noise=noise,
     )
 
     dataset_train.generate(data_path / "train")
@@ -154,9 +162,9 @@ if __name__ == "__main__":
         space_dim=space_dim,
         space_size=space_size,
         missing_ratio=None,
-        seed=1+train_size*10,
+        seed=1 + train_size * 10,
         dev=dev,
-        noise=noise
+        noise=noise,
     )
     dataset_test.generate(data_path / "test")
     dataset_test.eval()
@@ -212,7 +220,7 @@ if __name__ == "__main__":
         hidden=36,
         theta_dim=len(dataset_train.theta_names),
         spatial_dim=space_dim,
-        label="NBE"
+        label="NBE",
     ).to(device)
 
     # Creation the Trainer used train, test and show results
@@ -266,9 +274,12 @@ if __name__ == "__main__":
 
     dataset_train_nls = ClassifierSimulationDataset(dataset_train)
     loader_train_nls = DataLoader(
-        dataset_train_nls, batch_size=batch_size_train, shuffle=True, collate_fn=collate,
+        dataset_train_nls,
+        batch_size=batch_size_train,
+        shuffle=True,
+        collate_fn=collate,
         num_workers=4,
-        pin_memory=True
+        pin_memory=True,
     )
 
     # Creation of the neural network
@@ -278,19 +289,14 @@ if __name__ == "__main__":
         hidden=72,
         theta_dim=len(dataset_train.theta_names),
         spatial_dim=space_dim,
-        nls=True,       # NRE parameter
-        label="NRE"
+        nls=True,  # NRE parameter
+        label="NRE",
     ).to(device)
     # print_parameters_per_layer(CNN)
 
     # Creation the Trainer used train, test and show results
 
-    trainer_nre = Trainer(
-        CNN,
-        device,
-        res_path,
-        quantiles=[.05, .5, .95]
-    )
+    trainer_nre = Trainer(CNN, device, res_path, quantiles=[0.05, 0.5, 0.95])
 
     # Training
 
@@ -302,9 +308,9 @@ if __name__ == "__main__":
     # Testing
 
     for loader in loaders_test:
-        res = trainer_nre.test(loader)
+        res = trainer_nre.test(loader, mcmc=True)
 
-    try :
+    try:
         print(
             "quantiles precision :",
             torch.mean(
@@ -355,9 +361,3 @@ if __name__ == "__main__":
     # Kriging Visualisation
 
     visualise([trainer_nbe], res_path, num_dataset=0, nb_examples=2, k=[4, 7])
-
-
-
-
-
-
