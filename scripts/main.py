@@ -5,23 +5,23 @@ import copy
 
 gdoc.setNoScroll()
 
-from utils import *
-from models.gneiting_adv import GneitingAdvModel
-from models.gneiting_sep import GneitingSepModel
-from data.datasets import GenericSimulationDataset, NlsSimulationDataset
-from architecture.train_test import *
-from mle.mle_test import *
-from architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
-from architecture.output_graphs import *
+from neural_st_inference.utils import *
+from neural_st_inference.models.gneiting_adv import GneitingAdvModel
+from neural_st_inference.data.datasets import GenericSimulationDataset, ClassifierSimulationDataset
+from neural_st_inference.architecture.train_test import *
+from neural_st_inference.architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
+from neural_st_inference.output_graphs import *
+from neural_st_inference.mle.mle_test import *
+
 import warnings
 import torch
 
 warnings.filterwarnings("ignore", category=torch.jit.TracerWarning)
 warnings.filterwarnings("ignore", module="pyro")
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:1" if torch.cuda.is_available() else "cpu")
 
-# runfile("/home/aloret/PycharmProjects/Neural_ST_inference/code/src/main.py")
+# runfile("/home/aloret/PycharmProjects/Neural_ST_inference/other_codes/src/main.py")
 
 plt.rcParams.update(
     {
@@ -40,20 +40,21 @@ torch.manual_seed(2)
 
 # Path to data saving file
 
-data_path = create_data_path("output/data/spatiotemporal_adv")
-# data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-08-06_16-57-59")  # "2026-08-03_15-23-11"
+# data_path = create_data_path("output/data/spatiotemporal_adv")
+data_path = (Path("./output/data/spatiotemporal_adv").resolve() / "2026-09-24_16-50-46")  # "2026-09-24_16-50-46"
 
 # Path to results saving file
 
 res_path = create_res_path("output/results/spatiotemporal")
-# res_path = (Path("./output/results/spatiotemporal").resolve() / "2026-08-06_16-57-59")  # "2026-08-03_15-23-11"
+# res_path = (Path("./output/results/spatiotemporal").resolve() / "2026-10-09_09-10-13")  # 2026-10-08_09-55-55
 
 print("res_path", res_path)
 
 # Neural Network train options
 
-batch_size = 150
-nb_epochs = 500
+batch_size_train = 128
+batch_size_test = 64
+nb_epochs = 100
 freq_epochs_test = 10
 
 # Data options
@@ -61,12 +62,13 @@ freq_epochs_test = 10
 time_size = 100
 space_dim = 1
 space_size = 100
-missing_ratios = [0.94, 0.96, 0.98]
+missing_ratios = [0.96] # [0.94, 0.96, 0.98]
+dev, noise = 1.414, .5
 
 # Amount of data
 
-train_size = 10000
-test_size = 1500
+train_size = 10
+test_size = 10
 
 if __name__ == "__main__":
 
@@ -83,8 +85,11 @@ if __name__ == "__main__":
     # model = GneitingAdvModel(space_dim=space_dim)
     #
     # dataset_train = GenericSimulationDataset.load(data_path / "train", model)
+    # # dataset_train.global_seed = 1
+    # print("train global_seed", dataset_train.global_seed)
+    # print("train dev/noise", dataset_train.dev, dataset_train.noise)
     # loader_train = DataLoader(
-    #     dataset_train, batch_size=batch_size, shuffle=True, collate_fn=collate
+    #     dataset_train, batch_size=batch_size_train, shuffle=True, collate_fn=collate, num_workers=4, pin_memory=True, persistent_workers=True
     # )
     #
     # datasets_test = []
@@ -95,11 +100,14 @@ if __name__ == "__main__":
     #
     #     dataset = GenericSimulationDataset.load(specific_test_path, model)
     #     dataset.missing_ratio = ratio
-    #     print(dataset.missing_ratio)
+    #     # print("test global_seed", dataset.global_seed)
+    #     # print(dataset.missing_ratio)
+    #     dataset.eval()
+    #
     #
     #     datasets_test.append(dataset)
     #     loaders_test.append(
-    #         DataLoader(dataset, batch_size=test_size, shuffle=False, collate_fn=collate, num_workers=4, pin_memory=True)
+    #         DataLoader(dataset, batch_size=batch_size_test, shuffle=False, collate_fn=collate, num_workers=4, pin_memory=True)
     #     )
     #
     #     # sum = 0
@@ -109,8 +117,8 @@ if __name__ == "__main__":
     #     # print("missing ratio", sum, len(dataset), sum/len(dataset))
     #
     #     # show_example_mask(
-    #     #         dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    #     #     )
+    #     #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    #     # )
 
     ########################
     ####### Generate #######
@@ -118,8 +126,8 @@ if __name__ == "__main__":
 
     # Model choice
 
-    # model = GneitingAdvModel(space_dim=space_dim)
-    model = GneitingSepModel(space_dim=space_dim)
+    model = GneitingAdvModel(space_dim=space_dim)
+    # model = GneitingSepModel(space_dim=space_dim)
 
     # Creation of the class dataset and its θ
 
@@ -129,9 +137,12 @@ if __name__ == "__main__":
         time_size=time_size,
         space_dim=space_dim,
         space_size=space_size,
-        missing_ratio=None,
+        missing_ratio=(.9, .98),
         seed=1,
+        dev=dev,
+        noise=noise
     )
+    # dataset_train.generate_masks(data_path / "train")
 
     # Generation of data on a complete grid
 
@@ -142,7 +153,7 @@ if __name__ == "__main__":
 
     loader_train = DataLoader(
         dataset_train,
-        batch_size=batch_size,
+        batch_size=batch_size_train,
         shuffle=True,
         collate_fn=collate,
         num_workers=4,
@@ -159,6 +170,8 @@ if __name__ == "__main__":
         space_size=space_size,
         missing_ratio=None,
         seed=1+train_size*10,
+        dev=dev,
+        noise=noise
     )
     dataset_test.generate(data_path / "test")
     dataset_test.eval()
@@ -176,7 +189,7 @@ if __name__ == "__main__":
         loaders_test.append(
             DataLoader(
                 dataset,
-                batch_size=test_size,
+                batch_size=batch_size_test,
                 shuffle=False,
                 collate_fn=collate,
                 num_workers=4,
@@ -186,11 +199,8 @@ if __name__ == "__main__":
 
     # Show data example
 
-    # show_example(
-    #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
-    # )
-    # show_example(
-    #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=0
+    # show_example_mask(
+    #     datasets_test[0], data_path / "test" / f"ratio_{missing_ratios[0]}", k=4
     # )
     # show_example_gif(
     #     dataset_train, data_path / "test" / f"ratio_{missing_ratios[0]}",num_time_steps=time_size, k=0
@@ -214,20 +224,21 @@ if __name__ == "__main__":
     CNN = CNN_ST_network(
         in_channels=2,
         hidden=72,
-        theta_dim=dataset_train.model.nb_params,
+        theta_dim=len(dataset_train.theta_names),
         spatial_dim=space_dim,
         label="NBE",
     ).to(device)
+    CNN.load_state_dict(torch.load(res_path/ ".." / "2026-10-09_11-31-54_adv-mcmc" / "networks" / "NBE.pth", map_location=device))
 
-    print_parameters_per_layer(CNN)
+    # print_parameters_per_layer(CNN)
 
-    quantile_CNN = CNN_ST_network(
-        in_channels=2,
-        hidden=36,
-        theta_dim=dataset_train.model.nb_params,
-        spatial_dim=space_dim,
-        label="NBE"
-    ).to(device)
+    # quantile_CNN = CNN_ST_network(
+    #     in_channels=2,
+    #     hidden=36,
+    #     theta_dim=len(dataset_train.theta_names),
+    #     spatial_dim=space_dim,
+    #     label="NBE"
+    # ).to(device)
 
     # Creation the Trainer used train, test and show results
 
@@ -235,25 +246,25 @@ if __name__ == "__main__":
         CNN,
         device,
         res_path,
-        quantiles=[0.05, 0.95],
-        quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
+        # quantiles=[0.05, 0.95],
+        # quantile_networks=[copy.deepcopy(quantile_CNN), copy.deepcopy(quantile_CNN)],
     )
 
     # Training (and testing at the same time)
 
-    trainer_separately.train(
-        train_loader=loader_train,
-        test_loader=loaders_test[0],
-        nb_epochs=nb_epochs,
-        freq_epochs_test=freq_epochs_test,
-    )
+    # trainer_separately.train(
+    #     train_loader=loader_train,
+    #     test_loader=loaders_test[0],
+    #     nb_epochs=nb_epochs,
+    #     freq_epochs_test=freq_epochs_test,
+    # )
 
     # Testing
 
     for loader in loaders_test:
         res = trainer_separately.test(loader)  # res = ...
 
-    try:
+    try: # 0.8960, 0.9113, 0.8900, 0.9113
         print(
             "quantiles precision :",
             torch.mean(
@@ -265,19 +276,19 @@ if __name__ == "__main__":
     except:
         print("No quantiles")
 
-    # #############################
-    # #############################
-    # ############ NRE ############
-    # #############################
-    # #############################
-    #
+    #############################
+    #############################
+    ############ NRE ############
+    #############################
+    #############################
+
     # #####################
     # ####### Model #######
     # #####################
     #
     # dataset_train_nls = NlsSimulationDataset(dataset_train)
     # loader_train_nls = DataLoader(
-    #     dataset_train_nls, batch_size=batch_size, shuffle=True, collate_fn=collate,
+    #     dataset_train_nls, batch_size=batch_size_train, shuffle=True, collate_fn=collate,
     #     num_workers=4,
     #     pin_memory=True
     # )
@@ -289,7 +300,7 @@ if __name__ == "__main__":
     # CNN = CNN_ST_network(
     #     in_channels=2,
     #     hidden=72,
-    #     theta_dim=dataset_train.model.nb_params,
+    #     theta_dim=len(dataset_train.theta_names),
     #     spatial_dim=space_dim,
     #     nls=True,
     #     label="NRE"
@@ -308,7 +319,7 @@ if __name__ == "__main__":
     #     nb_epochs=nb_epochs,
     # )
     # for loader in loaders_test:
-    #     res = trainer_nls.test(loader, dataset_train)
+    #     res = trainer_nls.test(loader)
     #
     # try :
     #     print(
@@ -322,21 +333,20 @@ if __name__ == "__main__":
     # except:
     #     print("No quantiles")
 
-    # ###########################################
-    # ###########################################
-    # ############ Conclusion Graphs ############
-    # ###########################################
-    # ###########################################
+    ###########################################
+    ###########################################
+    ############ Conclusion Graphs ############
+    ###########################################
+    ###########################################
 
-    # visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2)
+    visualise([trainer_separately], res_path, num_dataset=0, nb_examples=2, k=[4,7])
 
-    trainers = [trainer_separately]
-
-    # train_graph(trainers, res_path)
-    time_hist(trainers, res_path)
-    test_alt_graph(trainers, res_path)
-
-    for i in range(len(datasets_test)):
-        test_graph(trainers, res_path, num_dataset=i)
-        # target_graph(trainers, res_path, k=0, num_dataset=i)
-        # visualise(trainers, res_path, num_dataset=i, nb_examples=2)
+    # trainers = [mle_trainer]
+    #
+    # # train_graph(trainers, res_path)
+    # time_hist(trainers, res_path)
+    # test_alt_graph(trainers, res_path)
+    #
+    # for i in range(len(datasets_test)):
+    #     test_graph(trainers, res_path, num_dataset=i)
+    #     # target_graph(trainers, res_path, k=0, num_dataset=i)

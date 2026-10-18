@@ -1,15 +1,12 @@
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timedelta
 import numpy as np
 import torch
 import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
-from matplotlib.ticker import ScalarFormatter
-import gstlearn as gl
 import time
-import xarray as xr
-
+import random
 
 THETA_COLORS = [
     {
@@ -56,6 +53,30 @@ THETA_COLORS = [
 
 cols = [c["train"] for c in THETA_COLORS]
 CMAP = LinearSegmentedColormap.from_list("custom_data", cols, N=100)
+
+
+class temporary_seed:
+    def __init__(self, seed: int | None):
+        self.seed = seed
+        self.torch_state = None
+        self.np_state = None
+        self.py_state = None
+
+    def __enter__(self):
+        if self.seed is not None:
+            self.torch_state = torch.get_rng_state()
+            self.np_state = np.random.get_state()
+            self.py_state = random.getstate()
+
+            torch.manual_seed(self.seed)
+            np.random.seed(self.seed % (2**32))
+            random.seed(self.seed)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self.seed is not None:
+            torch.set_rng_state(self.torch_state)
+            np.random.set_state(self.np_state)
+            random.setstate(self.py_state)
 
 
 def create_data_path(base_path: str) -> Path:
@@ -180,7 +201,8 @@ def sampling_poisson_1D(
     xx_parent = x_min_ext + x_delta_ext * torch.rand(numb_points_parent)
 
     numb_points_daughter = torch.clamp(
-        torch.poisson(torch.full((numb_points_parent,), float(lambda_daughter))).int(), min=1
+        torch.poisson(torch.full((numb_points_parent,), float(lambda_daughter))).int(),
+        min=1,
     )
     numb_points = torch.sum(numb_points_daughter).item()
 
@@ -208,25 +230,24 @@ def sampling_poisson_1D(
     return mask
 
 
-def create_mask(
-    space_size: int, space_shape: int, missing_ratio: float = None
-):
-    """Create a mask based on Poisson Sampling"""
-
-    if missing_ratio is None:
-        # missing_ratio = torch.rand(1) * 0.35 + 0.6   # space 30
-        missing_ratio = torch.rand(1) * 0.08 + 0.9   # space 100
-        # missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
-
-    nb_missing = int(space_size * missing_ratio)
-    nb_visible = space_size - nb_missing
-
-    if space_shape == 1:
-        visibles = sampling_poisson_1D(space_size, nb_visible, nb_visible, 0.1)
-    else:
-        visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
-
-    return visibles
+# def create_mask(space_size: int, space_shape: int, missing_ratio: float = None):
+#     """Create a mask based on Poisson Sampling"""
+#
+#     if missing_ratio is None:
+#         # missing_ratio = torch.rand(1) * 0.35 + 0.6   # space 30
+#         missing_ratio = torch.rand(1) * 0.08 + 0.9  # space 100
+#         # missing_ratio = torch.rand(1) * 0.25 + 0.7  # space 75x75
+#         # missing_ratio = torch.rand(1) * 0.22 + 0.7  # space 50x50
+#
+#     nb_missing = int(space_size * missing_ratio)
+#     nb_visible = space_size - nb_missing
+#
+#     if space_shape == 1:
+#         visibles = sampling_poisson_1D(space_size, nb_visible, nb_visible, 0.1)
+#     else:
+#         visibles = sampling_poisson_2D(space_size, nb_visible, nb_visible, 0.1)
+#
+#     return visibles
 
 
 def show_mask(outshape, dim=1, lambda_p=(3, 3, 12, 12), lambda_d=(3, 12, 3, 12)):
@@ -345,7 +366,7 @@ def show_example_mask(dataset, data_path: Path, k=0, label="example", mask=None)
 
         for i in range(len(axs[0])):
 
-            mask = dataset.get_mask(k+i)
+            mask = dataset.get_mask(k + i)
 
             dataset.show(axs[0, i], k + i)
             dataset.show(axs[1, i], k + i, mask=mask)
@@ -437,14 +458,14 @@ def show_example_gif(
                 im.set_clim(v_min, v_max)
                 im.set_cmap(CMAP)
 
-            axs[1, i].set_xlabel(r"$\it{Space 1}$")
+            axs[1, i].set_xlabel(r"Space 1")
             if i == 0:
-                axs[0, i].set_ylabel(r"$\it{Space 2}$")
-                axs[1, i].set_ylabel(r"$\it{Space 2}$")
+                axs[0, i].set_ylabel(r"Space 2")
+                axs[1, i].set_ylabel(r"Space 2")
 
         return [ax.get_images() for ax in axs.flat]
 
-    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=200)
+    anim = animation.FuncAnimation(fig, update, frames=num_time_steps, interval=100)
 
     out_dir = data_path / "examples"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -456,192 +477,6 @@ def show_example_gif(
     plt.close(fig)
 
     print(gif_path)
-
-
-def load_data(path, times=range(100000, 100025), nb_bins=75):
-
-    ds = xr.open_dataset(path, engine="netcdf4")
-
-    north = ds.northing.values
-    east = ds.easting.values
-    vals = ds.raw_GHI.isel(time=times).values
-
-    mask = ~np.isnan(vals).any(axis=1)
-    vals = vals[mask]
-    north = north[mask]
-    east = east[mask]
-
-    n_min, n_max = north.min(), north.max()
-    e_min, e_max = east.min(), east.max()
-
-    e_span = e_max - e_min
-    n_span = n_max - n_min
-    max_span = max(e_span, n_span)
-
-    if e_span < n_span:
-        e_max = e_min + max_span
-    else:
-        n_max = n_min + max_span
-
-    north_norm = (north - n_min) / (n_max - n_min)
-    east_norm = (east - e_min) / (e_max - e_min)
-    vals_norm = (vals - vals.mean()) / (vals.std())
-
-    y = torch.from_numpy(north_norm)
-    x = torch.from_numpy(east_norm)
-    values = torch.from_numpy(vals_norm).T
-
-    bin_size = 1.0 / nb_bins
-
-    ix = torch.clamp((x / bin_size).long(), max=nb_bins - 1)
-    iy = torch.clamp((y / bin_size).long(), max=nb_bins - 1)
-
-    flat_idx = ix * nb_bins + iy
-
-    value_flat = torch.full((values.shape[0], nb_bins * nb_bins), float("nan"))
-
-    unique_idx = flat_idx.unique()
-    for idx in unique_idx:
-        indices_in_cell = torch.where(flat_idx == idx)[0]
-        chosen = indices_in_cell[torch.randint(0, len(indices_in_cell), (1,))]
-        value_flat[:, idx] = values[:, chosen.squeeze()]
-
-    res = value_flat.view(values.shape[0], nb_bins, nb_bins)
-
-
-    # fig, axs = plt.subplots(1, 2, figsize=(14, 6))
-    #
-    # for ax in axs:
-    #     ax.set_xlim(0, 1)
-    #     ax.set_ylim(0, 1)
-    #     ax.set_aspect("equal")
-    #
-    # sc = axs[0].scatter(east, north, c=vals[:, 0], cmap=CMAP,)
-    # axs[0].set_xlim(e_min, e_max)
-    # axs[0].set_ylim(n_min, n_max)
-    # axs[0].set_xlabel("Easting (m)")
-    # axs[0].set_ylabel("Northing (m)")
-    #
-    # axs[1].imshow(
-    #     res[0].T, aspect="equal", extent=[0, 1, 0, 1], origin="lower", cmap=CMAP
-    # )
-    #
-    # cbar = fig.colorbar(sc, ax=axs, location="right", shrink=1, pad=0.03)
-    # cbar.set_label("GHI")
-    #
-    # fig.suptitle("GHI 04:01:00 6th June 2013")
-    # axs[0].set_title("Raw data")
-    # axs[1].set_title("Grid Projection")
-    #
-    # plt.show()
-    # plt.tight_layout()
-    #
-    # output_path = Path("./output/results/spatiotemporal").resolve() / f"paper/3D"
-    #
-    # fig.savefig(
-    #     output_path / f"projection.pdf", format="pdf", bbox_inches="tight"
-    # )
-    # fig.savefig(output_path / f"projection.png", format="png", bbox_inches="tight")
-
-    return res
-
-def arrow(path, wind, times=range(100000, 100025)):
-
-    ds = xr.open_dataset(path, engine="netcdf4")
-
-    north = ds.northing.values
-    east = ds.easting.values
-    vals = ds.raw_GHI.isel(time=times).values
-
-    mask = ~np.isnan(vals).any(axis=1)
-    vals = vals[mask]
-    north = north[mask]
-    east = east[mask]
-
-    n_min, n_max = north.min(), north.max()
-    e_min, e_max = east.min(), east.max()
-
-    fig, ax = plt.subplots(1, 1, figsize=(6, 6))
-
-    sc = ax.scatter(east, north, c=vals[:, 0], cmap=CMAP,)
-    ax.set_xlim(e_min, e_max)
-    ax.set_ylim(n_min, n_max)
-    ax.set_xlabel("Easting (m)")
-    ax.set_ylabel("Northing (m)")
-
-    cbar = fig.colorbar(sc, ax=ax, location="right", shrink=1, pad=0.03)
-    cbar.set_label("GHI")
-
-    fig.suptitle("Wind direction on time")
-
-    # Pour l'axe Y (Northing)
-    formatter_y = ScalarFormatter(useOffset=False)
-    formatter_y.set_scientific(False)
-    ax.yaxis.set_major_formatter(formatter_y)
-
-    # Pour l'axe X (Easting) si besoin
-    formatter_x = ScalarFormatter(useOffset=False)
-    formatter_x.set_scientific(False)
-    ax.xaxis.set_major_formatter(formatter_x)
-
-    def update(t):
-        ax.clear()
-
-        ax.scatter(
-            east,
-            north,
-            c=vals[:, t],
-            cmap=CMAP,
-        )
-        ax.set_xlim(e_min, e_max)
-        ax.set_ylim(n_min, n_max)
-        ax.set_xlabel("Easting (m)")
-        ax.set_ylabel("Northing (m)")
-        ax.set_title(f"Time {t}")
-
-        u_wind = wind[t, 1].item()
-        v_wind = wind[t, 0].item()
-
-        x_pos = e_min + 0.80 * (e_max - e_min)
-        y_pos = n_min + 0.80 * (n_max - n_min)
-
-        ax.quiver(
-            x_pos,
-            y_pos,
-            u_wind,
-            v_wind,
-            color="red",
-            units="inches",  # La taille dépend de pouces physiques
-            scale=20,
-            width=0.008,
-            headwidth=4,
-        )
-
-        ax.text(
-            x_pos,
-            y_pos + 0.003 * (n_max - n_min),
-            "Wind",
-            color="red",
-            ha="center",
-            weight="bold",
-        )
-
-        ax.ticklabel_format(style="plain", useOffset=False, axis="y")
-        ax.tick_params(axis="x", labelrotation=45)
-        ax.tick_params(axis="y", labelrotation=45)
-
-        return [ax.get_images()]
-
-    plt.subplots_adjust(left=0.18, bottom=0.15, right=0.95, top=0.88, wspace=0.3)
-
-    anim = animation.FuncAnimation(fig, update, frames=len(times), interval=100)
-
-    output_path = Path("./output/results/spatiotemporal").resolve() / f"paper/3D"
-    output_path.mkdir(parents=True, exist_ok=True)
-
-    gif_path = output_path / f"wind.gif"
-
-    anim.save(gif_path, writer="pillow")
 
 
 def baseline_mae(dataset) -> tuple[torch.Tensor, torch.Tensor]:
@@ -661,51 +496,3 @@ def format_seconds(s: float) -> str:
     """Times in second to h-m-s format"""
     h, m, s = int(s // 3600), int((s % 3600) // 60), int(s % 60)
     return f"{h}h{m}m{s}s" if h > 0 else (f"{m}m{s}s" if m > 0 else f"{s}s")
-
-def test_load_time(loader, network, device):
-    # Test sur 10 itérations
-    train_iter = iter(loader)
-
-    t_data, t_gpu_transfer, t_forward, t_backward = 0, 0, 0, 0
-    MAE = torch.nn.L1Loss(reduction="mean")
-    optimizer = torch.optim.Adam(network.parameters(), lr=1e-3)
-
-    for _ in range(10):
-        # 1.
-        t0 = time.perf_counter()
-        batch = next(train_iter)
-        torch.cuda.synchronize()
-        t1 = time.perf_counter()
-        t_data += t1 - t0
-
-        # 2.
-        data, theta = (
-            batch[0].cuda(),
-            batch[1].cuda(),
-        )
-        data = data.to(device, non_blocking=True).float()
-        theta = theta.to(device, non_blocking=True)
-        torch.cuda.synchronize()
-        t2 = time.perf_counter()
-        t_gpu_transfer += t2 - t1
-
-        # 3.
-        optimizer.zero_grad()
-        outputs = network(data)
-        loss = MAE(outputs, theta)
-        torch.cuda.synchronize()
-        t3 = time.perf_counter()
-        t_forward += t3 - t2
-
-        # 4.
-        loss.backward()
-        optimizer.step()
-        torch.cuda.synchronize()
-        t4 = time.perf_counter()
-        t_backward += t4 - t3
-
-    print(f"Mean per batch :")
-    print(f"- Lecture DataLoader : {t_data / 10:.4f}s")
-    print(f"- Transfer toward GPU : {t_gpu_transfer / 10:.4f}s")
-    print(f"- Forward : {t_forward / 10:.4f}s")
-    print(f"- Backward : {t_backward / 10:.4f}s")

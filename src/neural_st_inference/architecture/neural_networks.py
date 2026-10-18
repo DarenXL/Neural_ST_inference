@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
-from utils import *
+from neural_st_inference.utils import *
 
 
 class CNN_ST_network(nn.Module):
