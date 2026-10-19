@@ -10,10 +10,16 @@ import matplotlib.dates as mdates
 from neural_st_inference.utils import *
 from neural_st_inference.utils_data_sun import *
 from neural_st_inference.models.gneiting_adv import GneitingAdvModel
-from neural_st_inference.data.datasets import GenericSimulationDataset, ClassifierSimulationDataset
+from neural_st_inference.data.datasets import (
+    GenericSimulationDataset,
+    ClassifierSimulationDataset,
+)
 from neural_st_inference.architecture.train_test import *
 from neural_st_inference.mle.mle_test import *
-from neural_st_inference.architecture.neural_networks import CNN_ST_network, print_parameters_per_layer
+from neural_st_inference.architecture.neural_networks import (
+    CNN_ST_network,
+    print_parameters_per_layer,
+)
 from neural_st_inference.output_graphs import *
 import warnings
 import torch
@@ -33,19 +39,17 @@ plt.rcParams.update(
 
 # Path to network
 
-network_path = Path("./output/results/spatiotemporal").resolve() / "2026-10-09_19-07-30_3D"
+data_path = "output/data/sun/HOPE_qcGHI_1min_sub.nc"  # "output/data/sun/HOPE_qcGHI_1min_v4.nc"
+
+network_path = (
+    Path("./output/results/spatiotemporal").resolve() / "2026-10-09_19-07-30_3D"
+)
 
 # Path to results saving file
 
 output_path = create_res_path("output/results/spatiotemporal")
 
 date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-
-# Neural Network train options
-
-batch_size = 50
-nb_epochs = 500
-freq_epochs_test = 10
 
 # Data options
 
@@ -68,8 +72,13 @@ if __name__ == "__main__":
     ####################
 
     model = GneitingAdvModel(space_dim=space_dim)
-    ini = 104120
-    data, norms = load_data('output/data/sun/HOPE_qcGHI_1min_v4.nc', nb_bins=space_size, times=range(ini, ini + time_size, 1), get_norm=True)
+    ini = 120
+    data, norms = load_data(
+        data_path,
+        nb_bins=space_size,
+        times=range(ini, ini + time_size, 1),
+        get_norm=True,
+    )
     data_mean, data_std = norms
 
     mask = torch.zeros_like(data, dtype=torch.bool)
@@ -89,46 +98,47 @@ if __name__ == "__main__":
         spatial_dim=space_dim,
         label="NBE",
     ).to(device)
-    CNN.load_state_dict(torch.load(network_path / "networks" / "NBE.pth", map_location=device))
+    CNN.load_state_dict(
+        torch.load(network_path / "networks" / "NBE.pth", map_location=device)
+    )
     CNN.eval()
 
     quantile_CNN_q05 = CNN_ST_network(
-        in_channels=2,
-        hidden=36,
-        theta_dim=6,
-        spatial_dim=space_dim,
-        label="NBE"
+        in_channels=2, hidden=36, theta_dim=6, spatial_dim=space_dim, label="NBE"
     ).to(device)
-    quantile_CNN_q05.load_state_dict(torch.load(network_path / "networks" / "q0.05 - NBE.pth", map_location=device))
+    quantile_CNN_q05.load_state_dict(
+        torch.load(network_path / "networks" / "q0.05 - NBE.pth", map_location=device)
+    )
 
     quantile_CNN_q95 = CNN_ST_network(
-        in_channels=2,
-        hidden=36,
-        theta_dim=6,
-        spatial_dim=space_dim,
-        label="NBE"
+        in_channels=2, hidden=36, theta_dim=6, spatial_dim=space_dim, label="NBE"
     ).to(device)
-    quantile_CNN_q95.load_state_dict(torch.load(network_path / "networks" / "q0.95 - NBE.pth", map_location=device))
+    quantile_CNN_q95.load_state_dict(
+        torch.load(network_path / "networks" / "q0.95 - NBE.pth", map_location=device)
+    )
 
     # ###############################
     # ####### Sliding windows #######
     # ###############################
 
     sliding_window(
+        data_path,
         output_path,
-        104000,104840,
+        0,
+        840,
         CNN,
         quantile_CNN_q05,
         quantile_CNN_q95,
-        space_size = 50,
+        space_size=50,
     )
 
-    target = 104120
+    target = 120
     theta_est, q05, q95 = get_gaussian_weighted_estimate(
+        data_path,
         p_target=target,
-        CNN = CNN,
-        quantile_CNN_low = quantile_CNN_q05,
-        quantile_CNN_high = quantile_CNN_q95,
+        CNN=CNN,
+        quantile_CNN_low=quantile_CNN_q05,
+        quantile_CNN_high=quantile_CNN_q95,
         wide=20,
         n_lags=8,
         sigma_window=2.5,
@@ -148,8 +158,12 @@ if __name__ == "__main__":
 
     # load data as grid
 
-    data, norms = load_data('output/data/sun/HOPE_qcGHI_1min_v4.nc', nb_bins=space_size,
-                            times=range(ini, ini + time_size, 1), get_norm=True)
+    data, norms = load_data(
+        data_path,
+        nb_bins=space_size,
+        times=range(ini, ini + time_size, 1),
+        get_norm=True,
+    )
     data_mean, data_std = norms
 
     # mask data
@@ -183,16 +197,26 @@ if __name__ == "__main__":
 
     # Add future (10min) to missing locations
 
-    coords_miss_future = coords_miss.copy()[:coords_miss.shape[0]//2]
-    coords_miss_future[:,space_dim] += 1
+    coords_miss_future = coords_miss.copy()[: coords_miss.shape[0] // 2]
+    coords_miss_future[:, space_dim] += 1
     coords_miss = np.concatenate([coords_miss, coords_miss_future])
 
     # Kriging from real observations
 
     print("KRIGING...")
 
-    theta_dict = dict(zip(["adv1", "adv2", "range_time", "range_space"], theta_est[:-2]))
-    krig = model.kriging(coords_obs, coords_miss, y_obs, space_dim, theta_dict, dev=theta_est[-2], noise=theta_est[-1])
+    theta_dict = dict(
+        zip(["adv1", "adv2", "range_time", "range_space"], theta_est[:-2])
+    )
+    krig = model.kriging(
+        coords_obs,
+        coords_miss,
+        y_obs,
+        space_dim,
+        theta_dict,
+        dev=theta_est[-2],
+        noise=theta_est[-1],
+    )
     y_full = torch.tensor(krig).float()
 
     print("END KRIGING")
@@ -203,19 +227,40 @@ if __name__ == "__main__":
 
     # Unconditional simulation
 
-    simu_cond = model.simulate({"adv1": theta_est[0], "adv2": theta_est[1], "range_time": theta_est[2], "range_space": theta_est[3]}, time_size, space_dim, space_size, seed=None, mult_time=1.5)[0][0] * theta_est[4]
+    simu_cond = (
+        model.simulate(
+            {
+                "adv1": theta_est[0],
+                "adv2": theta_est[1],
+                "range_time": theta_est[2],
+                "range_space": theta_est[3],
+            },
+            time_size,
+            space_dim,
+            space_size,
+            seed=None,
+            mult_time=1.5,
+        )[0][0]
+        * theta_est[4]
+    )
     y_cond = simu_cond.reshape(-1)  # order="C"
 
     # Extract at observed locations
 
-    y_obs_cond = y_cond[:2*y_cond.shape[0]//3][~mask_obs]
+    y_obs_cond = y_cond[: 2 * y_cond.shape[0] // 3][~mask_obs]
 
     # Kriging on unconditional simulation
 
     print("KRIGING...")
 
     krig_cond = model.kriging(
-        coords_obs, coords_miss, y_obs_cond, space_dim, theta_dict, dev=theta_est[-2], noise=None
+        coords_obs,
+        coords_miss,
+        y_obs_cond,
+        space_dim,
+        theta_dict,
+        dev=theta_est[-2],
+        noise=None,
     )
     y_full_cond = torch.tensor(krig_cond).float()
 
@@ -232,7 +277,7 @@ if __name__ == "__main__":
     y = data_std * y + data_mean
     y_cond = data_std * y_cond + data_mean
     y_full = data_std * y_full + data_mean
-    y_full_cond= data_std * y_full_cond + data_mean
+    y_full_cond = data_std * y_full_cond + data_mean
     krig = data_std * krig + data_mean
     krig_cond = data_std * krig_cond + data_mean
 
@@ -241,12 +286,18 @@ if __name__ == "__main__":
     data_nan = data.clone()
     data_nan[mask] = torch.nan
 
-    data_future, (data_future_mean, data_future_std) = load_data('output/data/sun/HOPE_qcGHI_1min_v4.nc', nb_bins=space_size,
-                            times=range(ini + time_size, ini + 3*time_size//2, 1), get_norm=True)
+    data_future, (data_future_mean, data_future_std) = load_data(
+        data_path,
+        nb_bins=space_size,
+        times=range(ini + time_size, ini + 3 * time_size // 2, 1),
+        get_norm=True,
+    )
     data_future = data_future_std * data_future + data_future_mean
     data_nan = torch.concatenate([data_nan, data_future])
 
-    y_full_cond_reshaped = y_full_cond.reshape(int(time_size * 1.5), space_size, space_size)
+    y_full_cond_reshaped = y_full_cond.reshape(
+        int(time_size * 1.5), space_size, space_size
+    )
     y_full_reshaped = y_full.reshape(int(time_size * 1.5), space_size, space_size)
 
     if torch.is_tensor(y_full_reshaped):
@@ -273,7 +324,9 @@ if __name__ == "__main__":
 
     res_full = simu_cond - y_full_cond_reshaped + y_full_reshaped
 
-    mae_full = np.sqrt((y_full_reshaped - data_nan)**2) # np.abs(y_full_reshaped - data_nan)
+    mae_full = np.sqrt(
+        (y_full_reshaped - data_nan) ** 2
+    )  # np.abs(y_full_reshaped - data_nan)
     mae_max = np.nanmax(mae_full)
 
     v_min, v_max = np.nanmin(y_full_reshaped), np.nanmax(y_full_reshaped)
@@ -312,7 +365,9 @@ if __name__ == "__main__":
     )
     axs[2].set_title("Error")
 
-    cbar_data = fig.colorbar(im_krig, ax=axs[:2], location="bottom", shrink=0.8, pad=0.05)
+    cbar_data = fig.colorbar(
+        im_krig, ax=axs[:2], location="bottom", shrink=0.8, pad=0.05
+    )
     cbar_data.set_label("GHI")
 
     cbar_mae = fig.colorbar(im_mae, ax=axs[2], location="bottom", shrink=0.8, pad=0.05)
@@ -326,11 +381,23 @@ if __name__ == "__main__":
         im_mae.set_data(current_mae)
 
         if t >= time_size:
-            axs[0].set_title("Observations\n[ FORECASTING PHASE ]", color="firebrick", fontweight="bold")
-            axs[1].set_title("Kriging\n[ FORECAST ]", color="firebrick", fontweight="bold")
+            axs[0].set_title(
+                "Observations\n[ FORECASTING PHASE ]",
+                color="firebrick",
+                fontweight="bold",
+            )
+            axs[1].set_title(
+                "Kriging\n[ FORECAST ]", color="firebrick", fontweight="bold"
+            )
         else:
-            axs[0].set_title("Observations\n[ OBSERVATION PHASE ]", color="black", fontweight="normal")
-            axs[1].set_title("Kriging\n[ SPATIAL INTERPOLATION ]", color="black", fontweight="normal")
+            axs[0].set_title(
+                "Observations\n[ OBSERVATION PHASE ]",
+                color="black",
+                fontweight="normal",
+            )
+            axs[1].set_title(
+                "Kriging\n[ SPATIAL INTERPOLATION ]", color="black", fontweight="normal"
+            )
 
         current_time = start_time + timedelta(minutes=t)
         title.set_text(
@@ -343,12 +410,12 @@ if __name__ == "__main__":
         axs[2].set_title(
             f"Error\nMean : {mean_err:.3f} | Std : {std_err:.3f}",
             color="black",
-            fontweight="normal"
+            fontweight="normal",
         )
 
         return [im_obs, im_krig, im_mae, title]
 
-    anim = animation.FuncAnimation(fig, update, frames=3*time_size // 2, interval=200)
+    anim = animation.FuncAnimation(fig, update, frames=3 * time_size // 2, interval=200)
 
     gif_path = output_path / f"kriging_animated_{date}.gif"
     anim.save(gif_path, writer="pillow")
@@ -370,7 +437,7 @@ if __name__ == "__main__":
         extent=[0, 1, 0, 1],
         vmin=v_min,
         vmax=v_max,
-        cmap=CMAP
+        cmap=CMAP,
     )
     axs[0].set_title("Observations\n[ INTERPOLATION ]")
 
@@ -380,7 +447,7 @@ if __name__ == "__main__":
         extent=[0, 1, 0, 1],
         vmin=v_min,
         vmax=v_max,
-        cmap=CMAP
+        cmap=CMAP,
     )
     axs[1].set_title("Conditional Simulation\n[ INTERPOLATION ]")
 
@@ -392,11 +459,27 @@ if __name__ == "__main__":
         im_simu.set_data(np.flip(res_full[t].T, axis=0))
 
         if t >= time_size:
-            axs[0].set_title("Observations\n[ FORECASTING PHASE ]", color="firebrick", fontweight="bold")
-            axs[1].set_title("Conditional Simulation\n[ FORECAST ]", color="firebrick", fontweight="bold")
+            axs[0].set_title(
+                "Observations\n[ FORECASTING PHASE ]",
+                color="firebrick",
+                fontweight="bold",
+            )
+            axs[1].set_title(
+                "Conditional Simulation\n[ FORECAST ]",
+                color="firebrick",
+                fontweight="bold",
+            )
         else:
-            axs[0].set_title("Observations\n[ OBSERVATION PHASE ]", color="black", fontweight="normal")
-            axs[1].set_title("Conditional Simulation\n[ SPATIAL INTERPOLATION ]", color="black", fontweight="normal")
+            axs[0].set_title(
+                "Observations\n[ OBSERVATION PHASE ]",
+                color="black",
+                fontweight="normal",
+            )
+            axs[1].set_title(
+                "Conditional Simulation\n[ SPATIAL INTERPOLATION ]",
+                color="black",
+                fontweight="normal",
+            )
 
         current_time = start_time + timedelta(minutes=t)
         title.set_text(
@@ -406,7 +489,7 @@ if __name__ == "__main__":
 
         return [im_obs, im_simu, title]
 
-    anim = animation.FuncAnimation(fig, update, frames=3*time_size // 2, interval=200)
+    anim = animation.FuncAnimation(fig, update, frames=3 * time_size // 2, interval=200)
 
     out_dir = output_path / "examples"
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -419,13 +502,12 @@ if __name__ == "__main__":
     print(gif_path)
 
     data_to_save = {
-        "data":data,
-        "simu_cond":simu_cond,
-        "y":y,
-        "y_cond":y_cond,
-        "krig":krig,
-        "krig_cond":krig_cond,
-
+        "data": data,
+        "simu_cond": simu_cond,
+        "y": y,
+        "y_cond": y_cond,
+        "krig": krig,
+        "krig_cond": krig_cond,
     }
     torch.save(data_to_save, out_dir / "krig_save.pt")
 
@@ -438,7 +520,13 @@ if __name__ == "__main__":
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
-    ax.plot(times, mae_mean_over_time, color="blue", linewidth=2, label="Root Mean Squared Error (RMSE)")
+    ax.plot(
+        times,
+        mae_mean_over_time,
+        color="blue",
+        linewidth=2,
+        label="Root Mean Squared Error (RMSE)",
+    )
 
     ax.fill_between(
         times,
@@ -446,19 +534,25 @@ if __name__ == "__main__":
         mae_mean_over_time + mae_std_over_time,
         color="blue",
         alpha=0.2,
-        label="Std Dev"
+        label="Std Dev",
     )
 
-    forecast_start_time = times[time_size-1]
-    ax.axvline(x=forecast_start_time, color="firebrick", linestyle="--", linewidth=2, label="Start of Forecasting")
+    forecast_start_time = times[time_size - 1]
+    ax.axvline(
+        x=forecast_start_time,
+        color="firebrick",
+        linestyle="--",
+        linewidth=2,
+        label="Start of Forecasting",
+    )
 
-    ax.axvspan(forecast_start_time, times[-1], color='firebrick', alpha=0.05)
+    ax.axvspan(forecast_start_time, times[-1], color="firebrick", alpha=0.05)
 
     ax.set_title("Evolution of Kriging Error Over Time", fontsize=14, pad=15)
     ax.set_ylabel("Error (GHI)", fontsize=12)
     ax.set_xlabel("Time", fontsize=12)
 
-    ax.xaxis.set_major_formatter(mdates.DateFormatter('%H:%M'))
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M"))
     plt.xticks(rotation=45)
 
     ax.grid(True, linestyle=":", alpha=0.7)

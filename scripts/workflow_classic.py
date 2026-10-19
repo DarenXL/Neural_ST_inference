@@ -60,23 +60,21 @@ print("res_path", res_path)
 
 batch_size_train = 512
 batch_size_test = 2000
-nb_epochs = 20
+nb_epochs = 500
 freq_epochs_test = 10
 
 # Data options
 
-time_size = 20
+time_size = 100
 space_dim = 1
-space_size = 20
-missing_ratios = [
-    0.96
-]  # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]   # ATTENTION DANS UTILS.PY
+space_size = 100
+missing_ratios = [0.96]  # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]
 dev, noise = 1.414, 0.5  # 1.414, .5
 
 # Amount of data
 
-train_size = 5
-test_size = 5
+train_size = 10000
+test_size = 2000
 
 if __name__ == "__main__":
 
@@ -136,7 +134,7 @@ if __name__ == "__main__":
         time_size=time_size,
         space_dim=space_dim,
         space_size=space_size,
-        missing_ratio=None,
+        missing_ratio=(.9, .98),
         seed=1,
         dev=dev,
         noise=noise,
@@ -161,7 +159,7 @@ if __name__ == "__main__":
         time_size=time_size,
         space_dim=space_dim,
         space_size=space_size,
-        missing_ratio=None,
+        missing_ratio=(.9, .98),
         seed=1 + train_size * 10,
         dev=dev,
         noise=noise,
@@ -245,7 +243,7 @@ if __name__ == "__main__":
     # Testing
 
     for loader in loaders_test:
-        res = trainer_nbe.test(loader)  # res = ...
+        res = trainer_nbe.test(loader)
 
     try:
         print(

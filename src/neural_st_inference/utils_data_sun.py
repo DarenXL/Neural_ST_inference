@@ -72,6 +72,7 @@ def load_data(path, times=range(100000, 100020), nb_bins=50, get_norm=False):
 
 
 def sliding_window(
+    data_path,
     output_path,
     start: int,
     end: int,
@@ -95,7 +96,7 @@ def sliding_window(
             print(wide)
             for p in range(start + wide, end, stride):
                 data = load_data(
-                    "output/data/sun/HOPE_qcGHI_1min_v4.nc",
+                    data_path,
                     nb_bins=space_size,
                     times=range(p - wide, p),
                 )
@@ -119,7 +120,6 @@ def sliding_window(
             x_axis = np.arange(start + wide, end, stride)
             color = cols[[0, 2, 3, 5][i]]
 
-            # Indexation sur la grille 3x2 (k // 2 pour la ligne, k % 2 pour la colonne)
             for k, name in enumerate(theta_names):
                 ax = axs[k // 2, k % 2]
 
@@ -140,7 +140,6 @@ def sliding_window(
                     linewidth=0.5,
                 )
 
-        # Titres et cosmétique pour chaque paramètre
         for k, name in enumerate(theta_names):
             ax = axs[k // 2, k % 2]
             ax.set_title(name)
@@ -157,9 +156,6 @@ def sliding_window(
             if k == 0:
                 ax.legend()
 
-        # 3. Masquer le 6e sous-graphique inutile (ligne index 2, colonne index 1)
-        # axs[2, 1].set_visible(False)
-
         fig.suptitle(f"Parameters evolution during 29 June 2013")
         fig.tight_layout()
         plt.show()
@@ -173,6 +169,7 @@ def sliding_window(
 
 
 def get_gaussian_weighted_estimate(
+    data_path,
     p_target: int,
     CNN,
     quantile_CNN_low,
@@ -197,7 +194,7 @@ def get_gaussian_weighted_estimate(
     with torch.no_grad():
         for p in p_values:
             data = load_data(
-                "output/data/sun/HOPE_qcGHI_1min_v4.nc",
+                data_path,
                 nb_bins=space_size,
                 times=range(p - wide, p),
             )
