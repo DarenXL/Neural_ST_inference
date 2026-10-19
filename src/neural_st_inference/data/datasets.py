@@ -225,7 +225,7 @@ class GenericSimulationDataset(Dataset):
         for idx in range(self.theta_size):
             seed_idx = None if self.global_seed is None else self.global_seed + idx
             with temporary_seed(seed_idx):
-                mask = self.create_mask(self.space_size, self.space_dim, self.missing_ratio)
+                mask = self.create_mask()
             torch.save(mask, f"{Path(path)}/mask_{idx}.pt")
             # somme += (~mask).sum()
             # plt.imshow(mask)
