@@ -56,7 +56,7 @@ class MLE(BaseEstimator):
                     [
                         k.adv.item(),
                         k.length_scale_t.item(),
-                        k.length_scale_s.item(),
+                        k.length_scale_s.item() / 2,
                         torch.sqrt(covar_module.outputscale).item(),
                         torch.sqrt(lik_stationary.noise).item(),
                     ]

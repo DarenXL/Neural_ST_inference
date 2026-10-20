@@ -14,5 +14,32 @@ accuracy, uncertainty quantification and computational cost. The proposed approa
 
 ---
 
+# Set up environment
+
+Use [uv](https://docs.astral.sh/uv/)
+
+```
+uv sync
+```
+
+# Spatio-temporal Simulation Based Inference
+
+The purpose of this git is to study the efficiency of the Simulation Based Inference (SBI) framework on a spatio-temporal case. 
+The code provide simulation methods for Gaussian random fields with Gneiting Matèrn covariance function. 
+The data/simulations are projected onto a grid from the perspective of embedding data with CNNs of both space and time simultaneously to carpture the dependency between the two.
+SBI ...
+Neural Bayes Estimator (NBE) and the Neural Ratio Estimator (NRE) 
+
+# Scripts
+
+Two important scripts
+
+- `workflow_classic.py`
+Used to perform the complete simulation studies : Simulations, training and testing of 
+
+- `workflow_sun.py`
+
+---
+
 ### Acknowledgments
 \* The authors would like to thank the [Geolearning Chair](https://chaire-geolearning.org/) for its financial support.
