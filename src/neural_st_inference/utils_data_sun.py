@@ -6,8 +6,10 @@ from matplotlib.colors import LinearSegmentedColormap
 import matplotlib.animation as animation
 from matplotlib.ticker import ScalarFormatter
 import xarray as xr
+from tqdm import tqdm
 
 from neural_st_inference.utils import *
+
 
 
 def load_data(path, times=range(100000, 100020), nb_bins=50, get_norm=False):
@@ -71,7 +73,7 @@ def load_data(path, times=range(100000, 100020), nb_bins=50, get_norm=False):
     return res
 
 
-def sliding_window(
+def sliding_window_gaussian(
     data_path,
     output_path,
     start: int,
@@ -79,45 +81,63 @@ def sliding_window(
     CNN,
     quantile_CNN_low,
     quantile_CNN_high,
+    wide: int = 20,
+    n_lags: int = 1,
+    sigma_window: float = 5.0,
     space_size: int = 50,
     theta_names=(r"$v_1$", r"$v_2$", r"$\rho_t$", r"$\rho_s$", r"$\sigma$", r"$\tau$"),
 ):
-    """Apply a CNN over time"""
+    """Apply a CNN over time with a causal half-Gaussian moving average."""
     with torch.no_grad():
 
         fig, axs = plt.subplots(3, 2, figsize=(12, 8))
 
-        res_wide = {20: []}
-        res_q05 = {20: []}
-        res_q95 = {20: []}
+        res_wide = {wide: []}
+        res_q05 = {wide: []}
+        res_q95 = {wide: []}
 
         stride = 1
-        for i, wide in enumerate(res_wide.keys()):
-            print(wide)
-            for p in range(start + wide, end, stride):
+        for i, w in enumerate(res_wide.keys()):
+
+            p_start_raw = start + w - (n_lags - 1) * stride
+            raw_med, raw_q05, raw_q95 = [], [], []
+
+            for p in tqdm(
+                range(p_start_raw, end, stride),
+                desc=f"Window size {w}",
+                leave=False,
+            ):
                 data = load_data(
                     data_path,
                     nb_bins=space_size,
-                    times=range(p - wide, p),
+                    times=range(p - w, p),
                 )
 
                 mask = torch.zeros_like(data, dtype=torch.bool)
                 mask[torch.isnan(data)] = 1
-                data[mask] = 0
+                data[mask] = 0.0
 
                 sample = torch.stack([data, mask]).unsqueeze(0)
-                if p % 100 == 0:
-                    print(p, sample.shape)
 
-                res_wide[wide].append(CNN(sample)[0])
-                res_q05[wide].append(torch.exp(quantile_CNN_low(sample)[0]))
-                res_q95[wide].append(torch.exp(quantile_CNN_high(sample)[0]))
+                raw_med.append(CNN(sample)[0])
+                raw_q05.append(torch.exp(quantile_CNN_low(sample)[0]))
+                raw_q95.append(torch.exp(quantile_CNN_high(sample)[0]))
 
-            res_wide[wide] = torch.stack(res_wide[wide]).cpu().numpy()
-            res_q05[wide] = torch.stack(res_q05[wide]).cpu().numpy()
-            res_q95[wide] = torch.stack(res_q95[wide]).cpu().numpy()
+            raw_med = torch.stack(raw_med)
+            raw_q05 = torch.stack(raw_q05)
+            raw_q95 = torch.stack(raw_q95)
 
-            x_axis = np.arange(start + wide, end, stride)
+            distances = torch.arange(
+                -n_lags + 1, 1, dtype=torch.float32, device=raw_med.device
+            )
+            weights = torch.exp(-0.5 * (distances / sigma_window) ** 2)
+            weights = weights / weights.sum()
+
+            res_wide[w] = (raw_med.unfold(0, n_lags, 1) @ weights).cpu().numpy()
+            res_q05[w] = (raw_q05.unfold(0, n_lags, 1) @ weights).cpu().numpy()
+            res_q95[w] = (raw_q95.unfold(0, n_lags, 1) @ weights).cpu().numpy()
+
+            x_axis = np.arange(start + w, end, stride)
             color = cols[[0, 2, 3, 5][i]]
 
             for k, name in enumerate(theta_names):
@@ -125,18 +145,18 @@ def sliding_window(
 
                 ax.plot(
                     x_axis,
-                    res_wide[wide][:, k],
-                    label=f"Median of the posterior" if k == 0 else "",
+                    res_wide[w][:, k],
+                    label="Median of the posterior" if k == 0 else "",
                     color=color,
                     linewidth=0.5,
                 )
                 ax.fill_between(
                     x_axis,
-                    res_wide[wide][:, k] - res_q05[wide][:, k],
-                    res_wide[wide][:, k] + res_q95[wide][:, k],
+                    res_wide[w][:, k] - res_q05[w][:, k],
+                    res_wide[w][:, k] + res_q95[w][:, k],
                     color=color,
                     alpha=0.2,
-                    label=f"UQ 90%" if k == 0 else "",
+                    label="90% CI" if k == 0 else "",
                     linewidth=0.5,
                 )
 
@@ -156,16 +176,24 @@ def sliding_window(
             if k == 0:
                 ax.legend()
 
-        fig.suptitle(f"Parameters evolution during 29 June 2013")
+        fig.suptitle(
+            f"Parameters evolution during 29 June 2013"
+        )
         fig.tight_layout()
         plt.show()
 
         fig.savefig(
-            output_path / f"sliding_window_wide.pdf", format="pdf", bbox_inches="tight"
+            output_path / "sliding_window_wide_gaussian.pdf",
+            format="pdf",
+            bbox_inches="tight",
         )
         fig.savefig(
-            output_path / f"sliding_window_wide.png", format="png", bbox_inches="tight"
+            output_path / "sliding_window_wide_gaussian.png",
+            format="png",
+            bbox_inches="tight",
         )
+
+        return res_wide, res_q05, res_q95
 
 
 def get_gaussian_weighted_estimate(
@@ -176,7 +204,7 @@ def get_gaussian_weighted_estimate(
     quantile_CNN_high,
     wide: int = 20,
     n_lags: int = 10,
-    sigma_window: float = 3.0,
+    sigma_window: float = 5.0,
     space_size: int = 50,
 ):
     """

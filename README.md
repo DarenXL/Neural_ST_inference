@@ -22,22 +22,28 @@ Use [uv](https://docs.astral.sh/uv/)
 uv sync
 ```
 
-# Spatio-temporal Simulation Based Inference
+[//]: # (# Spatio-temporal Simulation Based Inference)
 
-The purpose of this git is to study the efficiency of the Simulation Based Inference (SBI) framework on a spatio-temporal case. 
-The code provide simulation methods for Gaussian random fields with Gneiting Matèrn covariance function. 
-The data/simulations are projected onto a grid from the perspective of embedding data with CNNs of both space and time simultaneously to carpture the dependency between the two.
-SBI ...
-Neural Bayes Estimator (NBE) and the Neural Ratio Estimator (NRE) 
+[//]: # ()
+[//]: # (The purpose of this git is to study the efficiency of the Simulation Based Inference &#40;SBI&#41; framework on a spatio-temporal case. )
+
+[//]: # (The code provide simulation methods for Gaussian random fields with Gneiting Matèrn covariance function. )
+
+[//]: # (The data/simulations are projected onto a grid from the perspective of embedding data with CNNs of both space and time simultaneously to carpture the dependency between the two.)
+
+[//]: # (SBI ...)
+
+[//]: # (Neural Bayes Estimator &#40;NBE&#41; and the Neural Ratio Estimator &#40;NRE&#41; )
 
 # Scripts
 
 Two important scripts
 
 - `workflow_classic.py`
-Used to perform the complete simulation studies : Simulations, training and testing of 
+Used to perform the complete simulation studies : train set and test set simulations + training and testing of NBE and NRE + MLE + summary graphs.
 
 - `workflow_sun.py`
+Used to perform the inferences on the solar radiations data : Sliding windows over time + kriging and conditional simulations. The network is already trained.
 
 ---
 

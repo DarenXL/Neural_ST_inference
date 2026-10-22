@@ -47,7 +47,7 @@ network_path = (
 
 # Path to results saving file
 
-output_path = create_res_path("output/results/spatiotemporal")
+output_path = create_res_path("output/results/spatiotemporal/")
 
 date = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
@@ -72,7 +72,7 @@ if __name__ == "__main__":
     ####################
 
     model = GneitingAdvModel(space_dim=space_dim)
-    ini = 120
+    ini = 360
     data, norms = load_data(
         data_path,
         nb_bins=space_size,
@@ -121,36 +121,43 @@ if __name__ == "__main__":
     # ####### Sliding windows #######
     # ###############################
 
-    sliding_window(
-        data_path,
-        output_path,
-        0,
-        840,
-        CNN,
-        quantile_CNN_q05,
-        quantile_CNN_q95,
-        space_size=50,
-    )
+    # all_theta_est, all_q05, all_q95 = sliding_window_gaussian(
+    #     data_path=data_path,
+    #     output_path=output_path,
+    #     start=0,
+    #     end=840, # 840
+    #     CNN=CNN,
+    #     quantile_CNN_low=quantile_CNN_q05,
+    #     quantile_CNN_high=quantile_CNN_q95,
+    #     wide=time_size,
+    #     n_lags=1,
+    #     sigma_window=2.5,
+    #     space_size=50,
+    # )
 
-    target = 120
+    target = ini
     theta_est, q05, q95 = get_gaussian_weighted_estimate(
         data_path,
         p_target=target,
         CNN=CNN,
         quantile_CNN_low=quantile_CNN_q05,
         quantile_CNN_high=quantile_CNN_q95,
-        wide=20,
-        n_lags=8,
+        wide=time_size,
+        n_lags=1,
         sigma_window=2.5,
     )
     for name, m, low, high in zip(theta_names, theta_est, q05, q95):
         print(f"{name:8s} : {m:.4f}  [-{low:.4f}, +{high:.4f}]")
 
+    # print(all_theta_est[time_size][target - time_size])
+    print(theta_est)
+
+
     ####################
     ####### Krig #######
     ####################
 
-    print(theta_est)
+    # print(r"Estimated $\theta$ :", theta_est)
 
     time_size = 20
     space_dim = 2
@@ -315,7 +322,7 @@ if __name__ == "__main__":
 
     ### Plot krig ###
 
-    start_time = datetime.strptime("7:21:00 29 June 2013", "%H:%M:%S %d %B %Y")
+    start_time = datetime.strptime("5:21:00 29 June 2013", "%H:%M:%S %d %B %Y") + timedelta(minutes=target)
 
     fig, axs = plt.subplots(nrows=1, ncols=3, figsize=(13, 7), layout="constrained")
     title = fig.suptitle("")
@@ -324,10 +331,10 @@ if __name__ == "__main__":
 
     res_full = simu_cond - y_full_cond_reshaped + y_full_reshaped
 
-    mae_full = np.sqrt(
+    mse_full = np.sqrt(
         (y_full_reshaped - data_nan) ** 2
     )  # np.abs(y_full_reshaped - data_nan)
-    mae_max = np.nanmax(mae_full)
+    mse_max = np.nanmax(mse_full)
 
     v_min, v_max = np.nanmin(y_full_reshaped), np.nanmax(y_full_reshaped)
 
@@ -339,7 +346,7 @@ if __name__ == "__main__":
         vmax=v_max,
         cmap=CMAP,
     )
-    axs[0].set_title("Observations")
+    axs[0].set_title("Observations\n")
 
     im_krig = axs[1].imshow(
         np.flip(y_full_reshaped[0].T, axis=0),
@@ -349,36 +356,36 @@ if __name__ == "__main__":
         vmax=v_max,
         cmap=CMAP,
     )
-    axs[1].set_title("Kriging")
+    axs[1].set_title("Kriging\n")
 
     cols = ["#FFFFFF", "#7AA7F1"]
-    mae_cmap = LinearSegmentedColormap.from_list("custom_mae", cols, N=100)
-    mae_cmap.set_bad(color="silver")
+    mse_cmap = LinearSegmentedColormap.from_list("custom_mse", cols, N=100)
+    mse_cmap.set_bad(color="silver")
 
-    im_mae = axs[2].imshow(
-        np.flip(mae_full[0].T, axis=0),
+    im_mse = axs[2].imshow(
+        np.flip(mse_full[0].T, axis=0),
         aspect="equal",
         extent=[0, 1, 0, 1],
         vmin=0,
-        vmax=mae_max,
-        cmap=mae_cmap,
+        vmax=mse_max,
+        cmap=mse_cmap,
     )
-    axs[2].set_title("Error")
+    axs[2].set_title("Error\n")
 
     cbar_data = fig.colorbar(
         im_krig, ax=axs[:2], location="bottom", shrink=0.8, pad=0.05
     )
     cbar_data.set_label("GHI")
 
-    cbar_mae = fig.colorbar(im_mae, ax=axs[2], location="bottom", shrink=0.8, pad=0.05)
-    cbar_mae.set_label("Root Mean Squared Error (RMSE)")
+    cbar_mse = fig.colorbar(im_mse, ax=axs[2], location="bottom", shrink=0.8, pad=0.05)
+    cbar_mse.set_label("Root Mean Squared Error (RMSE)")
 
     def update(t):
         im_obs.set_data(np.flip(data_nan[t].T, axis=0))
         im_krig.set_data(np.flip(y_full_reshaped[t].T, axis=0))
 
-        current_mae = np.flip(mae_full[t].T, axis=0)
-        im_mae.set_data(current_mae)
+        current_mse = np.flip(mse_full[t].T, axis=0)
+        im_mse.set_data(current_mse)
 
         if t >= time_size:
             axs[0].set_title(
@@ -405,15 +412,15 @@ if __name__ == "__main__":
             f"GHI {current_time.strftime('%H:%M:%S %d %B %Y')}"
         )
 
-        mean_err = np.nanmean(current_mae)
-        std_err = np.nanstd(current_mae)
+        mean_err = np.nanmean(current_mse)
+        std_err = np.nanstd(current_mse)
         axs[2].set_title(
             f"Error\nMean : {mean_err:.3f} | Std : {std_err:.3f}",
             color="black",
             fontweight="normal",
         )
 
-        return [im_obs, im_krig, im_mae, title]
+        return [im_obs, im_krig, im_mse, title]
 
     anim = animation.FuncAnimation(fig, update, frames=3 * time_size // 2, interval=200)
 
@@ -508,45 +515,47 @@ if __name__ == "__main__":
         "y_cond": y_cond,
         "krig": krig,
         "krig_cond": krig_cond,
+        "error":mse_full,
+        "theta":theta_est
     }
     torch.save(data_to_save, out_dir / "krig_save.pt")
 
     ### Prediction Error ###
 
-    mae_mean_over_time = np.nanmean(mae_full, axis=(1, 2))
-    mae_std_over_time = np.nanstd(mae_full, axis=(1, 2))
+    mse_mean_over_time = np.nanmean(mse_full, axis=(1, 2))
+    mse_std_over_time = np.nanstd(mse_full, axis=(1, 2))
 
-    times = [start_time + timedelta(minutes=i) for i in range(len(mae_mean_over_time))]
+    times = [start_time + timedelta(minutes=i) for i in range(len(mse_mean_over_time))]
 
     fig, ax = plt.subplots(figsize=(10, 5))
 
     ax.plot(
         times,
-        mae_mean_over_time,
+        mse_mean_over_time,
         color="blue",
         linewidth=2,
         label="Root Mean Squared Error (RMSE)",
     )
 
-    ax.fill_between(
-        times,
-        np.maximum(0, mae_mean_over_time - mae_std_over_time),
-        mae_mean_over_time + mae_std_over_time,
-        color="blue",
-        alpha=0.2,
-        label="Std Dev",
-    )
+    # ax.fill_between(
+    #     times,
+    #     np.maximum(0, mse_mean_over_time - mse_std_over_time),
+    #     mse_mean_over_time + mse_std_over_time,
+    #     color="blue",
+    #     alpha=0.2,
+    #     label="Std Dev",
+    # )
 
     forecast_start_time = times[time_size - 1]
     ax.axvline(
         x=forecast_start_time,
-        color="firebrick",
+        color=THETA_COLORS[4]["train"],
         linestyle="--",
         linewidth=2,
         label="Start of Forecasting",
     )
 
-    ax.axvspan(forecast_start_time, times[-1], color="firebrick", alpha=0.05)
+    ax.axvspan(forecast_start_time, times[-1], color=THETA_COLORS[4]["train"], alpha=0.05)
 
     ax.set_title("Evolution of Kriging Error Over Time", fontsize=14, pad=15)
     ax.set_ylabel("Error (GHI)", fontsize=12)
@@ -560,7 +569,6 @@ if __name__ == "__main__":
 
     plt.tight_layout()
 
-    output_path = Path("./output/results/spatiotemporal").resolve() / "paper/3D"
     output_path.mkdir(parents=True, exist_ok=True)
     plt.savefig(output_path / "kriging_error_timeseries.pdf", format="pdf", dpi=300)
 
