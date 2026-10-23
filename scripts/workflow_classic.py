@@ -39,7 +39,7 @@ plt.rcParams.update(
 np.random.seed(2)
 torch.manual_seed(2)
 
-use_keops = False
+use_keops = True
 
 
 #########################
@@ -62,21 +62,21 @@ print("res_path", res_path)
 
 batch_size_train = 512
 batch_size_test = 2000
-nb_epochs = 20
+nb_epochs = 500
 freq_epochs_test = 10
 
 # Data options
 
-time_size = 10
+time_size = 100
 space_dim = 1
-space_size = 10
+space_size = 100
 missing_ratios = [0.96]  # [0.7, 0.85, 0.92] # [0.94, 0.96, 0.98]
 dev, noise = 1.414, 0.5  # 1.414, .5
 
 # Amount of data
 
-train_size = 10
-test_size = 10
+train_size = 10000
+test_size = 2000
 
 if __name__ == "__main__":
 
