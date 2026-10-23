@@ -72,7 +72,7 @@ if __name__ == "__main__":
     ####################
 
     model = GneitingAdvModel(space_dim=space_dim)
-    ini = 360
+    ini = 120
     data, norms = load_data(
         data_path,
         nb_bins=space_size,
@@ -121,19 +121,20 @@ if __name__ == "__main__":
     # ####### Sliding windows #######
     # ###############################
 
-    # all_theta_est, all_q05, all_q95 = sliding_window_gaussian(
-    #     data_path=data_path,
-    #     output_path=output_path,
-    #     start=0,
-    #     end=840, # 840
-    #     CNN=CNN,
-    #     quantile_CNN_low=quantile_CNN_q05,
-    #     quantile_CNN_high=quantile_CNN_q95,
-    #     wide=time_size,
-    #     n_lags=1,
-    #     sigma_window=2.5,
-    #     space_size=50,
-    # )
+    all_theta_est, all_q05, all_q95 = sliding_window_gaussian(
+        data_path=data_path,
+        output_path=output_path,
+        start=0,
+        end=840, # 840
+        CNN=CNN,
+        quantile_CNN_low=quantile_CNN_q05,
+        quantile_CNN_high=quantile_CNN_q95,
+        wide=time_size,
+        n_lags=1,
+        sigma_window=2.5,
+        space_size=50,
+        device=device,
+    )
 
     target = ini
     theta_est, q05, q95 = get_gaussian_weighted_estimate(
@@ -145,6 +146,7 @@ if __name__ == "__main__":
         wide=time_size,
         n_lags=1,
         sigma_window=2.5,
+        device=device,
     )
     for name, m, low, high in zip(theta_names, theta_est, q05, q95):
         print(f"{name:8s} : {m:.4f}  [-{low:.4f}, +{high:.4f}]")

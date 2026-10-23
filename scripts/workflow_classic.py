@@ -308,7 +308,11 @@ if __name__ == "__main__":
     # Testing
 
     for loader in loaders_test:
-        res = trainer_nre.test(loader, mcmc=True, map=False)
+        res = trainer_nre.test(
+            loader,
+            mcmc=True,  # Otherwise optimisation
+            map=False   # Compute MAP, can be slow
+        )
 
     try:
         print(

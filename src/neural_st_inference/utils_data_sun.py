@@ -81,6 +81,7 @@ def sliding_window_gaussian(
     CNN,
     quantile_CNN_low,
     quantile_CNN_high,
+    device,
     wide: int = 20,
     n_lags: int = 1,
     sigma_window: float = 5.0,
@@ -111,17 +112,17 @@ def sliding_window_gaussian(
                     data_path,
                     nb_bins=space_size,
                     times=range(p - w, p),
-                )
+                ).to(device)
 
-                mask = torch.zeros_like(data, dtype=torch.bool)
+                mask = torch.zeros_like(data, dtype=torch.bool).to(device)
                 mask[torch.isnan(data)] = 1
                 data[mask] = 0.0
 
                 sample = torch.stack([data, mask]).unsqueeze(0)
 
-                raw_med.append(CNN(sample)[0])
-                raw_q05.append(torch.exp(quantile_CNN_low(sample)[0]))
-                raw_q95.append(torch.exp(quantile_CNN_high(sample)[0]))
+                raw_med.append(CNN(sample)[0].detach().cpu())
+                raw_q05.append(torch.exp(quantile_CNN_low(sample)[0]).detach().cpu())
+                raw_q95.append(torch.exp(quantile_CNN_high(sample)[0]).detach().cpu())
 
             raw_med = torch.stack(raw_med)
             raw_q05 = torch.stack(raw_q05)
@@ -202,6 +203,7 @@ def get_gaussian_weighted_estimate(
     CNN,
     quantile_CNN_low,
     quantile_CNN_high,
+    device,
     wide: int = 20,
     n_lags: int = 10,
     sigma_window: float = 5.0,
@@ -225,18 +227,18 @@ def get_gaussian_weighted_estimate(
                 data_path,
                 nb_bins=space_size,
                 times=range(p - wide, p),
-            )
+            ).to(device)
 
-            mask = torch.zeros_like(data, dtype=torch.bool)
+            mask = torch.zeros_like(data, dtype=torch.bool).to(device)
             mask[torch.isnan(data)] = 1
             data[mask] = 0.0
 
             sample = torch.stack([data, mask]).unsqueeze(0)
 
-            preds_median.append(CNN(sample)[0])
+            preds_median.append(CNN(sample)[0].detach().cpu())
             if output_quantiles:
-                preds_q05.append(torch.exp(quantile_CNN_low(sample)[0]))
-                preds_q95.append(torch.exp(quantile_CNN_high(sample)[0]))
+                preds_q05.append(torch.exp(quantile_CNN_low(sample)[0]).detach().cpu())
+                preds_q95.append(torch.exp(quantile_CNN_high(sample)[0]).detach().cpu())
 
     preds_median = torch.stack(preds_median)
 
