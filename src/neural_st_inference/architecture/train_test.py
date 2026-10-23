@@ -112,7 +112,7 @@ class Trainer(BaseEstimator):
         else:
             self.train_nbe(train_loader, test_loader, nb_epochs, freq_epochs_test)
 
-    def test(self, test_loader, mcmc=True):
+    def test(self, test_loader, mcmc=True, map=False):
         """ "
         Test the neural network.
         keeps track of the datasets used.
@@ -131,7 +131,7 @@ class Trainer(BaseEstimator):
 
         if self.network.nls:
             if mcmc :
-                return self.test_nre_MCMC(test_loader)
+                return self.test_nre_MCMC(test_loader, map=map)
             else :
                 return self.test_nre_optim(test_loader)
         else:
@@ -624,7 +624,7 @@ class Trainer(BaseEstimator):
         with pyro.plate("batch_factors", batch_size):
             pyro.factor("log_ratio_factor", log_ratio)
 
-    def test_nre_MCMC(self, loader_test, num_samples=2000, warmup_steps=500):
+    def test_nre_MCMC(self, loader_test, num_samples=2000, warmup_steps=500, map=False):
         """https://pyro.ai/examples/predictive_deterministic.html"""
         all_samples = []
         all_true_theta = []
@@ -674,6 +674,7 @@ class Trainer(BaseEstimator):
         )
 
         time_start = time.time()
+        time_map = 0
 
         t = tqdm(loader_test, total=len(loader_test), desc="Inference NLS")
 
@@ -688,14 +689,43 @@ class Trainer(BaseEstimator):
                 pyro.clear_param_store()
 
                 mcmc.run(data_batch, lower_bound, upper_bound)
-                chain_samples = mcmc.get_samples()["theta"].detach().cpu()
+                chain_samples = mcmc.get_samples()["theta"].detach()
+
+                if map :
+                    with torch.no_grad():
+                        time_map_t = time.time()
+                        log_ratio_list = []
+
+                        for s_idx in range(chain_samples.size(0)):
+                            single_theta = chain_samples[s_idx]
+
+                            log_ratio = -self.network(
+                                data_batch, theta=single_theta
+                            ).squeeze(-1)
+
+                            log_ratio_list.append(log_ratio.cpu())
+
+                        chain_log_ratio = torch.stack(log_ratio_list)
+                        time_map += time.time() - time_map_t
+
 
                 batch_chains.append(chain_samples.detach().cpu())
+                if map :
+                    batch_log_ratios.append(chain_log_ratio.detach().cpu()) # MAP
 
                 torch.cuda.empty_cache()
 
             samples = torch.stack(batch_chains, dim=0)
             samples = samples.reshape(-1, samples.shape[2], samples.shape[3])
+
+            if map :
+                log_ratios = torch.stack(batch_log_ratios, dim=0) # MAP
+                log_ratios = log_ratios.reshape(-1, log_ratios.shape[-1]) # MAP
+                map_indices = torch.argmax(log_ratios, dim=0) # MAP
+
+                theta_MAP = samples[map_indices, torch.arange(data_batch.size(0)), :] # MAP
+
+                all_theta_final.append(theta_MAP) # MAP
 
             all_samples.append(samples)
             all_true_theta.append(theta_batch.detach().cpu())
@@ -706,7 +736,10 @@ class Trainer(BaseEstimator):
         all_samples = all_samples.permute(1, 0, 2)
         for q in self.quantiles:
             all_quantiles[q] = torch.quantile(all_samples, q, dim=1)
-        all_theta_final = all_quantiles[0.5]
+        if map :
+            all_theta_final = torch.concatenate(all_theta_final, dim=0)  # MAP
+        else :
+            all_theta_final = all_quantiles[0.5]
         all_true_theta = torch.concatenate(all_true_theta, dim=0)
         final_test_losses = torch.abs(all_theta_final - all_true_theta)
 
@@ -718,6 +751,7 @@ class Trainer(BaseEstimator):
             "final_test_losses": final_test_losses,  # (Nb_epochs, Nb_params)
             "train_time": self.train_time,
             "test_time": time_total,
+            "map_time": time_map,
             "simu_time": self.simu_time,
             "total_time": self.train_time + time_total + self.simu_time,
             "estimation_label": self.estimation_label,

@@ -8,11 +8,16 @@ from tqdm import tqdm
 import gpytorch
 from gpytorch.kernels import Kernel
 from gpytorch.constraints import Positive, Interval
-
-import pykeops
-from pykeops.torch import LazyTensor as KEOps_LT
 from linear_operator import LinearOperator as _LOBase
-from gpytorch.kernels.keops.keops_kernel import KeOpsKernel
+
+try:
+    import pykeops
+    from pykeops.torch import LazyTensor as KEOps_LT
+    from gpytorch.kernels.keops.keops_kernel import KeOpsKernel as _BaseKernel
+    KEOPS_AVAILABLE = True
+except ImportError:
+    KEOPS_AVAILABLE = False
+    _BaseKernel = Kernel  # Fallback sur le Kernel GPyTorch standard
 
 
 class GneitingLinearOperator(_LOBase):
@@ -130,64 +135,71 @@ class GneitingLinearOperator(_LOBase):
         )
 
 
-class GneitingKernel(KeOpsKernel):
+class GneitingKernel(_BaseKernel):
     """
     Gneiting spatio-temporal kernel (Matern only) — KeOps implementation.
     """
 
     has_lengthscale = False
 
-    def __init__(
-        self,
-        spatial_dim=2,
-        nu=1.5,
-        adv_init=0.0,
-        ls_s_init=1.0,
-        ls_t_init=1.0,
-        **kwargs,
-    ):
+    def __init__(self, spatial_dim=2, nu=1.5, adv_init=0., ls_s_init=1.0, ls_t_init=1.0,
+                 use_keops=True, **kwargs):
         super().__init__(**kwargs)
         self.d = spatial_dim
         self.nu_fixed = float(nu)
+        self.use_keops = bool(use_keops and KEOPS_AVAILABLE)
 
         if nu not in (0.5, 1.5, 2.5):
-            raise ValueError(f"KeOps Matern requires nu in {{0.5,1.5,2.5}}, got {nu}.")
+            raise ValueError(f"Matern requires nu in {{0.5, 1.5, 2.5}}, got {nu}.")
 
         self._adv_constraint = Interval(-1.0, 1.0)
-        raw_adv = self._adv_constraint.inverse_transform(torch.tensor(adv_init))
+        raw_adv = self._adv_constraint.inverse_transform(torch.tensor(float(adv_init)))
 
         self.register_parameter("raw_adv", nn.Parameter(raw_adv))
-        self.register_parameter(
-            "raw_ls_s", nn.Parameter(torch.tensor(math.log(ls_s_init)))
-        )
-        self.register_parameter(
-            "raw_ls_t", nn.Parameter(torch.tensor(math.log(ls_t_init)))
-        )
+        self.register_parameter("raw_ls_s", nn.Parameter(torch.tensor(math.log(ls_s_init))))
+        self.register_parameter("raw_ls_t", nn.Parameter(torch.tensor(math.log(ls_t_init))))
         self._ls_constraint = Positive()
 
     @property
-    def adv(self):
-        return self._adv_constraint.transform(self.raw_adv)
-
+    def adv(self): return self._adv_constraint.transform(self.raw_adv)
     @property
-    def length_scale_s(self):
-        return self._ls_constraint.transform(self.raw_ls_s)
-
+    def length_scale_s(self): return self._ls_constraint.transform(self.raw_ls_s)
     @property
-    def length_scale_t(self):
-        return self._ls_constraint.transform(self.raw_ls_t)
+    def length_scale_t(self): return self._ls_constraint.transform(self.raw_ls_t)
+
+    def _forward_dense(self, x1, x2):
+        s1, t1 = x1[..., :self.d], x1[..., self.d:self.d+1]
+        s2, t2 = x2[..., :self.d], x2[..., self.d:self.d+1]
+
+        dt = t1.unsqueeze(-2) - t2.unsqueeze(-3)                      # (..., N, M, 1)
+        phi = 1.0 + (dt.abs() / self.length_scale_t + 1e-8) ** 2      # (..., N, M, 1)
+        tf = phi.squeeze(-1) ** (-0.5 * self.d)                       # (..., N, M)
+
+        s_diff = (s1.unsqueeze(-2) - s2.unsqueeze(-3)) - self.adv * dt
+        r2 = (s_diff ** 2).sum(-1) / (self.length_scale_s ** 2 * phi.squeeze(-1))
+
+        nu = self.nu_fixed
+        s = math.sqrt(2.0 * nu) * (r2 + 1e-20).sqrt()
+
+        if abs(nu - 0.5) < 1e-3:
+            k = (-s).exp()
+        elif abs(nu - 1.5) < 1e-3:
+            k = (1.0 + s) * (-s).exp()
+        else:
+            k = (1.0 + s + s ** 2 / 3.0) * (-s).exp()
+
+        return tf * k
 
     def forward(self, x1, x2, diag=False, **params):
-        res = GneitingLinearOperator(
-            x1,
-            x2,
-            self.adv,
-            self.length_scale_s,
-            self.length_scale_t,
-            d=self.d,
-            nu_fixed=self.nu_fixed,
-        )
-        return res.diagonal(dim1=-1, dim2=-2) if diag else res
+        if diag:
+            return torch.ones(*x1.shape[:-1], dtype=x1.dtype, device=x1.device)
+
+        if self.use_keops:
+            return GneitingLinearOperator(
+                x1, x2, self.adv, self.length_scale_s, self.length_scale_t,
+                d=self.d, nu_fixed=self.nu_fixed
+            )
+        return self._forward_dense(x1, x2)
 
 
 class GneitingGP(gpytorch.models.ExactGP):
@@ -201,6 +213,7 @@ class GneitingGP(gpytorch.models.ExactGP):
         adv_init=0.0,
         ls_s_init=1.0,
         ls_t_init=1.0,
+        use_keops=True,
     ):
         super().__init__(train_x, train_y, likelihood)
         self.mean_module = gpytorch.means.ConstantMean()
@@ -212,6 +225,7 @@ class GneitingGP(gpytorch.models.ExactGP):
                 adv_init=adv_init,
                 ls_s_init=ls_s_init,
                 ls_t_init=ls_t_init,
+                use_keops=use_keops
             )
         )
 
@@ -258,14 +272,14 @@ def set_gp_params_from_theta(model, likelihood, theta, dataset, sq12_convention=
     )
 
 
-def evaluate_gneiting_kriging(train_x, train_y, test_x, test_y, theta, dataset, device):
+def evaluate_gneiting_kriging(train_x, train_y, test_x, test_y, theta, dataset, device, use_keops=True):
 
     lik_stationary = gpytorch.likelihoods.GaussianLikelihood(
         noise_constraint=gpytorch.constraints.GreaterThan(1e-6)
     ).to(device)
 
     model_stationary = GneitingGP(
-        train_x, train_y, lik_stationary, spatial_dim=dataset.space_dim, nu=1.5
+        train_x, train_y, lik_stationary, spatial_dim=dataset.space_dim, nu=1.5, use_keops=use_keops
     ).to(device)
 
     set_gp_params_from_theta(
@@ -297,13 +311,14 @@ def train_gneiting_gp(
     lr=0.05,
     tau_init=0.1,
     sigma2_init=1.0,
+    use_keops=True,
 ):
     device = train_x.device
 
     likelihood = gpytorch.likelihoods.GaussianLikelihood()
     likelihood.noise = tau_init**2
 
-    model = GneitingGP(train_x, train_y, likelihood, spatial_dim=spatial_dim, nu=nu).to(
+    model = GneitingGP(train_x, train_y, likelihood, spatial_dim=spatial_dim, nu=nu, use_keops=use_keops).to(
         device
     )
     model.covar_module.outputscale = sigma2_init

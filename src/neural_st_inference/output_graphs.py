@@ -223,8 +223,6 @@ def time_hist(
             / "complete_outputs"
             / f"outputs_{trainer.estimation_label} [{num_dataset_train[j]}].pt"
         )
-        print(path)
-        print(torch.load(path))
         train_times.append(torch.load(path)["train_time"])
         path = (
             trainer.res_path
@@ -238,7 +236,6 @@ def time_hist(
 
     fig_time, ax = plt.subplots(figsize=(8, 5))
     # cols = ["#7AA7F1", "#648FFF", "#785EF0", "#DC267F", "#FE6100", "#FFB000"]
-    print(train_times)
     bar0 = ax.bar(x - width, simu_times, width, label="Simulation", color="#7AA7F1")
     bar1 = ax.bar(x, train_times, width, label="Train", color="#785EF0")
     bar2 = ax.bar(x + width, test_times, width, label="Test", color="#DC267F")
@@ -338,9 +335,6 @@ def visualise_output(
     all_theta_pred = torch.load(path)["final_all_theta"]
     true_all_theta = torch.load(path)["true_all_theta"]
 
-    print(all_theta_pred)
-    print(true_all_theta)
-
     if space_dim == 1:
         label_x = r"Space"
         label_y = r"Time"
@@ -349,10 +343,8 @@ def visualise_output(
         label_y = r"Space 2"
 
     for i in range(nb_examples):
-        print(k[i])
         full_sample, true_theta = dataset[k[i]]
         full_sample, true_theta = full_sample[0], true_theta[0]
-        print(true_theta)
 
         axs[i, 1].imshow(
             full_sample[0] if space_dim == 1 else full_sample[0, 0],

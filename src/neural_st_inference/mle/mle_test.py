@@ -17,7 +17,7 @@ class MLE(BaseEstimator):
             nls=True,
         )
 
-    def test_mle(self, dataset):
+    def test_mle(self, dataset, use_keops=True):
         # dataset = test_loader.dataset
         self.test_dataset_hist.append(dataset)
 
@@ -49,6 +49,7 @@ class MLE(BaseEstimator):
                     nu=1.5,
                     n_iter=600,
                     lr=0.05,
+                    use_keops=use_keops,
                 )
                 covar_module = model_stationary.covar_module
                 k = covar_module.base_kernel

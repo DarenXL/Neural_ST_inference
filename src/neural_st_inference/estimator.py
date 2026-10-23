@@ -35,7 +35,7 @@ class BaseEstimator(ABC):
         path = self.res_path / "complete_outputs" / filename
         torch.save(outputs, path)
 
-    def pred_error(self, theta_pred, dataset_idx=-1, n_train=300, n_test=1000):
+    def pred_error(self, theta_pred, dataset_idx=-1, n_train=300, n_test=1000, use_keops=True):
         """
         WARNING : Adapted to Gneiting matèrn model only
         """
@@ -88,6 +88,7 @@ class BaseEstimator(ABC):
                     current_theta,
                     dataset,
                     self.device,
+                    use_keops=use_keops
                 )
 
                 all_pred_scores.append(torch.tensor([mse, mae, nlpd]))
