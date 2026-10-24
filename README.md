@@ -1,4 +1,4 @@
-# Neural Simulation-Based Inference Methods for Complex Spatio-Temporal Models
+# Neural Simulation-Based Inference for space-time Gaussian processes
 
 **Alexandre Loret**¹\*, **Lucia Clarotto**², **Nicolas Desassis**¹, **Thomas Romary**¹  
 
@@ -11,8 +11,7 @@ In spatio-temporal data analysis, estimating covariance parameters for Gaussian 
 Following recent advances in simulation-based inference techniques, we propose two neural network architectures — Neural Bayes Estimation (NBE) and Neural Ratio Estimation (NRE) — to learn the parameters of Gaussian spatio-temporal Gneiting-Matérn models with advection. 
 The networks are trained on simulations generated directly from the underlying Gaussian random field model. 
 A thorough simulation study demonstrates strong performance across one-dimensional time and both one-dimensional space and two-dimensional space, yielding high accuracy and reliable uncertainty quantification for both NBE and NRE. 
-Through extensive offline training, the framework achieves fully amortized inference, replacing costly optimization with a single forward pass. 
-Finally, we apply our framework to solar radiation prediction and short-term forecasting. 
+Through extensive offline training, the framework achieves fully amortized inference, replacing costly optimization with a single forward pass. Finally, we apply our framework to solar radiation prediction and short-term forecasting. 
 By adopting a sliding-window approach, the model accounts for temporal non-stationarity while retaining this key advantage: achieving near-instantaneous parameter inference and forecasting.
 
 ---
