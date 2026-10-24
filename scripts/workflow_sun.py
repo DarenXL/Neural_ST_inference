@@ -139,7 +139,7 @@ if __name__ == "__main__":
     target = ini
     theta_est, q05, q95 = get_gaussian_weighted_estimate(
         data_path,
-        p_target=target,
+        p_target=target+time_size,
         CNN=CNN,
         quantile_CNN_low=quantile_CNN_q05,
         quantile_CNN_high=quantile_CNN_q95,

@@ -205,8 +205,8 @@ def get_gaussian_weighted_estimate(
     quantile_CNN_high,
     device,
     wide: int = 20,
-    n_lags: int = 10,
-    sigma_window: float = 5.0,
+    n_lags: int = 8,
+    sigma_window: float = 2.5,
     space_size: int = 50,
 ):
     """
