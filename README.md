@@ -1,10 +1,5 @@
 # Neural Simulation-Based Inference for space-time Gaussian processes
 
-**Alexandre Loret**¹\*, **Lucia Clarotto**², **Nicolas Desassis**¹, **Thomas Romary**¹  
-
-¹ *STIM, Mines Paris – PSL*  
-² *MIA Paris-Saclay, AgroParisTech / INRAE – Université Paris-Saclay*  
-
 ---
 
 In spatio-temporal data analysis, estimating covariance parameters for Gaussian random fields via maximum likelihood estimation (MLE) is computationally prohibitive for large datasets. 
